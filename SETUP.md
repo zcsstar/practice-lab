@@ -175,11 +175,16 @@ practices, mistakes and progress. Switch any time from the chip. (Use the same
 student names on every device if you turn on Drive sync. If the login gate is on,
 each child’s password lands them on their own profile automatically.)
 
-**Parents aren’t students.** Anyone marked `parent:true` in the login can manage
-everything but doesn’t appear as a student. The students are simply the
-non-parent login users (e.g. Howard, Brendan) — their profiles are created
-automatically. A parent logs in and lands on a student, switching between them
-via the name chip.
+**Parents vs students.** Anyone marked `parent:true` in the login can manage
+everything (all students, AI key, email, sync) but isn’t a student themselves.
+The students are the non-parent login users (e.g. Howard, Brendan) — their
+profiles are created automatically. A parent logs in and lands on a student,
+switching between them via the name chip.
+
+**Students are sandboxed.** A child’s password logs them straight into their own
+profile and **only** their profile — they can’t switch to siblings, add or delete
+students, or change the email/AI/sync settings. They can manage their own
+practice defaults and do practices.
 
 **Saved defaults per student** — two ways to set them:
 - On the practice setup screen, configure the exam/year/topics/etc. and tap
