@@ -1,0 +1,12 @@
+# Test / tooling artifacts
+.playwright-mcp/
+*.tmp.js
+*.png
+backup-*.json
+practice-lab-backup-*.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
