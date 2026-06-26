@@ -239,7 +239,7 @@ function signOut(){localStorage.removeItem(AUTH_KEY);location.reload();}
 const KEYVAULT={
   "enabled": true,
   "provider": "gemini",
-  "model": "gemini-2.0-flash",
+  "model": "gemini-2.5-flash",
   "baseUrl": "",
   "grants": {
     "Chi": {
@@ -391,9 +391,14 @@ async function callGemini(prompt,files){
   while(true){
     r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
     if(r.ok)break;
-    if((r.status===503||r.status===429||r.status===500)&&attempt<2){attempt++;await new Promise(res=>setTimeout(res,1200*attempt));continue;}
+    // Retry only transient server errors (busy). Do NOT retry 429 — that's a
+    // quota limit, and retrying just burns more of it.
+    if((r.status===503||r.status===500)&&attempt<2){attempt++;await new Promise(res=>setTimeout(res,1500*attempt));continue;}
     const t=(await r.text()).slice(0,400);
-    throw new Error('Gemini '+r.status+': '+(r.status===503?'the model is busy right now — please try again in a moment.':t));
+    let msg=t;
+    if(r.status===503)msg='the model is busy right now — please try again in a moment.';
+    else if(r.status===429)msg='daily free-tier limit reached for this model/key. Try again later, switch model, or enable billing (see SETUP.md).';
+    throw new Error('Gemini '+r.status+': '+msg);
   }
   const j=await r.json();
   const cand=j?.candidates?.[0];
