@@ -168,6 +168,21 @@ served to strangers. Ask and I’ll walk you through it.
 
 ---
 
+## Central storage across devices (important)
+
+Practice defaults, uploaded past papers, mistakes and history are stored **per
+device** unless you turn on **Google Drive sync** — that's the central copy all
+devices share (there's no server). To get one shared copy:
+
+1. On **each** device, sign in as a parent → tap **☁️ Connect Google Drive** on
+   the home screen (or ⚙️ Settings → Access & sync), and approve with the **same**
+   Google account everywhere.
+2. After that, everything syncs automatically: set a student's defaults or upload
+   a past paper on one device, and it appears on the others on next sync.
+
+If you don't connect Drive, each device keeps its own separate copy (you can
+still move data manually with **Export/Import** on the History screen).
+
 ## Multiple kids
 
 Tap the **name chip** (top-right) → **Add student**. Each child has their own

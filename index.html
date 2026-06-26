@@ -282,7 +282,7 @@ const DEFAULT_CFG={
   provider:'gemini',apiKey:'',model:'gemini-2.0-flash',baseUrl:'',
   profiles:[],activeProfileId:'',
   emailEnabled:false,emailjs:{publicKey:'',serviceId:'',templateId:''},emailTo:'zcsstar.nz@gmail.com',
-  drive:{enabled:false,clientId:''},
+  drive:{enabled:true,clientId:''},
   webSearch:true,
   examContext:{}   // saved per-exam extra context text, keyed by exam id
 };
@@ -375,8 +375,9 @@ async function callGemini(prompt,files,useSearch){
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(CFG.apiKey)}`;
   const parts=[{text:prompt}];
   for(const f of (files||[]))parts.push({inline_data:{mime_type:f.mime,data:f.dataB64}});
-  const body={contents:[{parts}],generationConfig:{temperature:0.8}};
-  if(useSearch)body.tools=[{google_search:{}}]; else body.generationConfig.responseMimeType='application/json';
+  // Always use Gemini's strict JSON mode — it escapes LaTeX backslashes correctly.
+  // (Search grounding can't combine with JSON mode and produced invalid JSON, so we don't use the tool.)
+  const body={contents:[{parts}],generationConfig:{temperature:0.8,responseMimeType:'application/json'}};
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok)throw new Error('Gemini '+r.status+': '+(await r.text()).slice(0,400));
   const j=await r.json();
@@ -402,7 +403,13 @@ async function callClaude(prompt,files){
 }
 function parseQuestions(raw){
   let txt=String(raw||'').trim().replace(/^```(json)?/i,'').replace(/```$/,'').trim();
-  let obj;try{obj=JSON.parse(txt);}catch(e){const m=txt.match(/\{[\s\S]*\}/);if(m)obj=JSON.parse(m[0]);else throw new Error('AI did not return valid JSON.');}
+  const tryParse=s=>{try{return JSON.parse(s);}catch(e){return undefined;}};
+  // Fallback: some models emit raw LaTeX backslashes (\sqrt, \div) that are invalid JSON escapes.
+  const fixEsc=s=>s.replace(/\\(?!["\\/bfnrtu])/g,'\\\\');
+  let obj=tryParse(txt);
+  if(obj===undefined)obj=tryParse(fixEsc(txt));
+  if(obj===undefined){const m=txt.match(/\{[\s\S]*\}/);if(m)obj=tryParse(m[0])||tryParse(fixEsc(m[0]));}
+  if(obj===undefined)throw new Error('AI did not return valid JSON.');
   const arr=Array.isArray(obj)?obj:(obj.questions||obj.items||[]);
   if(!arr.length)throw new Error('No questions returned.');
   return arr.map((q,i)=>({id:'q'+i,topic:q.topic||'General',type:(q.type||(Array.isArray(q.options)&&q.options.length?'multiple_choice':'short')),question:q.question||q.text||'',options:Array.isArray(q.options)?q.options:null,answerIndex:(typeof q.answerIndex==='number')?q.answerIndex:null,answer:(q.answer!=null)?String(q.answer):(Array.isArray(q.options)&&typeof q.answerIndex==='number'?String(q.options[q.answerIndex]):''),acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):[],explanation:q.explanation||'',marks:Number(q.marks)||1}));
@@ -410,9 +417,8 @@ function parseQuestions(raw){
 async function generateQuestions(s,files){
   const refsText=(files||[]).map(f=>f.text?`[${f.name}]\n${f.text}`:'').filter(Boolean).join('\n\n');
   const prompt=buildPrompt(s,refsText);
-  const useSearch=CFG.provider==='gemini'&&s.webSearch&&!refsText;
   let raw;
-  if(CFG.provider==='gemini')raw=await callGemini(prompt,files,useSearch);
+  if(CFG.provider==='gemini')raw=await callGemini(prompt,files);
   else if(CFG.provider==='claude')raw=await callClaude(prompt,files);
   else raw=await callOpenAICompatible(prompt,files);
   return parseQuestions(raw);
@@ -479,9 +485,11 @@ async function viewHome(){
     menuItem('📄','Reference papers','Upload real past papers for the AI to match',()=>viewRefs()),
   );
   const setupWarn=!CFG.apiKey?el('div',{class:'card',style:'border-color:#ffd8a8;background:#fff7ed'},el('h2',{},isParent()?'👋 First, add your AI key':'🔑 Waiting for the AI key'),el('p',{class:'sub',style:'margin-bottom:10px'},isParent()?'Practice Lab needs an AI key to write questions. The free Google Gemini key takes ~2 minutes.':'A parent needs to set up the shared AI key, then you’re ready to go.'),isParent()?el('button',{class:'btn primary',onclick:()=>viewSettings()},'Open settings'):null):null;
+  const driveBanner=(isParent()&&CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'&&!driveToken)?el('div',{class:'card',style:'border-color:#cfe2ff;background:var(--feature)'},el('h2',{},'☁️ Sync across devices'),el('p',{class:'sub',style:'margin-bottom:10px'},'Connect Google Drive (once per device, same Google account) to share students, defaults, past papers and history everywhere.'),el('button',{class:'btn primary',onclick:()=>{CFG.drive.enabled=true;saveCfg();driveConnect(true);}},'Connect Google Drive')):null;
   show(el('div',{},
     el('div',{class:'card'},el('h2',{},`Kia ora, ${esc(activeProfile().name)}! 👋`),el('p',{class:'sub'},'Pick what you want to do today.'),tiles),
     setupWarn,
+    driveBanner,
     el('div',{class:'card'},el('h2',{},'What would you like to do?'),el('p',{class:'sub'},''),menu)
   ));
 }
@@ -558,6 +566,7 @@ function saveDefaults(){
   if(setupState.customTopics)setupState.topics=[...new Set([...setupState.topics,...setupState.customTopics.split(',').map(s=>s.trim()).filter(Boolean)])];
   const p=setupTarget||activeProfile();
   p.defaults={country:setupState.country,subject:setupState.subject,exam:setupState.exam,level:setupState.level,topics:setupState.topics.slice(),count:setupState.count,difficulty:setupState.difficulty,style:setupState.style,timeLimitMin:setupState.timeLimitMin,webSearch:setupState.webSearch,context:setupState.context};
+  p.defaultsAt=Date.now();
   saveCfg();scheduleDriveSync();toast('Saved as '+p.name+'’s defaults ✓');
 }
 async function viewSetup(mode='practice',targetId=null){
@@ -886,7 +895,18 @@ function driveConnect(interactive){if(!driveClientId())return toast('No OAuth Cl
 function scheduleDriveSync(){if(!driveReady())return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>{if(driveToken)driveSyncNow();else driveConnect(false);},1500);}
 async function driveFindFile(){const r=await fetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D'practice-lab.json'&fields=files(id,name)",{headers:{Authorization:'Bearer '+driveToken}});if(!r.ok)throw new Error('drive list '+r.status);return (await r.json()).files?.[0]?.id||null;}
 async function driveSyncNow(){if(!driveToken)return;try{const fileId=await driveFindFile();if(fileId){const rr=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+driveToken}});if(rr.ok)await mergeRemote(await rr.json());}const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:await dbAll('refs'),profiles:CFG.profiles,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
-async function mergeRemote(remote){if(Array.isArray(remote.profiles))remote.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();const la=new Map((await dbAll('attempts')).map(a=>[a.id,a]));for(const a of(remote.attempts||[]))if(!la.has(a.id))await dbPut('attempts',a);const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[]))if(!lr.has(r.id))await dbPut('review',r);const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[]))if(!lf.has(r.id))await dbPut('refs',r);await reconcileProfiles();}
+async function mergeRemote(remote){
+  if(Array.isArray(remote.profiles))for(const rp of remote.profiles){
+    const lp=CFG.profiles.find(x=>x.id===rp.id||x.name.toLowerCase()===String(rp.name).toLowerCase());
+    if(!lp){CFG.profiles.push(rp);}
+    else if(rp.defaults&&(rp.defaultsAt||0)>(lp.defaultsAt||0)){lp.defaults=rp.defaults;lp.defaultsAt=rp.defaultsAt;} // newer defaults win
+  }
+  saveCfg();
+  const la=new Map((await dbAll('attempts')).map(a=>[a.id,a]));for(const a of(remote.attempts||[]))if(!la.has(a.id))await dbPut('attempts',a);
+  const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[]))if(!lr.has(r.id))await dbPut('review',r);
+  const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[]))if(!lf.has(r.id))await dbPut('refs',r);
+  await reconcileProfiles();
+}
 
 /* ============================================================ Nav + boot ============================================================ */
 $('#navHome').addEventListener('click',()=>{if(S&&!S.submitted&&!confirm('Leave the current practice?'))return;stopTimer();viewHome();});
@@ -899,19 +919,33 @@ submitSession=async function(){const wasReview=S&&S.mode==='review';const qs=was
 /* ----- LOGIN ----- */
 function isParentName(name){return AUTH.users.some(u=>u.parent&&u.name.toLowerCase()===String(name).toLowerCase());}
 function studentNames(){return AUTH.users.filter(u=>!u.parent&&u.hash).map(u=>u.name);}
-// Students = the non-parent login users. Seed missing ones; drop stray profiles
-// (parent-named or legacy) that have no saved practices. Idempotent.
+// Stable, name-derived profile id so every device agrees (lets Drive sync merge
+// profiles/defaults/history reliably instead of using random per-device ids).
+function stableId(name){return 'u:'+String(name).toLowerCase().trim();}
+// Students = the non-parent login users. Seed/migrate to stable ids; drop stray
+// profiles (parent-named or legacy) that have no saved practices. Idempotent.
 async function reconcileProfiles(){
   if(!gateActive())return;
   const names=studentNames();if(!names.length)return;
-  for(const nm of names){if(!CFG.profiles.find(p=>p.name.toLowerCase()===nm.toLowerCase()))CFG.profiles.push({id:uid(),name:nm});}
-  let attempts=[];try{attempts=await dbAll('attempts');}catch(e){}
+  let attempts=[],review=[],refs=[];
+  try{attempts=await dbAll('attempts');review=await dbAll('review');refs=await dbAll('refs');}catch(e){}
+  for(const nm of names){
+    const sid=stableId(nm);
+    const existing=CFG.profiles.find(p=>p.id===sid||p.name.toLowerCase()===nm.toLowerCase());
+    if(existing&&existing.id!==sid){ // migrate data references from old id → stable id
+      const oldId=existing.id;
+      for(const a of attempts)if(a.profileId===oldId){a.profileId=sid;await dbPut('attempts',a);}
+      for(const r of review)if(r.profileId===oldId){r.profileId=sid;await dbPut('review',r);}
+      for(const f of refs)if(f.profileId===oldId){f.profileId=sid;await dbPut('refs',f);}
+      existing.id=sid;
+    } else if(!existing){CFG.profiles.push({id:sid,name:nm});}
+  }
+  const seen=new Set();CFG.profiles=CFG.profiles.filter(p=>{if(seen.has(p.id))return false;seen.add(p.id);return true;});
   const hasData=id=>attempts.some(a=>a.profileId===id);
-  const isStudent=p=>names.some(n=>n.toLowerCase()===p.name.toLowerCase());
+  const isStudent=p=>names.some(n=>stableId(n)===p.id);
   CFG.profiles=CFG.profiles.filter(p=>isStudent(p)||hasData(p.id));
-  // a student is locked to their own profile
-  const au=authedUser();
-  if(au&&!au.parent){const mine=CFG.profiles.find(p=>p.name.toLowerCase()===au.name.toLowerCase());if(mine)CFG.activeProfileId=mine.id;}
+  const au=authedUser(); // a student is locked to their own profile
+  if(au&&!au.parent)CFG.activeProfileId=stableId(au.name);
   if(!CFG.profiles.find(p=>p.id===CFG.activeProfileId))CFG.activeProfileId=(CFG.profiles[0]||{}).id;
   saveCfg();
 }
@@ -921,8 +955,9 @@ function applyAuthedProfile(name){
     if(students.length&&!students.find(p=>p.id===CFG.activeProfileId))CFG.activeProfileId=students[0].id;
     saveCfg();return;
   }
-  const p=CFG.profiles.find(x=>x.name.toLowerCase()===String(name).toLowerCase());
-  if(p)CFG.activeProfileId=p.id;else{const np={id:uid(),name};CFG.profiles.push(np);CFG.activeProfileId=np.id;}
+  const sid=gateActive()?stableId(name):null;
+  const p=CFG.profiles.find(x=>(sid&&x.id===sid)||x.name.toLowerCase()===String(name).toLowerCase());
+  if(p){if(sid)p.id=sid;CFG.activeProfileId=p.id;}else{const np={id:sid||uid(),name};CFG.profiles.push(np);CFG.activeProfileId=np.id;}
   saveCfg();
 }
 function viewLogin(){
