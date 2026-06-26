@@ -25,9 +25,19 @@ This is what writes the questions.
    - Paste the key → **🧪 Test connection**. You should see ✅.
 4. **Save settings.**
 
-> Free Gemini limits are generous for daily home use (questions are small
-> requests). If a model name ever stops working, try `gemini-2.5-flash` or
-> `gemini-1.5-flash` in the Model box.
+> **Free-tier limits matter.** Each practice you generate = **1 API request**.
+> On the free tier, **Gemini 2.5 Flash allows ~20 requests per day** (and 5 per
+> minute). You can see your usage at
+> https://aistudio.google.com/app/rate-limit. If you hit the daily cap you'll get
+> a `429` error until it resets (around midnight US Pacific).
+>
+> Note: **gemini-2.0-flash has no free tier** on current keys (`limit: 0`), so use
+> **gemini-2.5-flash** for free use.
+>
+> **Need more than ~20/day?** Click **Set up billing** in AI Studio to switch the
+> project to pay-as-you-go. Usage is tiny — a practice is a few thousand tokens,
+> so 2.5 Flash costs a fraction of a cent each; even heavy daily family use is
+> typically a few cents. Billing removes the 20/day cap and the "busy" 503s.
 
 ### Share the key with all devices (so kids never type it) — parent only
 
