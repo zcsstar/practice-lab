@@ -194,9 +194,9 @@ function initials(name){return (String(name||'?').trim().split(/\s+/).map(w=>w[0
 const AUTH={
   enabled:true,
   users:[
-    // {name:'Parent', hash:'', parent:true},
-    // {name:'Mia',    hash:''},
-    // {name:'Leo',    hash:''},
+    {name:'Chi', hash:'98f2292c7e40bcc6ce5f5f8f41996975f2418fd5589e6a37955012a97fb2f3d5', parent:true},
+    {name:'Howard', hash:'6a2a6d0bd93e2d3a8af7ea8556f6066bd7c1cc0ad54ad3431cf98237ed1e5e3e'},
+    {name:'Brendan', hash:'acd6792c7f8b80c504c404dcb15c85380ae878adb55b04bf2f2603e3caf5fe6c'},
   ]
 };
 async function plHash(pw){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('practicelab::'+pw));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
