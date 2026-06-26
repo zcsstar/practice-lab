@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <title>Practice Lab</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>" />
 
@@ -176,7 +179,7 @@
     <button class="iconbtn" id="navSettings" title="Settings">⚙️</button>
   </header>
   <main id="app"></main>
-  <footer class="appfoot">© <span id="footYear">2026</span> Cheez</footer>
+  <footer class="appfoot">© <span id="footYear">2026</span> Cheez · <span id="footVer">v8</span></footer>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -393,7 +396,7 @@ async function callGemini(prompt,files){
     if(r.ok)break;
     // Retry only transient server errors (busy). Do NOT retry 429 — that's a
     // quota limit, and retrying just burns more of it.
-    if((r.status===503||r.status===500)&&attempt<2){attempt++;await new Promise(res=>setTimeout(res,1500*attempt));continue;}
+    if((r.status===503||r.status===500)&&attempt<3){attempt++;await new Promise(res=>setTimeout(res,1500*attempt));continue;}
     const t=(await r.text()).slice(0,400);
     let msg=t;
     if(r.status===503)msg='the model is busy right now — please try again in a moment.';
@@ -1056,8 +1059,9 @@ async function startApp(){
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   viewHome();
 }
+const APP_VERSION='v8';
 (async function boot(){
-  try{$('#footYear').textContent=new Date().getFullYear();}catch(e){}
+  try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
   if(gateActive()&&!authedUser()){viewLogin();return;}
   await startApp();
