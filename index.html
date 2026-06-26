@@ -409,15 +409,26 @@ async function callClaude(prompt,files){
   if(!r.ok)throw new Error('Claude '+r.status+': '+(await r.text()).slice(0,400));
   const j=await r.json();return j?.content?.map(c=>c.text).filter(Boolean).join('')||'';
 }
+// Extract the balanced {...}/[...] starting at index i (respects strings/escapes).
+function extractBalanced(s,i){
+  const open=s[i],close=open==='{'?'}':']';let d=0,inStr=false,esc=false;
+  for(let k=i;k<s.length;k++){const ch=s[k];
+    if(inStr){if(esc)esc=false;else if(ch==='\\')esc=true;else if(ch==='"')inStr=false;}
+    else{if(ch==='"')inStr=true;else if(ch===open)d++;else if(ch===close){d--;if(d===0)return s.slice(i,k+1);}}}
+  return null;
+}
 function parseQuestions(raw){
   let txt=String(raw||'').trim().replace(/^```(json)?/i,'').replace(/```$/,'').trim();
   const tryParse=s=>{try{return JSON.parse(s);}catch(e){return undefined;}};
-  // Fallback: some models emit raw LaTeX backslashes (\sqrt, \div) that are invalid JSON escapes.
-  const fixEsc=s=>s.replace(/\\(?!["\\/bfnrtu])/g,'\\\\');
-  let obj=tryParse(txt);
-  if(obj===undefined)obj=tryParse(fixEsc(txt));
-  if(obj===undefined){const m=txt.match(/\{[\s\S]*\}/);if(m)obj=tryParse(m[0])||tryParse(fixEsc(m[0]));}
-  if(obj===undefined)throw new Error('AI did not return valid JSON.');
+  const fixEsc=s=>s.replace(/\\(?!["\\/bfnrtu])/g,'\\\\'); // repair raw LaTeX backslashes
+  const usable=p=>p&&(Array.isArray(p)||p.questions||p.items);
+  // Build candidates: whole text, then every balanced {…}/[…] start. Pick the
+  // first that parses into a questions object — ignores thinking/prose & braces.
+  const candidates=[txt];
+  for(let i=0;i<txt.length;i++){const ch=txt[i];if(ch==='{'||ch==='['){const sub=extractBalanced(txt,i);if(sub)candidates.push(sub);}}
+  let obj;
+  for(const c of candidates){let p=tryParse(c);if(!usable(p))p=tryParse(fixEsc(c));if(usable(p)){obj=p;break;}}
+  if(obj===undefined)throw new Error('AI did not return valid JSON. The model sent: '+JSON.stringify(txt.slice(0,200)));
   const arr=Array.isArray(obj)?obj:(obj.questions||obj.items||[]);
   if(!arr.length)throw new Error('No questions returned.');
   return arr.map((q,i)=>({id:'q'+i,topic:q.topic||'General',type:(q.type||(Array.isArray(q.options)&&q.options.length?'multiple_choice':'short')),question:q.question||q.text||'',options:Array.isArray(q.options)?q.options:null,answerIndex:(typeof q.answerIndex==='number')?q.answerIndex:null,answer:(q.answer!=null)?String(q.answer):(Array.isArray(q.options)&&typeof q.answerIndex==='number'?String(q.options[q.answerIndex]):''),acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):[],explanation:q.explanation||'',marks:Number(q.marks)||1}));
