@@ -436,18 +436,36 @@ function qText(q){return q.question||q.text||q.stem||q.prompt||q.problem||q.ques
 function qOpts(q){return Array.isArray(q.options)?q.options:(Array.isArray(q.choices)?q.choices:(Array.isArray(q.answers)?q.answers:null));}
 function looksQ(q){return q&&typeof q==='object'&&(qText(q)||qOpts(q)||q.answer!=null);}
 function getArr(p){return Array.isArray(p)?p:(p&&Array.isArray(p.questions)?p.questions:(p&&Array.isArray(p.items)?p.items:(p&&Array.isArray(p.data)?p.data:null)));}
+// Escape raw control chars (newlines/tabs) that appear INSIDE string values —
+// some models emit multi-line strings which are invalid JSON. Leaves structural
+// whitespace alone.
+function sanitizeCtrl(s){let out='',inStr=false,esc=false;for(let i=0;i<s.length;i++){const ch=s[i];
+  if(inStr){if(esc){out+=ch;esc=false;continue;}if(ch==='\\'){out+=ch;esc=true;continue;}if(ch==='"'){out+=ch;inStr=false;continue;}
+    if(ch==='\n'){out+='\\n';continue;}if(ch==='\r'){out+='\\r';continue;}if(ch==='\t'){out+='\\t';continue;}out+=ch;}
+  else{out+=ch;if(ch==='"')inStr=true;}}return out;}
+// Recover complete question objects from a truncated array (response cut off
+// before the closing brackets), then rebuild a valid wrapper.
+function salvageQuestions(s){
+  const m=s.match(/"(?:questions|items|data)"\s*:\s*\[/);
+  let start=m?(m.index+m[0].length-1):s.indexOf('[');if(start<0)return null;
+  const objs=[];let i=start+1;
+  while(i<s.length){while(i<s.length&&/[\s,]/.test(s[i]))i++;if(s[i]!=='{')break;const sub=extractBalanced(s,i);if(!sub)break;objs.push(sub);i+=sub.length;}
+  return objs.length?('{"questions":['+objs.join(',')+']}'):null;
+}
 function parseQuestions(raw){
   let txt=String(raw||'').trim().replace(/^```(json)?/i,'').replace(/```$/,'').trim();
   const tryParse=s=>{try{return JSON.parse(s);}catch(e){return undefined;}};
   const fixEsc=s=>s.replace(/\\(?!["\\/bfnrtu])/g,'\\\\'); // repair raw LaTeX backslashes
   const usable=p=>{const a=getArr(p);return !!(a&&a.length&&a.some(looksQ));};
-  // Candidates: whole text, then every balanced {…}/[…] start. Pick the first
-  // that yields an array whose items actually look like questions — ignores
-  // thinking/prose, stray braces, and decoy arrays.
+  const variants=s=>[s,sanitizeCtrl(s),fixEsc(s),fixEsc(sanitizeCtrl(s))];
+  const pick=cs=>{for(const c of cs)for(const v of variants(c)){const p=tryParse(v);if(usable(p))return p;}return undefined;};
+  // Candidates: whole text + every balanced {…}/[…] start (ignores thinking/prose
+  // & decoy arrays). Each tried with control-char + escape repairs.
   const candidates=[txt];
   for(let i=0;i<txt.length;i++){const ch=txt[i];if(ch==='{'||ch==='['){const sub=extractBalanced(txt,i);if(sub)candidates.push(sub);}}
-  let obj;
-  for(const c of candidates){let p=tryParse(c);if(!usable(p))p=tryParse(fixEsc(c));if(usable(p)){obj=p;break;}}
+  let obj=pick(candidates);
+  // Last resort: salvage complete questions from a truncated response.
+  if(obj===undefined){const sv=salvageQuestions(sanitizeCtrl(txt))||salvageQuestions(txt);if(sv)obj=tryParse(sv)||tryParse(fixEsc(sv));}
   if(obj===undefined)throw new Error('AI did not return valid JSON. The model sent: '+JSON.stringify(txt.slice(0,220)));
   const arr=(getArr(obj)||[]).filter(looksQ);
   if(!arr.length)throw new Error('The AI response had no usable questions. It sent: '+JSON.stringify(txt.slice(0,220)));
