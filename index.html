@@ -665,9 +665,37 @@ function viewSettings(){
       toggle('Sync to my Google Drive',CFG.drive.enabled,v=>CFG.drive.enabled=v),
       field('OAuth Client ID','From Google Cloud Console (see SETUP.md)',el('input',{type:'text',value:CFG.drive.clientId,placeholder:'xxxx.apps.googleusercontent.com',oninput:e=>CFG.drive.clientId=e.target.value.trim()})),
       el('div',{class:'row'},el('button',{class:'btn',onclick:()=>driveConnect(true)},'Connect & sync now'),el('span',{class:'small muted',style:'align-self:center'},el('span',{class:'statusdot'+(driveToken?' on':'')}),driveToken?'Connected':'Not connected'))),
+    buildLoginCard(),
     el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>{saveCfg();initEmailJS();refreshHeaderProfile();toast('Settings saved ✓');}},'Save settings'),el('button',{class:'btn',onclick:()=>{saveCfg();viewHome();}},'Save & go home')),
     el('div',{class:'card',style:'margin-top:16px'},el('p',{class:'small muted',style:'margin:0'},'Keys are stored only in this browser (localStorage). Nothing is sent anywhere except directly to the AI / email service you configure.'))
   ));
+}
+function buildLoginCard(){
+  const nameI=el('input',{type:'text',placeholder:'Person’s name (e.g. Mia)'});
+  const parentCb=el('input',{type:'checkbox',style:'width:auto'});
+  const pwI=el('input',{type:'text',placeholder:'Choose a password'});
+  const out=el('textarea',{readonly:'',rows:'2',style:'font-family:monospace;font-size:12px;display:none'});
+  const note=el('div',{class:'small muted',style:'margin-top:6px'});
+  const status=gateActive()?el('span',{class:'small',style:'color:var(--ok)'},el('span',{class:'statusdot on'}),'Login is ON ('+AUTH.users.filter(u=>u.hash).length+' user'+(AUTH.users.filter(u=>u.hash).length>1?'s':'')+')'):el('span',{class:'small muted'},el('span',{class:'statusdot'}),'Login is OFF — add users to the AUTH block to enable');
+  async function gen(){
+    if(!pwI.value){toast('Type a password first.');return;}
+    const h=await plHash(pwI.value);
+    const line=`{name:'${(nameI.value||'User').replace(/'/g,'')}', hash:'${h}'${parentCb.checked?', parent:true':''}},`;
+    out.value=line;out.style.display='';
+    try{await navigator.clipboard.writeText(line);toast('Copied! Paste it into the AUTH block.');}catch(e){toast('Generated — copy the line below.');}
+    note.innerHTML='Paste this line inside <b>users:[ ]</b> in the 🔒 LOGIN block near the top of <b>index.html</b>, then save the file. The password is not stored — keep a note of it.';
+  }
+  return el('div',{class:'card'},
+    el('h2',{},'🔒 Login / access'),
+    el('p',{class:'sub'},'Optional password gate so only your family can open the app. '),
+    el('div',{style:'margin-bottom:10px'},status),
+    field('Name','',nameI),
+    el('label',{class:'field',style:'display:flex;align-items:center;gap:10px'},parentCb,el('span',{class:'lbl',style:'margin:0'},'This is a parent (can manage everything)')),
+    field('Password','anything memorable — turned into a one-way hash',pwI),
+    el('div',{class:'row'},el('button',{class:'btn',onclick:gen},'🔑 Generate login line')),
+    out,note,
+    el('p',{class:'small muted',style:'margin-top:10px'},'Tip: the page source is public once hosted, so this keeps casual visitors out rather than being bank-grade. Your AI key is never in the file. For stronger protection, front the site with Cloudflare Access — see SETUP.md.')
+  );
 }
 function defaultModel(p){return {gemini:'gemini-2.0-flash',openai:'gpt-4o-mini',claude:'claude-3-5-haiku-latest',custom:'gpt-4o-mini'}[p]||'';}
 function toggle(label,val,on){const cb=el('input',{type:'checkbox',style:'width:auto'});cb.checked=val;cb.addEventListener('change',e=>on(e.target.checked));return el('label',{class:'field',style:'display:flex;align-items:center;gap:10px'},cb,el('span',{class:'lbl',style:'margin:0'},label));}
