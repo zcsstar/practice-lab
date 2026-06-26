@@ -34,8 +34,15 @@ are in [SETUP.md](SETUP.md).
   - All records are tagged with `profileId` and filtered by the active profile.
 - **Profiles** — `CFG.profiles[]` + `activeProfileId`. Header chip switches
   student; each has isolated attempts/review. Each profile may carry
-  `defaults` (saved practice settings); `viewSetup()` pre-fills from them and
-  `saveDefaults()` writes them back.
+  `defaults` (saved practice settings); `viewSetup(mode,targetId)` pre-fills from
+  the target profile and `saveDefaults()` writes them back. `mode='defaults'`
+  (from Manage students → ⚙️ Defaults) edits a specific profile's defaults
+  **without** changing the active profile (via `setupTarget`).
+  - **Students = non-parent login users.** When the gate is on,
+    `reconcileProfiles()` (run in `startApp()` and after Drive merge) seeds a
+    profile per non-parent `AUTH` user and drops stray profiles (parent-named or
+    legacy) that have no saved attempts. `applyAuthedProfile()` never creates a
+    profile for a parent — parents land on a student and switch via the chip.
 - **Login gate** — `AUTH` block at the very top of the `<script>` (easy to edit).
   Per-person `{name, hash}` where `hash` = SHA-256 of `'practicelab::'+password`
   (helper `plHash()` is exposed on `window` for generating hashes in the

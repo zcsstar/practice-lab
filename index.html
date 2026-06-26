@@ -477,8 +477,9 @@ function viewProfiles(){
       el('span',{class:'avatar',style:'background:'+colorFor(p.name)},initials(p.name)),
       el('div',{class:'meta'},el('div',{class:'nm'},p.name),isActive?el('div',{class:'dt',style:'color:var(--ok)'},'Active'):el('div',{class:'dt'},'Tap “Use” to switch')),
       isActive?el('span',{class:'badge ok'},'✓'):el('button',{class:'btn sm',onclick:()=>{CFG.activeProfileId=p.id;saveCfg();toast('Switched to '+p.name);viewHome();}},'Use'),
-      el('button',{class:'btn sm',onclick:()=>{const nn=prompt('Rename student',p.name);if(nn&&nn.trim()){p.name=nn.trim();saveCfg();viewProfiles();}}},'✏️'),
-      CFG.profiles.length>1?el('button',{class:'btn sm danger',onclick:()=>{if(confirm('Remove '+p.name+'? Their practices stay in the database but become hidden.')){CFG.profiles=CFG.profiles.filter(x=>x.id!==p.id);if(CFG.activeProfileId===p.id)CFG.activeProfileId=CFG.profiles[0].id;saveCfg();viewProfiles();}}},'🗑'):null
+      el('button',{class:'btn sm',title:'Practice defaults',onclick:()=>viewSetup('defaults',p.id)},'⚙️ Defaults'),
+      el('button',{class:'btn sm',title:'Rename',onclick:()=>{const nn=prompt('Rename student',p.name);if(nn&&nn.trim()){p.name=nn.trim();saveCfg();viewProfiles();}}},'✏️'),
+      CFG.profiles.length>1?el('button',{class:'btn sm danger',title:'Remove',onclick:()=>{if(confirm('Remove '+p.name+'? Their practices stay in the database but become hidden.')){CFG.profiles=CFG.profiles.filter(x=>x.id!==p.id);if(CFG.activeProfileId===p.id)CFG.activeProfileId=CFG.profiles[0].id;saveCfg();viewProfiles();}}},'🗑'):null
     ));
   });
   show(el('div',{},
@@ -523,16 +524,18 @@ async function viewRefs(){
 }
 
 /* ----- SETUP ----- */
-let setupState=null,setupRefs=[];
+let setupState=null,setupRefs=[],setupTarget=null;
 function saveDefaults(){
   if(setupState.customTopics)setupState.topics=[...new Set([...setupState.topics,...setupState.customTopics.split(',').map(s=>s.trim()).filter(Boolean)])];
-  const p=activeProfile();
+  const p=setupTarget||activeProfile();
   p.defaults={country:setupState.country,subject:setupState.subject,exam:setupState.exam,level:setupState.level,topics:setupState.topics.slice(),count:setupState.count,difficulty:setupState.difficulty,style:setupState.style,timeLimitMin:setupState.timeLimitMin,webSearch:setupState.webSearch,context:setupState.context};
   saveCfg();scheduleDriveSync();toast('Saved as '+p.name+'’s defaults ✓');
 }
-async function viewSetup(){
-  if(!CFG.apiKey){if(isParent()){toast('Add your AI key in Settings first.');return viewSettings();}toast('No AI key yet — ask a parent to set it up.');return;}
-  const d=activeProfile().defaults||{};
+async function viewSetup(mode='practice',targetId=null){
+  const defaultsMode=(mode==='defaults');
+  if(!defaultsMode&&!CFG.apiKey){if(isParent()){toast('Add your AI key in Settings first.');return viewSettings();}toast('No AI key yet — ask a parent to set it up.');return;}
+  setupTarget=(defaultsMode&&targetId)?(CFG.profiles.find(p=>p.id===targetId)||activeProfile()):activeProfile();
+  const d=setupTarget.defaults||{};
   const examId=(d.exam&&EXAMS[d.exam])?d.exam:'icas';
   const level=(d.level&&EXAMS[examId].levels.includes(d.level))?d.level:EXAMS[examId].levels[0];
   setupState={country:d.country||EXAMS[examId].country,subject:d.subject||'Mathematics',exam:examId,level,topics:Array.isArray(d.topics)?d.topics.slice():[],count:d.count||10,difficulty:d.difficulty||3,style:d.style||EXAMS[examId].style,timeLimitMin:(d.timeLimitMin!=null?d.timeLimitMin:15),notes:'',context:(d.context!=null?d.context:(CFG.examContext[examId]||'')),webSearch:(d.webSearch!=null?d.webSearch:CFG.webSearch),refIds:[]};
@@ -559,23 +562,29 @@ async function viewSetup(){
         field('Time limit','',selOf(setupState.timeLimitMin,[[0,'No timer'],[5,'5 minutes'],[10,'10 minutes'],[15,'15 minutes'],[20,'20 minutes'],[30,'30 minutes'],[45,'45 minutes'],[60,'60 minutes']],v=>setupState.timeLimitMin=+v))
       ),
       field('Difficulty','',selOf(setupState.difficulty,[[1,'1 · Gentle'],[2,'2 · Easy'],[3,'3 · On level'],[4,'4 · Stretch'],[5,'5 · Competition']],v=>setupState.difficulty=+v)),
-      // reference papers
-      el('label',{class:'field'},el('span',{class:'lbl'},'Use real past papers ',el('span',{class:'hint'},setupRefs.length?'(tap to include as a style reference)':'(none uploaded — add some in Reference papers)')),
+      // reference papers (only when running a real practice, not editing defaults)
+      defaultsMode?null:el('label',{class:'field'},el('span',{class:'lbl'},'Use real past papers ',el('span',{class:'hint'},setupRefs.length?'(tap to include as a style reference)':'(none uploaded — add some in Reference papers)')),
         setupRefs.length?el('div',{class:'chips'},...setupRefs.map(r=>{const c=el('button',{class:'chip',type:'button','aria-pressed':String(setupState.refIds.includes(r.id)),onclick:()=>{const i=setupState.refIds.indexOf(r.id);if(i<0)setupState.refIds.push(r.id);else setupState.refIds.splice(i,1);c.setAttribute('aria-pressed',String(setupState.refIds.includes(r.id)));}},(r.mime==='application/pdf'?'📕 ':r.mime.startsWith('image/')?'🖼️ ':'📃 ')+r.name.slice(0,28));return c;})):el('button',{class:'btn sm',type:'button',onclick:()=>viewRefs()},'📄 Upload past papers')
       ),
       // extra context
       field('Extra context to improve accuracy '+'',(CFG.examContext[setupState.exam]?'(saved for '+EXAMS[setupState.exam].label+')':'(saved per exam for next time)'),(()=>{const t=el('textarea',{placeholder:'e.g. ICAS Paper C is for Year 5; ~35 questions, increasing difficulty; focus on multi-step word problems and avoid calculator use.',oninput:e=>setupState.context=e.target.value});t.value=setupState.context;return t;})()),
       // web search
       (CFG.provider==='gemini')?toggle('Let the AI search for real exam info when no papers are attached',setupState.webSearch,v=>setupState.webSearch=v):el('div',{class:'small muted'},'Tip: web search grounding is available with the Gemini provider. Attach past papers for best accuracy on other providers.'),
-      field('Anything else for this set? (optional)','',(()=>{const t=el('textarea',{placeholder:'e.g. focus on fractions today',oninput:e=>setupState.notes=e.target.value});return t;})())
+      defaultsMode?null:field('Anything else for this set? (optional)','',(()=>{const t=el('textarea',{placeholder:'e.g. focus on fractions today',oninput:e=>setupState.notes=e.target.value});return t;})())
     );
   }
   render();
-  show(el('div',{},backBar('New practice',()=>viewHome()),
-    el('div',{class:'card'},el('h2',{},'Set up the practice'),el('p',{class:'sub'},'Choose the target, optionally attach real papers, then generate.'+(activeProfile().defaults?' Pre-filled from '+esc(activeProfile().name)+'’s saved defaults.':'')),host),
-    el('div',{class:'row between'},
-      el('button',{class:'btn',onclick:()=>saveDefaults()},'💾 Save as '+activeProfile().name+'’s defaults'),
-      el('button',{class:'btn primary lg',onclick:()=>doGenerate()},'✨ Generate questions'))
+  const nm=esc(setupTarget.name);
+  show(el('div',{},backBar(defaultsMode?nm+'’s defaults':'New practice',()=>defaultsMode?viewProfiles():viewHome()),
+    el('div',{class:'card'},
+      el('h2',{},defaultsMode?'⚙️ '+nm+'’s practice defaults':'Set up the practice'),
+      el('p',{class:'sub'},defaultsMode?'These load automatically when '+nm+' starts a practice. They can still be adjusted each time.':('Choose the target, optionally attach real papers, then generate.'+(setupTarget.defaults?' Pre-filled from '+nm+'’s saved defaults.':''))),
+      host),
+    defaultsMode
+      ? el('div',{class:'row end'},el('button',{class:'btn primary lg',onclick:()=>{saveDefaults();viewProfiles();}},'💾 Save '+nm+'’s defaults'))
+      : el('div',{class:'row between'},
+          el('button',{class:'btn',onclick:()=>saveDefaults()},'💾 Save as '+nm+'’s defaults'),
+          el('button',{class:'btn primary lg',onclick:()=>doGenerate()},'✨ Generate questions'))
   ));
 }
 
@@ -845,7 +854,7 @@ function driveConnect(interactive){if(!driveClientId())return toast('No OAuth Cl
 function scheduleDriveSync(){if(!driveReady())return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>{if(driveToken)driveSyncNow();else driveConnect(false);},1500);}
 async function driveFindFile(){const r=await fetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D'practice-lab.json'&fields=files(id,name)",{headers:{Authorization:'Bearer '+driveToken}});if(!r.ok)throw new Error('drive list '+r.status);return (await r.json()).files?.[0]?.id||null;}
 async function driveSyncNow(){if(!driveToken)return;try{const fileId=await driveFindFile();if(fileId){const rr=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+driveToken}});if(rr.ok)await mergeRemote(await rr.json());}const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:await dbAll('refs'),profiles:CFG.profiles,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
-async function mergeRemote(remote){if(Array.isArray(remote.profiles))remote.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();const la=new Map((await dbAll('attempts')).map(a=>[a.id,a]));for(const a of(remote.attempts||[]))if(!la.has(a.id))await dbPut('attempts',a);const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[]))if(!lr.has(r.id))await dbPut('review',r);const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[]))if(!lf.has(r.id))await dbPut('refs',r);}
+async function mergeRemote(remote){if(Array.isArray(remote.profiles))remote.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();const la=new Map((await dbAll('attempts')).map(a=>[a.id,a]));for(const a of(remote.attempts||[]))if(!la.has(a.id))await dbPut('attempts',a);const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[]))if(!lr.has(r.id))await dbPut('review',r);const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[]))if(!lf.has(r.id))await dbPut('refs',r);await reconcileProfiles();}
 
 /* ============================================================ Nav + boot ============================================================ */
 $('#navHome').addEventListener('click',()=>{if(S&&!S.submitted&&!confirm('Leave the current practice?'))return;stopTimer();viewHome();});
@@ -856,12 +865,36 @@ const _origSubmit=submitSession;
 submitSession=async function(){const wasReview=S&&S.mode==='review';const qs=wasReview?S.questions.slice():null;const ans=wasReview?S.answers.slice():null;await _origSubmit.apply(this,arguments);if(wasReview){for(let i=0;i<qs.length;i++){const q=qs[i];if(!q.reviewId)continue;const g=gradeAnswer(q,ans[i]);try{const item=(await dbAll('review')).find(r=>r.id===q.reviewId);if(!item)continue;item.timesSeen=(item.timesSeen||0)+1;if(g.status==='correct'){item.timesCorrect=(item.timesCorrect||0)+1;if(item.timesCorrect>=2)item.mastered=true;}else item.timesCorrect=0;await dbPut('review',item);}catch(e){}}scheduleDriveSync();}};
 
 /* ----- LOGIN ----- */
-function applyAuthedProfile(name){const p=CFG.profiles.find(x=>x.name.toLowerCase()===String(name).toLowerCase());if(p)CFG.activeProfileId=p.id;else{const np={id:uid(),name};CFG.profiles.push(np);CFG.activeProfileId=np.id;}saveCfg();}
+function isParentName(name){return AUTH.users.some(u=>u.parent&&u.name.toLowerCase()===String(name).toLowerCase());}
+function studentNames(){return AUTH.users.filter(u=>!u.parent&&u.hash).map(u=>u.name);}
+// Students = the non-parent login users. Seed missing ones; drop stray profiles
+// (parent-named or legacy) that have no saved practices. Idempotent.
+async function reconcileProfiles(){
+  if(!gateActive())return;
+  const names=studentNames();if(!names.length)return;
+  for(const nm of names){if(!CFG.profiles.find(p=>p.name.toLowerCase()===nm.toLowerCase()))CFG.profiles.push({id:uid(),name:nm});}
+  let attempts=[];try{attempts=await dbAll('attempts');}catch(e){}
+  const hasData=id=>attempts.some(a=>a.profileId===id);
+  const isStudent=p=>names.some(n=>n.toLowerCase()===p.name.toLowerCase());
+  CFG.profiles=CFG.profiles.filter(p=>isStudent(p)||hasData(p.id));
+  if(!CFG.profiles.find(p=>p.id===CFG.activeProfileId))CFG.activeProfileId=(CFG.profiles[0]||{}).id;
+  saveCfg();
+}
+function applyAuthedProfile(name){
+  if(isParentName(name)){ // parent isn't a student — land on a student profile
+    const students=CFG.profiles.filter(p=>!isParentName(p.name));
+    if(students.length&&!students.find(p=>p.id===CFG.activeProfileId))CFG.activeProfileId=students[0].id;
+    saveCfg();return;
+  }
+  const p=CFG.profiles.find(x=>x.name.toLowerCase()===String(name).toLowerCase());
+  if(p)CFG.activeProfileId=p.id;else{const np={id:uid(),name};CFG.profiles.push(np);CFG.activeProfileId=np.id;}
+  saveCfg();
+}
 function viewLogin(){
   $('header.app').style.display='none';
   const pwd=el('input',{type:'password',placeholder:'Password',autocomplete:'current-password',onkeydown:e=>{if(e.key==='Enter')tryLogin();}});
   const errEl=el('div',{class:'small',style:'color:var(--bad);min-height:18px;margin-top:6px'});
-  async function tryLogin(){const h=await plHash(pwd.value);const u=AUTH.users.find(x=>x.hash&&x.hash===h);if(!u){errEl.textContent='Incorrect password. Try again.';pwd.value='';pwd.focus();return;}localStorage.setItem(AUTH_KEY,JSON.stringify({name:u.name,parent:!!u.parent,ts:Date.now()}));applyAuthedProfile(u.name);await unlockSharedKey(u.name,pwd.value);toast('Welcome, '+u.name+'!');startApp();}
+  async function tryLogin(){const h=await plHash(pwd.value);const u=AUTH.users.find(x=>x.hash&&x.hash===h);if(!u){errEl.textContent='Incorrect password. Try again.';pwd.value='';pwd.focus();return;}localStorage.setItem(AUTH_KEY,JSON.stringify({name:u.name,parent:!!u.parent,ts:Date.now()}));applyAuthedProfile(u.name);await unlockSharedKey(u.name,pwd.value);toast('Welcome, '+u.name+'!');await startApp();}
   show(el('div',{style:'max-width:380px;margin:8vh auto 0'},
     el('div',{class:'card',style:'text-align:center'},
       el('div',{class:'logo',style:'margin:0 auto 14px'},'🧪'),
@@ -872,8 +905,9 @@ function viewLogin(){
     )));
   setTimeout(()=>pwd.focus(),60);
 }
-function startApp(){
+async function startApp(){
   $('header.app').style.display='';
+  await reconcileProfiles();
   initEmailJS();refreshHeaderProfile();
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   viewHome();
@@ -881,7 +915,7 @@ function startApp(){
 (async function boot(){
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
   if(gateActive()&&!authedUser()){viewLogin();return;}
-  startApp();
+  await startApp();
 })();
 </script>
 </body>

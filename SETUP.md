@@ -175,10 +175,20 @@ practices, mistakes and progress. Switch any time from the chip. (Use the same
 student names on every device if you turn on Drive sync. If the login gate is on,
 each child’s password lands them on their own profile automatically.)
 
-**Saved defaults per student:** on the practice setup screen, set the usual exam,
-year, topics, difficulty, timer etc. and tap **💾 Save as &lt;name&gt;’s
-defaults**. Next time that student starts a practice, the form is pre-filled with
-those settings — and they can still change anything before generating.
+**Parents aren’t students.** Anyone marked `parent:true` in the login can manage
+everything but doesn’t appear as a student. The students are simply the
+non-parent login users (e.g. Howard, Brendan) — their profiles are created
+automatically. A parent logs in and lands on a student, switching between them
+via the name chip.
+
+**Saved defaults per student** — two ways to set them:
+- On the practice setup screen, configure the exam/year/topics/etc. and tap
+  **💾 Save as &lt;name&gt;’s defaults**, or
+- Go to the name chip → **Manage students → ⚙️ Defaults** next to a student to
+  edit their defaults directly (without starting a practice).
+
+Either way, next time that student starts a practice the form is pre-filled —
+and they can still change anything before generating.
 
 ## Reference papers (more realistic questions)
 
