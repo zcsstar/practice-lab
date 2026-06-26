@@ -372,18 +372,24 @@ Return ONLY valid JSON, no markdown fences, exactly:
   return p;
 }
 
-async function callGemini(prompt,files,useSearch){
+async function callGemini(prompt,files){
   const model=CFG.model||'gemini-2.0-flash';
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(CFG.apiKey)}`;
   const parts=[{text:prompt}];
   for(const f of (files||[]))parts.push({inline_data:{mime_type:f.mime,data:f.dataB64}});
-  // Always use Gemini's strict JSON mode — it escapes LaTeX backslashes correctly.
-  // (Search grounding can't combine with JSON mode and produced invalid JSON, so we don't use the tool.)
-  const body={contents:[{parts}],generationConfig:{temperature:0.8,responseMimeType:'application/json'}};
+  // Strict JSON mode (escapes LaTeX backslashes correctly). For 2.5 "thinking"
+  // models, disable thinking so it returns the JSON answer directly (thought
+  // text otherwise contaminates / empties the response).
+  const gc={temperature:0.8,responseMimeType:'application/json'};
+  if(/2\.5|thinking/i.test(model))gc.thinkingConfig={thinkingBudget:0};
+  const body={contents:[{parts}],generationConfig:gc};
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok)throw new Error('Gemini '+r.status+': '+(await r.text()).slice(0,400));
   const j=await r.json();
-  return j?.candidates?.[0]?.content?.parts?.map(p=>p.text).filter(Boolean).join('')||'';
+  const cand=j?.candidates?.[0];
+  const text=(cand?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text).filter(Boolean).join('');
+  if(!text){const reason=cand?.finishReason||j?.promptFeedback?.blockReason||'empty response';throw new Error('Gemini returned no text (finishReason: '+reason+'). Try fewer questions or model gemini-2.0-flash.');}
+  return text;
 }
 async function callOpenAICompatible(prompt,files){
   const base=(CFG.baseUrl||'https://api.openai.com/v1').replace(/\/$/,'');
@@ -921,6 +927,14 @@ submitSession=async function(){const wasReview=S&&S.mode==='review';const qs=was
 /* ----- LOGIN ----- */
 function isParentName(name){return AUTH.users.some(u=>u.parent&&u.name.toLowerCase()===String(name).toLowerCase());}
 function studentNames(){return AUTH.users.filter(u=>!u.parent&&u.hash).map(u=>u.name);}
+// Pre-filled practice defaults per student (applied only when a profile has none;
+// the parent can still edit & save to override). Keyed by lowercased name.
+const SEED_DEFAULTS={
+  brendan:{country:'New Zealand',subject:'Mathematics',exam:'icas',level:'Year 5 (Paper C)',topics:[],count:10,difficulty:3,style:'multiple_choice',timeLimitMin:15,webSearch:true,
+    context:`Audience: a New Zealand Year 5 student sitting ICAS Mathematics (Paper C). Match authentic ICAS style: short, self-contained, word-based problem-solving questions that test understanding and reasoning rather than rote calculation. Each multiple-choice question has four options (A–D) with exactly one correct answer and plausible distractors based on common mistakes. Progress from easier to harder. Cover a balanced mix: number and place value, fractions and decimals, patterns and simple algebra, measurement (length, mass, capacity, time, money in NZ dollars), geometry and shape, and data and chance. Use New Zealand English spelling and everyday NZ contexts (dollars and cents, kilometres, NZ names and places). Assume no calculator. Keep language age-appropriate for a 9–10 year old, but make the harder questions genuinely require multi-step reasoning.`},
+  howard:{country:'New Zealand',subject:'Mathematics',exam:'rangitoto',level:'Year 9 Extension',topics:[],count:10,difficulty:4,style:'mixed',timeLimitMin:20,webSearch:true,
+    context:`Audience: a high-achieving New Zealand Year 8 student preparing for a Year 9 high-school extension/accelerate entrance exam, in the style of the Rangitoto College Year 9 Extension Programme (or comparable NZ secondary-school extension entrance assessments where that style applies). Generate original questions matching the difficulty, topics and structure of such entrance exams: challenging, multi-step problem-solving that rewards insight, pattern-spotting and clear reasoning, pitched above standard Year 8 level. Cover number and proportional reasoning (fractions, ratios, percentages, rates), pre-algebra and patterns (forming and solving simple equations, sequences), geometry and measurement (area, perimeter, volume, angles), basic probability and statistics, and logic/word problems. Favour questions that combine two or more ideas and require working, not single-step recall. Follow the New Zealand Curriculum, use New Zealand English and NZ contexts. Assume no calculator unless a question clearly needs one.`}
+};
 // Stable, name-derived profile id so every device agrees (lets Drive sync merge
 // profiles/defaults/history reliably instead of using random per-device ids).
 function stableId(name){return 'u:'+String(name).toLowerCase().trim();}
@@ -946,6 +960,8 @@ async function reconcileProfiles(){
   const hasData=id=>attempts.some(a=>a.profileId===id);
   const isStudent=p=>names.some(n=>stableId(n)===p.id);
   CFG.profiles=CFG.profiles.filter(p=>isStudent(p)||hasData(p.id));
+  // pre-fill suggested defaults for known students that don't have any yet
+  for(const p of CFG.profiles){const sd=SEED_DEFAULTS[p.name.toLowerCase()];if(sd&&!p.defaults){p.defaults={...sd};p.defaultsAt=1;}}
   const au=authedUser(); // a student is locked to their own profile
   if(au&&!au.parent)CFG.activeProfileId=stableId(au.name);
   if(!CFG.profiles.find(p=>p.id===CFG.activeProfileId))CFG.activeProfileId=(CFG.profiles[0]||{}).id;
