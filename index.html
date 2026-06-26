@@ -153,6 +153,7 @@
   .statusdot.on{background:var(--ok)}
   a{color:var(--brand)}
   .empty{text-align:center;color:var(--muted);padding:30px 10px}.empty .big{font-size:40px;margin-bottom:8px}
+  .appfoot{text-align:center;color:var(--muted);font-size:12px;padding:28px 0 6px;letter-spacing:.2px}
   .seclabel{font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin:20px 6px 8px}
   .seclabel:first-child{margin-top:4px}
   .lockbox{display:flex;align-items:center;gap:12px;background:var(--feature);border:1px solid #cfe2ff;border-radius:var(--radius-ctrl);padding:14px}
@@ -175,6 +176,7 @@
     <button class="iconbtn" id="navSettings" title="Settings">⚙️</button>
   </header>
   <main id="app"></main>
+  <footer class="appfoot">© <span id="footYear">2026</span> Cheez</footer>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -983,6 +985,7 @@ async function startApp(){
   viewHome();
 }
 (async function boot(){
+  try{$('#footYear').textContent=new Date().getFullYear();}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
   if(gateActive()&&!authedUser()){viewLogin();return;}
   await startApp();
