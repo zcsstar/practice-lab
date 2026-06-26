@@ -235,9 +235,27 @@ function signOut(){localStorage.removeItem(AUTH_KEY);location.reload();}
    old per-device key field instead.
    ============================================================ */
 const KEYVAULT={
-  enabled:false,
-  provider:'gemini', model:'gemini-2.0-flash', baseUrl:'',
-  grants:{ /* "Name": {salt:'..', iv:'..', ct:'..'} */ }
+  "enabled": true,
+  "provider": "gemini",
+  "model": "gemini-2.5-flash",
+  "baseUrl": "",
+  "grants": {
+    "Chi": {
+      "salt": "7niIN1EFL7UCRUHdpp7U+Q==",
+      "iv": "7zemf1vGGuwl4Ime",
+      "ct": "47PbRQl9Ji54KUeAjmqzgSrucgJazbqfjViOBMbA9Sq1NreNXQNc3m4xgGCFhGWychWIkb8+noNw2nuX28xOBafsmIRQ"
+    },
+    "Howard": {
+      "salt": "V6drQyxRZHZ9gnrHT3QbGw==",
+      "iv": "N8BIAkfkb5427WDA",
+      "ct": "w5GiYNPiY5uMP3Kxy4tFWdKZlon6SOwx5asPDzVIjPVWU0kX9BKbDCUw5w+Olo3OYDTStDdEHWpjsMBf/2CfG87WoFK0"
+    },
+    "Brendan": {
+      "salt": "8CQSj3MjRNe8avBqBo9afA==",
+      "iv": "HZxd/OgLDIVukwfq",
+      "ct": "wqrUK4sXrAVl0PsPE9droQGc1/dKhpam/znNrCiGRLIxh7gPw8vAxW7BdPeXKa8g1sKLJcnejXCM62wQilfSNycOgBfr"
+    }
+  }
 };
 /* WebCrypto helpers for the vault */
 function b64e(buf){let s='';const b=new Uint8Array(buf);for(let i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s);}
