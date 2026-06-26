@@ -252,6 +252,11 @@ async function unlockSharedKey(name,password){
 }
 function isParent(){const u=authedUser();return !gateActive()||(u&&u.parent);}
 
+/* Pre-set Google Drive OAuth client ID (not a secret; safe to publish).
+   Devices use this automatically — no need to paste it per device. */
+const DRIVE_CLIENT_ID='24143204919-cjeg3g94c9jgt869am681581795nh5fb.apps.googleusercontent.com';
+function driveClientId(){return (CFG.drive&&CFG.drive.clientId)||DRIVE_CLIENT_ID;}
+
 /* ---------- config ---------- */
 const CFG_KEY='practicelab.config.v2';
 const DEFAULT_CFG={
@@ -714,10 +719,11 @@ function viewSettings(){
     parent?sec('Access & sync'):null,
     parent?el('div',{class:'card'},el('h2',{},'☁️ Sync & access'),el('p',{class:'sub'},'Optional extras for parents.'),
       el('details',{class:'adv'},el('summary',{},'Google Drive sync across devices'),
-        el('p',{class:'sub',style:'margin-top:8px'},'Syncs history & papers between devices. Needs the app on https (GitHub Pages).'),
+        el('p',{class:'sub',style:'margin-top:8px'},'Syncs history & papers between devices. Sign in with the same Google account on every device. Turn on, then Connect once per device.'),
         toggle('Sync to my Google Drive',CFG.drive.enabled,v=>CFG.drive.enabled=v),
-        field('OAuth Client ID','From Google Cloud Console (see SETUP.md)',el('input',{type:'text',value:CFG.drive.clientId,placeholder:'xxxx.apps.googleusercontent.com',oninput:e=>CFG.drive.clientId=e.target.value.trim()})),
-        el('div',{class:'row'},el('button',{class:'btn',onclick:()=>driveConnect(true)},'Connect & sync now'),el('span',{class:'small muted',style:'align-self:center'},el('span',{class:'statusdot'+(driveToken?' on':'')}),driveToken?'Connected':'Not connected'))),
+        el('details',{class:'adv'},el('summary',{},'Advanced: OAuth Client ID (pre-set ✓)'),
+          field('OAuth Client ID','Already configured for this app — only change if you made your own.',el('input',{type:'text',value:CFG.drive.clientId,placeholder:DRIVE_CLIENT_ID,oninput:e=>CFG.drive.clientId=e.target.value.trim()}))),
+        el('div',{class:'row',style:'margin-top:10px'},el('button',{class:'btn',onclick:()=>{CFG.drive.enabled=true;saveCfg();driveConnect(true);}},'Connect & sync now'),el('span',{class:'small muted',style:'align-self:center'},el('span',{class:'statusdot'+(driveToken?' on':'')}),driveToken?'Connected':'Not connected'))),
       el('details',{class:'adv'},el('summary',{},'Login / passwords'),buildLoginInner()) ):null,
     el('div',{class:'row',style:'margin-top:18px'},el('button',{class:'btn primary',onclick:()=>{saveCfg();initEmailJS();refreshHeaderProfile();toast('Settings saved ✓');}},'Save settings'),el('button',{class:'btn',onclick:()=>{saveCfg();viewHome();}},'Save & go home')),
     el('p',{class:'small muted',style:'text-align:center;margin-top:14px'},'Keys are stored only in this browser. Nothing is sent anywhere except directly to the AI / email service you set up.')
@@ -834,8 +840,8 @@ async function clearAll(){if(!confirm('Delete '+activeProfile().name+'’s pract
 
 /* ============================================================ Google Drive ============================================================ */
 let driveToken=null,tokenClient=null,syncTimer=null;
-function driveReady(){return CFG.drive.enabled&&CFG.drive.clientId&&window.google&&google.accounts&&google.accounts.oauth2;}
-function driveConnect(interactive){if(!CFG.drive.clientId)return toast('Add your OAuth Client ID first.');if(!window.google||!google.accounts||!google.accounts.oauth2)return toast('Google library not loaded (need internet + https).');if(!tokenClient)tokenClient=google.accounts.oauth2.initTokenClient({client_id:CFG.drive.clientId,scope:'https://www.googleapis.com/auth/drive.appdata',callback:r=>{if(r.access_token){driveToken=r.access_token;toast('☁️ Connected to Drive');driveSyncNow();}}});tokenClient.requestAccessToken({prompt:interactive?'consent':''});}
+function driveReady(){return CFG.drive.enabled&&driveClientId()&&window.google&&google.accounts&&google.accounts.oauth2;}
+function driveConnect(interactive){if(!driveClientId())return toast('No OAuth Client ID configured.');if(!window.google||!google.accounts||!google.accounts.oauth2)return toast('Google library not loaded (need internet + https).');if(!tokenClient)tokenClient=google.accounts.oauth2.initTokenClient({client_id:driveClientId(),scope:'https://www.googleapis.com/auth/drive.appdata',callback:r=>{if(r.access_token){driveToken=r.access_token;toast('☁️ Connected to Drive');driveSyncNow();}}});tokenClient.requestAccessToken({prompt:interactive?'consent':''});}
 function scheduleDriveSync(){if(!driveReady())return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>{if(driveToken)driveSyncNow();else driveConnect(false);},1500);}
 async function driveFindFile(){const r=await fetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D'practice-lab.json'&fields=files(id,name)",{headers:{Authorization:'Bearer '+driveToken}});if(!r.ok)throw new Error('drive list '+r.status);return (await r.json()).files?.[0]?.id||null;}
 async function driveSyncNow(){if(!driveToken)return;try{const fileId=await driveFindFile();if(fileId){const rr=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+driveToken}});if(rr.ok)await mergeRemote(await rr.json());}const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:await dbAll('refs'),profiles:CFG.profiles,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
@@ -869,7 +875,7 @@ function viewLogin(){
 function startApp(){
   $('header.app').style.display='';
   initEmailJS();refreshHeaderProfile();
-  if(CFG.drive.enabled&&CFG.drive.clientId&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
+  if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   viewHome();
 }
 (async function boot(){
