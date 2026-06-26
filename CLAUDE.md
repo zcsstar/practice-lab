@@ -64,9 +64,27 @@ are in [SETUP.md](SETUP.md).
   The summary lists every wrong/self-check/flagged question with the student's
   answer, the correct answer and the explanation; `plainMath()` strips LaTeX so
   it reads cleanly in email (KaTeX doesn't render in mail clients).
-- **Design** — warm "Claude-style" theme (cream `#faf9f5` canvas, coral `#cc785c`
-  accent, serif headings at weight 500) per `design/DESIGN-GUIDELINES.md`. Colours
-  are CSS variables in `:root`; keep coral for primary actions only.
+- **Shared API key (KEYVAULT)** — optional parent-managed key sharing. `KEYVAULT`
+  block sits next to `AUTH` at the top of the script. Holds per-user grants =
+  `AES-256-GCM(apiKey, PBKDF2('plk::'+password))` (helpers `encStr`/`decStr`/
+  `deriveAesKey`, base64 via `b64e`/`b64d`). Built in Settings (parent only) via
+  `buildVaultInner()`. On login, `unlockSharedKey(name,password)` decrypts the
+  grant and writes the key into `CFG` (persists per device, so no re-typing).
+  Requires the login gate on. `isParent()` gates the key UI; non-parents see a
+  locked card. Plaintext key never lives in the repo.
+- **Design / theme** — iOS-style: SF system font (`-apple-system…`), iOS system
+  colours (canvas `#f2f2f7`, blue `#007aff`, green/red/orange semantics), flat
+  primary buttons, iOS toggle switches (`input[type=checkbox].sw`). No serif.
+  References: `design/DESIGN-GUIDELINES.md` (superseded by iOS look) and
+  `design/gsap-skills.md`.
+- **Animation (GSAP)** — loaded from CDN. `animateIn(scope)` (called by `show()`)
+  fades/rises cards on every view; results screen counts up the score and
+  staggers question cards; the runner cross-fades on question swap. Transform/
+  `autoAlpha` only; honours `prefers-reduced-motion` via `reduceMotion`.
+- **Settings** — grouped iOS-style sections via `sec(label)`; advanced items
+  (EmailJS keys, Drive, login, key sharing) live in `<details class="adv">` to
+  keep the screen uncluttered. `buildAICard(parent)` / `buildVaultInner()` /
+  `buildLoginInner()` build the AI + access blocks.
 - **Drive sync** — optional; Google Identity token client + Drive `appDataFolder`
   REST. Merge-on-id (no conflict resolution beyond "keep both / first wins").
   Only works on an https origin. `scheduleDriveSync()` debounces writes.

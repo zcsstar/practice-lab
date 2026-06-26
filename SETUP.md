@@ -29,6 +29,27 @@ This is what writes the questions.
 > requests). If a model name ever stops working, try `gemini-2.5-flash` or
 > `gemini-1.5-flash` in the Model box.
 
+### Share the key with all devices (so kids never type it) — parent only
+
+Once your login (section 4) is set up, you (the parent) can store the key
+**encrypted** so every device unlocks it automatically — no key typing per
+device, and the key is never in the public file as plain text.
+
+1. Sign in as the parent → **⚙️ Settings → AI** → set the provider/key/model →
+   expand **🔑 Share this key with all devices**.
+2. Paste the AI key, type each family member's password (once, so it can be
+   encrypted for them), tap **🔐 Build shared-key block**. It copies a
+   `const KEYVAULT = {…}` block to your clipboard.
+3. In `index.html`, replace the existing `const KEYVAULT = {…};` block (near the
+   top, just below the LOGIN block) with the copied one. Save and re-publish
+   (or ask me to push).
+4. Now when anyone logs in, the app decrypts the key from their password and uses
+   it everywhere. Kids see *"AI key is set by a parent ✓"* and can't change it.
+
+> Security: each grant is AES-256-GCM encrypted under that person's password, so
+> the plaintext key never appears in the repo. Safe for a public GitHub Pages
+> site.
+
 **Using your own paid account instead?**
 - **OpenAI**: provider = OpenAI, model `gpt-4o-mini` (cheap) or `gpt-4o`, key from
   platform.openai.com.
@@ -88,6 +109,13 @@ it manually.
 
 The app has a built-in password gate so only you and the kids can use it. To
 turn it on:
+
+**Easiest (no console):** open the app, go to **⚙️ Settings → Access & sync →
+Login / passwords**. Type a name + password (tick *parent* for yourself) →
+**Generate login line** — it copies a ready-to-paste line. Do this per person,
+then jump to step 3 below.
+
+**Or via console:**
 
 1. Open `index.html` in a browser. Press **F12 → Console**.
 2. For each person, run (type a password of your choice):
