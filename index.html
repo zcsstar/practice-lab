@@ -239,7 +239,7 @@ function signOut(){localStorage.removeItem(AUTH_KEY);location.reload();}
 const KEYVAULT={
   "enabled": true,
   "provider": "gemini",
-  "model": "gemini-2.5-flash",
+  "model": "gemini-2.0-flash",
   "baseUrl": "",
   "grants": {
     "Chi": {
@@ -272,6 +272,10 @@ async function unlockSharedKey(name,password){
   }catch(e){console.warn('shared key unlock failed',e);return false;}
 }
 function isParent(){const u=authedUser();return !gateActive()||(u&&u.parent);}
+// Keep provider/model in sync with the shared vault on every load (plain-text;
+// the key itself still requires login to decrypt). Lets a model change propagate
+// to already-logged-in devices without re-login.
+function applyVaultMeta(){if(KEYVAULT&&KEYVAULT.enabled){if(KEYVAULT.provider)CFG.provider=KEYVAULT.provider;if(KEYVAULT.model)CFG.model=KEYVAULT.model;if(KEYVAULT.baseUrl)CFG.baseUrl=KEYVAULT.baseUrl;saveCfg();}}
 
 /* Pre-set Google Drive OAuth client ID (not a secret; safe to publish).
    Devices use this automatically — no need to paste it per device. */
@@ -382,9 +386,15 @@ async function callGemini(prompt,files){
   // text otherwise contaminates / empties the response).
   const gc={temperature:0.8,responseMimeType:'application/json'};
   if(/2\.5|thinking/i.test(model))gc.thinkingConfig={thinkingBudget:0};
-  const body={contents:[{parts}],generationConfig:gc};
-  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(!r.ok)throw new Error('Gemini '+r.status+': '+(await r.text()).slice(0,400));
+  const body=JSON.stringify({contents:[{parts}],generationConfig:gc});
+  let r,attempt=0;
+  while(true){
+    r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
+    if(r.ok)break;
+    if((r.status===503||r.status===429||r.status===500)&&attempt<2){attempt++;await new Promise(res=>setTimeout(res,1200*attempt));continue;}
+    const t=(await r.text()).slice(0,400);
+    throw new Error('Gemini '+r.status+': '+(r.status===503?'the model is busy right now — please try again in a moment.':t));
+  }
   const j=await r.json();
   const cand=j?.candidates?.[0];
   const text=(cand?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text).filter(Boolean).join('');
@@ -417,21 +427,32 @@ function extractBalanced(s,i){
     else{if(ch==='"')inStr=true;else if(ch===open)d++;else if(ch===close){d--;if(d===0)return s.slice(i,k+1);}}}
   return null;
 }
+function qText(q){return q.question||q.text||q.stem||q.prompt||q.problem||q.questionText||q.q||'';}
+function qOpts(q){return Array.isArray(q.options)?q.options:(Array.isArray(q.choices)?q.choices:(Array.isArray(q.answers)?q.answers:null));}
+function looksQ(q){return q&&typeof q==='object'&&(qText(q)||qOpts(q)||q.answer!=null);}
+function getArr(p){return Array.isArray(p)?p:(p&&Array.isArray(p.questions)?p.questions:(p&&Array.isArray(p.items)?p.items:(p&&Array.isArray(p.data)?p.data:null)));}
 function parseQuestions(raw){
   let txt=String(raw||'').trim().replace(/^```(json)?/i,'').replace(/```$/,'').trim();
   const tryParse=s=>{try{return JSON.parse(s);}catch(e){return undefined;}};
   const fixEsc=s=>s.replace(/\\(?!["\\/bfnrtu])/g,'\\\\'); // repair raw LaTeX backslashes
-  const usable=p=>p&&(Array.isArray(p)||p.questions||p.items);
-  // Build candidates: whole text, then every balanced {…}/[…] start. Pick the
-  // first that parses into a questions object — ignores thinking/prose & braces.
+  const usable=p=>{const a=getArr(p);return !!(a&&a.length&&a.some(looksQ));};
+  // Candidates: whole text, then every balanced {…}/[…] start. Pick the first
+  // that yields an array whose items actually look like questions — ignores
+  // thinking/prose, stray braces, and decoy arrays.
   const candidates=[txt];
   for(let i=0;i<txt.length;i++){const ch=txt[i];if(ch==='{'||ch==='['){const sub=extractBalanced(txt,i);if(sub)candidates.push(sub);}}
   let obj;
   for(const c of candidates){let p=tryParse(c);if(!usable(p))p=tryParse(fixEsc(c));if(usable(p)){obj=p;break;}}
-  if(obj===undefined)throw new Error('AI did not return valid JSON. The model sent: '+JSON.stringify(txt.slice(0,200)));
-  const arr=Array.isArray(obj)?obj:(obj.questions||obj.items||[]);
-  if(!arr.length)throw new Error('No questions returned.');
-  return arr.map((q,i)=>({id:'q'+i,topic:q.topic||'General',type:(q.type||(Array.isArray(q.options)&&q.options.length?'multiple_choice':'short')),question:q.question||q.text||'',options:Array.isArray(q.options)?q.options:null,answerIndex:(typeof q.answerIndex==='number')?q.answerIndex:null,answer:(q.answer!=null)?String(q.answer):(Array.isArray(q.options)&&typeof q.answerIndex==='number'?String(q.options[q.answerIndex]):''),acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):[],explanation:q.explanation||'',marks:Number(q.marks)||1}));
+  if(obj===undefined)throw new Error('AI did not return valid JSON. The model sent: '+JSON.stringify(txt.slice(0,220)));
+  const arr=(getArr(obj)||[]).filter(looksQ);
+  if(!arr.length)throw new Error('The AI response had no usable questions. It sent: '+JSON.stringify(txt.slice(0,220)));
+  return arr.map((q,i)=>{const opts=qOpts(q);const ai=(typeof q.answerIndex==='number')?q.answerIndex:(typeof q.correctIndex==='number'?q.correctIndex:null);
+    return {id:'q'+i,topic:q.topic||q.category||q.strand||'General',
+      type:(q.type||(opts&&opts.length?'multiple_choice':'short')),
+      question:qText(q),options:opts,answerIndex:ai,
+      answer:(q.answer!=null)?String(q.answer):(opts&&typeof ai==='number'?String(opts[ai]):''),
+      acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):(Array.isArray(q.accepted)?q.accepted.map(String):[]),
+      explanation:q.explanation||q.solution||q.working||q.reason||'',marks:Number(q.marks||q.mark||q.points)||1};});
 }
 async function generateQuestions(s,files){
   const refsText=(files||[]).map(f=>f.text?`[${f.name}]\n${f.text}`:'').filter(Boolean).join('\n\n');
@@ -1006,6 +1027,7 @@ function viewLogin(){
 }
 async function startApp(){
   $('header.app').style.display='';
+  applyVaultMeta();
   await reconcileProfiles();
   initEmailJS();refreshHeaderProfile();
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
