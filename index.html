@@ -382,10 +382,10 @@ async function callGemini(prompt,files){
   const parts=[{text:prompt}];
   for(const f of (files||[]))parts.push({inline_data:{mime_type:f.mime,data:f.dataB64}});
   // Strict JSON mode (escapes LaTeX backslashes correctly). For 2.5 "thinking"
-  // models, disable thinking so it returns the JSON answer directly (thought
-  // text otherwise contaminates / empties the response).
-  const gc={temperature:0.8,responseMimeType:'application/json'};
-  if(/2\.5|thinking/i.test(model))gc.thinkingConfig={thinkingBudget:0};
+  // models, disable thinking AND give a large output budget — otherwise hidden
+  // thinking eats the budget and the JSON answer gets truncated.
+  const gc={temperature:0.8,responseMimeType:'application/json',maxOutputTokens:16384};
+  if(/2\.5|thinking|gemini-flash|gemini-pro/i.test(model))gc.thinkingConfig={thinkingBudget:0,includeThoughts:false};
   const body=JSON.stringify({contents:[{parts}],generationConfig:gc});
   let r,attempt=0;
   while(true){
