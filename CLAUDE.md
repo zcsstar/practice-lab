@@ -67,9 +67,12 @@ are in [SETUP.md](SETUP.md).
 - **Question bank (AI-usage reduction)** — `buildPracticeSet(s,files)` is the
   entry point used by `doGenerate()`/`practiceTopic()` instead of calling
   `generateQuestions()` directly. It serves matching questions from the `bank`
-  store first (0 API calls); on a miss it generates a `BANK_PREFILL` (20) batch,
+  store first (0 API calls); on a miss it generates a `BANK_PREFILL` (24) batch,
   uses what's needed and banks the unused surplus (`bankAdd` de-dupes by
-  `qhash`/`normQ`). Bank key = `country|subject|exam|level|difficulty|style`
+  `qhash`/`normQ`). The bank hub's manual pre-generate uses a bigger `BANK_DEEP`
+  (40) batch. Output-token budget scales with batch size via `outTokens(count,
+  cap)` (floor 16384; caps: Gemini 65536 / OpenAI 16384 / Claude 8192) so large
+  batches don't truncate; `generateQuestions` passes it per provider. Bank key = `country|subject|exam|level|difficulty|style`
   (`bankKey`); `bankTake` honours selected topics strictly and rotates
   least-served-first. **Attached past papers or per-session notes always force a
   fresh generation and are NOT banked.** Daily call count lives in `localStorage`

@@ -32,17 +32,29 @@ question snapshot plus:
    topics strictly), marking them served.
 2. **Full hit → 0 API calls** (`source:'bank'`). Toast: *"⚡ From your saved
    bank — no AI used today."*
-3. **Miss / partial → 1 call** for a `BANK_PREFILL` (20) batch; the session uses
+3. **Miss / partial → 1 call** for a `BANK_PREFILL` (24) batch; the session uses
    what it needs and **only the unused surplus is banked** (avoids immediate
    repeats). `source:'mixed'` or `'generated'`.
 4. **Past papers attached OR per-session notes → always fresh, never banked**
    (`source:'fresh'`) — accuracy/specificity when the user explicitly wants it
    is never compromised by stale bank content.
 
+### Getting the most out of one call
+- **Output-token budget scales with batch size.** `outTokens(count,cap)` =
+  `min(cap, max(16384, 4096 + count*1000))`, capped per provider (Gemini 65536,
+  OpenAI 16384, Claude 8192). The old fixed `16384` is the floor, so small
+  practices are unchanged while big batches get the room to finish without
+  truncating. Combined with `salvageQuestions()`, a batch that *does* stop early
+  still banks every complete question.
+- **Manual deep top-up.** The bank hub's **Pre-generate** button uses
+  `BANK_DEEP` (40) — one deliberately large call that stocks the bank for many
+  free practices. Interactive misses use the smaller `BANK_PREFILL` (24) so the
+  child isn't kept waiting.
+
 ### Supporting pieces
 - **`viewBank()`** — the bank hub: a daily AI-usage meter (`X / 20 free
   generations today`), banked counts per setup, a **Pre-generate (1 AI call)**
-  button to stock up during downtime, and Clear.
+  button (deep batch) to stock up during downtime, and Clear.
 - **Usage meter** — `localStorage` `practicelab.usage`, last ~21 days, surfaced
   on the bank screen and used to warn as the free limit approaches.
 - Bank flows through **export/import** and **Drive sync** like the other stores.

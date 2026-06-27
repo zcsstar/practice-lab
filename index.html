@@ -218,7 +218,7 @@ function fmtExplain(text){
   let raw=String(text??'').replace(/\r/g,'').trim();
   if(!raw)return '';
   const math=[];
-  raw=raw.replace(/\$\$[\s\S]*?\$\$|\$[^$\n]*?\$/g,m=>{math.push(m);return `${math.length-1}`;});
+  raw=raw.replace(/\$\$[\s\S]*?\$\$|\$(?:\\.|[^$\n])*?\$/g,m=>{math.push(m);return `${math.length-1}`;});
   // put each numbered step / "Step N" onto its own line
   raw=raw.replace(/[ \t]+(?=\d+\.\s+(?:\*\*|[A-Z]))/g,'\n');
   raw=raw.replace(/[ \t]+(?=(?:Step|Part)\s+\d+\s*[:.\)])/gi,'\n');
@@ -384,7 +384,8 @@ function usageGet(){let u={};try{u=JSON.parse(localStorage.getItem(USAGE_KEY)||'
 function usageToday(){return usageGet()[todayISO()]||0;}
 function usageBump(n=1){const u=usageGet(),d=todayISO();u[d]=(u[d]||0)+n;const ks=Object.keys(u).sort();while(ks.length>21)delete u[ks.shift()];localStorage.setItem(USAGE_KEY,JSON.stringify(u));}
 function freeDailyLimit(){return CFG.provider==='gemini'?20:0;} // 0 = unknown / not free-tier-limited
-const BANK_PREFILL=20; // questions to request when we do hit the API, so the surplus refills the bank
+const BANK_PREFILL=24; // batch size when a practice misses the bank — serves now + banks the surplus
+const BANK_DEEP=40;    // batch size for a manual "stock the bank" pre-generation (one big call → many free practices)
 function normQ(s){return String(s||'').toLowerCase().replace(/\$/g,' ').replace(/[^a-z0-9]+/g,' ').trim().slice(0,180);}
 function qhash(s){const t=normQ(s);let h=2166136261>>>0;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return 'h'+(h>>>0).toString(36);}
 function bankKey(s){return [s.country,s.subject,s.exam,s.level,s.difficulty,s.style].map(x=>String(x==null?'':x).toLowerCase().trim()).join('|');}
@@ -479,6 +480,7 @@ FORMAT: ${styleLine}`;
 REQUIREMENTS:
 - Real exam quality. Vary the topics. Order from easier to harder.
 - Use LaTeX for ALL maths, wrapped in single dollar signs, e.g. $\\frac{3}{4}$ or $x^2+5$.
+- MONEY: put the whole amount inside ONE math span with an escaped dollar sign, e.g. write $\\$27.50$ (renders as a dollar amount). NEVER leave a bare "$" in plain text — two bare $ signs get misread as a maths delimiter and garble the text.
 - EXPLANATIONS — keep them SIMPLE, SHORT and easy for a ${s.level} student to read. Match the vocabulary and sentence length to that age: for primary / elementary years use very simple words and very short sentences. Aim for 2–4 short steps; for primary levels keep the whole explanation under ~60 words. Friendly and encouraging.
 - Write the FINAL, already-correct explanation only. Do NOT think out loud, second-guess, recheck, or show false starts (never "wait", "let me recheck", "I made a mistake", "actually", "this is not correct", "let's re-think"). Work out the answer privately, then write only the clean, confident solution.
 - Structure each explanation as numbered steps: put each step on its OWN line beginning with "1. ", "2. ", etc., separated by a real newline (\n). Bold the key idea of a step with **double asterisks**. One short sentence per step where possible. Do NOT use asterisk bullets or markdown emphasis in the "question" text itself.
@@ -492,15 +494,16 @@ Return ONLY valid JSON, no markdown fences, exactly:
   return p;
 }
 
-async function callGemini(prompt,files){
+async function callGemini(prompt,files,maxTokens){
   const model=CFG.model||'gemini-2.0-flash';
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(CFG.apiKey)}`;
   const parts=[{text:prompt}];
   for(const f of (files||[]))parts.push({inline_data:{mime_type:f.mime,data:f.dataB64}});
   // Strict JSON mode (escapes LaTeX backslashes correctly). For 2.5 "thinking"
   // models, disable thinking AND give a large output budget — otherwise hidden
-  // thinking eats the budget and the JSON answer gets truncated.
-  const gc={temperature:0.8,responseMimeType:'application/json',maxOutputTokens:16384};
+  // thinking eats the budget and the JSON answer gets truncated. Budget scales
+  // with batch size so large bank pre-generations complete in one call.
+  const gc={temperature:0.8,responseMimeType:'application/json',maxOutputTokens:maxTokens||16384};
   if(/2\.5|thinking|gemini-flash|gemini-pro/i.test(model))gc.thinkingConfig={thinkingBudget:0,includeThoughts:false};
   const body=JSON.stringify({contents:[{parts}],generationConfig:gc});
   let r,attempt=0;
@@ -522,20 +525,20 @@ async function callGemini(prompt,files){
   if(!text){const reason=cand?.finishReason||j?.promptFeedback?.blockReason||'empty response';throw new Error('Gemini returned no text (finishReason: '+reason+'). Try fewer questions or model gemini-2.0-flash.');}
   return text;
 }
-async function callOpenAICompatible(prompt,files){
+async function callOpenAICompatible(prompt,files,maxTokens){
   const base=(CFG.baseUrl||'https://api.openai.com/v1').replace(/\/$/,'');
   const content=[{type:'text',text:prompt}];
   for(const f of (files||[]))if(f.mime.startsWith('image/'))content.push({type:'image_url',image_url:{url:'data:'+f.mime+';base64,'+f.dataB64}});
-  const body={model:CFG.model||'gpt-4o-mini',temperature:0.8,response_format:{type:'json_object'},messages:[{role:'system',content:'You output only valid JSON.'},{role:'user',content}]};
+  const body={model:CFG.model||'gpt-4o-mini',temperature:0.8,max_tokens:maxTokens||16384,response_format:{type:'json_object'},messages:[{role:'system',content:'You output only valid JSON.'},{role:'user',content}]};
   const r=await fetch(base+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+CFG.apiKey},body:JSON.stringify(body)});
   if(!r.ok)throw new Error('API '+r.status+': '+(await r.text()).slice(0,400));
   const j=await r.json();return j?.choices?.[0]?.message?.content||'';
 }
-async function callClaude(prompt,files){
+async function callClaude(prompt,files,maxTokens){
   const content=[];
   for(const f of (files||[]))if(f.mime.startsWith('image/'))content.push({type:'image',source:{type:'base64',media_type:f.mime,data:f.dataB64}});
   content.push({type:'text',text:prompt+'\n\nRespond with only the JSON object.'});
-  const body={model:CFG.model||'claude-3-5-haiku-latest',max_tokens:4096,temperature:0.8,messages:[{role:'user',content}]};
+  const body={model:CFG.model||'claude-3-5-haiku-latest',max_tokens:Math.min(8192,maxTokens||4096),temperature:0.8,messages:[{role:'user',content}]};
   const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CFG.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)});
   if(!r.ok)throw new Error('Claude '+r.status+': '+(await r.text()).slice(0,400));
   const j=await r.json();return j?.content?.map(c=>c.text).filter(Boolean).join('')||'';
@@ -594,13 +597,18 @@ function parseQuestions(raw){
       explanation:q.explanation||q.solution||q.working||q.reason||'',marks:Number(q.marks||q.mark||q.points)||1,
       svg:sanitizeSvg(q.svg||q.figure||q.diagram||q.image||'')};});
 }
+// Output-token budget needed for a batch. Each question (with a short
+// explanation, options and maybe a small SVG) is ~900 tokens; give headroom so
+// big bank batches don't truncate. Clamped per provider's real ceiling.
+function outTokens(count,cap){return Math.min(cap,Math.max(16384,4096+(count||10)*1000));}
 async function generateQuestions(s,files){
   const refsText=(files||[]).map(f=>f.text?`[${f.name}]\n${f.text}`:'').filter(Boolean).join('\n\n');
   const prompt=buildPrompt(s,refsText);
+  const count=s.count||10;
   let raw;
-  if(CFG.provider==='gemini')raw=await callGemini(prompt,files);
-  else if(CFG.provider==='claude')raw=await callClaude(prompt,files);
-  else raw=await callOpenAICompatible(prompt,files);
+  if(CFG.provider==='gemini')raw=await callGemini(prompt,files,outTokens(count,65536));
+  else if(CFG.provider==='claude')raw=await callClaude(prompt,files,outTokens(count,8192));
+  else raw=await callOpenAICompatible(prompt,files,outTokens(count,16384));
   return parseQuestions(raw);
 }
 /* Build a practice set with the fewest possible API calls:
@@ -630,7 +638,7 @@ async function practiceTopic(topic){
   const base=src?{country:src.country,subject:src.subject,exam:(EXAMS[src.exam]?src.exam:'icas'),level:src.level,difficulty:src.difficulty||3,style:src.style||(EXAMS[src.exam]&&EXAMS[src.exam].style)||'mixed'}:defaultSettingsFor(activeProfile());
   const exam=EXAMS[base.exam]||EXAMS.icas;
   const s={...base,topics:[topic],count:8,context:CFG.examContext[base.exam]||'',webSearch:CFG.webSearch,notes:'',examLabel:exam.label};
-  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building a '+esc(topic)+' drill…'),el('div',{class:'muted small',style:'margin-top:6px'},'8 questions · '+esc(s.level||'')+' · diff '+s.difficulty)))));
+  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building a '+topic+' drill…'),el('div',{class:'muted small',style:'margin-top:6px'},'8 questions · '+(s.level||'')+' · diff '+s.difficulty)))));
   try{
     const set=await buildPracticeSet(s,[]);
     startSession(s,set.questions,'practice');
@@ -878,7 +886,7 @@ function viewRun(){
   function renderNav(){navWrap.innerHTML='';S.questions.forEach((q,i)=>{const answered=S.answers[i]!=null&&S.answers[i]!==''&&S.answers[i]!==-1;navWrap.append(el('button',{class:'qchip'+(i===S.cur?' cur':'')+(answered?' answered':'')+(S.flags[i]?' flagged':''),onclick:()=>{S.cur=i;renderQ();renderNav();}},String(i+1)));});}
   function renderQ(){
     const i=S.cur,q=S.questions[i];qHost.innerHTML='';
-    const head=el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)+' of '+total),el('span',{class:'pill'},esc(q.topic)),el('span',{class:'pill'},q.marks+' mark'+(q.marks>1?'s':''))),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak(qSpeakText(q))},'🔊'));
+    const head=el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)+' of '+total),el('span',{class:'pill'},q.topic),el('span',{class:'pill'},q.marks+' mark'+(q.marks>1?'s':''))),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak(qSpeakText(q))},'🔊'));
     const qtext=el('div',{class:'qtext',html:esc(q.question)});
     const fig=q.svg?el('div',{class:'figure',html:q.svg}):'';
     let input;
@@ -929,7 +937,7 @@ function viewResults(a){
     const yourAns=r.type==='multiple_choice'?(r.userAns===-1||r.userAns==null?'—':(String.fromCharCode(65+r.userAns)+'. '+(r.options?.[r.userAns]??''))):(r.userAns||'—');
     const correctAns=r.type==='multiple_choice'?(String.fromCharCode(65+r.answerIndex)+'. '+(r.options?.[r.answerIndex]??r.answer)):(r.answer+(r.acceptedAnswers?.length?` (also: ${r.acceptedAnswers.join(', ')})`:''));
     list.append(el('div',{class:'qresult '+cls},
-      el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)),el('span',{class:'pill'},esc(r.topic)),r.flagged?el('span',{class:'pill',style:'color:#d97706'},'🚩 flagged'):''),badge),
+      el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)),el('span',{class:'pill'},r.topic),r.flagged?el('span',{class:'pill',style:'color:#d97706'},'🚩 flagged'):''),badge),
       el('div',{class:'qtext',style:'font-size:16px;margin:8px 0 6px',html:esc(r.question)}),
       r.svg?el('div',{class:'figure',html:r.svg}):'',
       el('div',{class:'ans-line'},el('b',{},'Your answer: '),el('span',{html:esc(yourAns)})),
@@ -1003,15 +1011,15 @@ async function viewBank(){
       el('p',{class:'sub',style:'margin-bottom:10px'},st.total?`${st.total} question${st.total===1?'':'s'} saved and ready to practise for free.`:'No saved questions yet. Pre-generate a batch now so future practices use no AI.'),
       ...rows,
       el('div',{class:'row',style:'margin-top:14px'},
-        el('button',{class:'btn primary',onclick:()=>topUpBank(defaultSettingsFor(p))},'✨ Pre-generate '+BANK_PREFILL+' (1 AI call)'),
+        el('button',{class:'btn primary',onclick:()=>topUpBank(defaultSettingsFor(p))},'✨ Pre-generate '+BANK_DEEP+' (1 AI call)'),
         st.total?el('button',{class:'btn danger',onclick:()=>clearBank()},'Clear bank'):'' )),
     el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('p',{class:'sub',style:'margin:0'},'💡 Each batch is reused across many practices with the same exam, level and difficulty, so most sessions cost zero AI. Attaching past papers or adding session notes always generates fresh questions.'))));
 }
 async function topUpBank(s){
   if(!CFG.apiKey)return toast('Add an AI key in Settings first.');
-  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Filling the bank…'),el('div',{class:'muted small',style:'margin-top:6px'},`${BANK_PREFILL} ${EXAMS[s.exam].label} · ${s.subject} · ${s.level}`)))));
+  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Filling the bank…'),el('div',{class:'muted small',style:'margin-top:6px'},`${BANK_DEEP} ${EXAMS[s.exam].label} · ${s.subject} · ${s.level} — this one call powers many free practices`)))));
   try{
-    const gen=await generateQuestions({...s,count:BANK_PREFILL,examLabel:EXAMS[s.exam].label},[]);
+    const gen=await generateQuestions({...s,count:BANK_DEEP,examLabel:EXAMS[s.exam].label},[]);
     usageBump(1);
     const added=await bankAdd({...s,examLabel:EXAMS[s.exam].label},gen);
     scheduleDriveSync();
@@ -1044,7 +1052,7 @@ async function viewDashboard(){
         el('div',{class:'row',style:'gap:10px;align-items:center'},el('span',{class:'avatar',style:'background:'+colorFor(p.name)},initials(p.name)),el('div',{},el('div',{style:'font-weight:700'},esc(p.name)),el('div',{class:'small muted'},last?('Last practice: '+last.date):'No practices yet'))),
         el('span',{class:'streak'},'🔥 '+streak)),
       el('div',{class:'tiles',style:'margin-top:12px'},tile(at.length,'Practices'),tile(avg+'%','Avg score'),tile(toReview,'To review'),tile(weak?weak.pct+'%':'—','Weakest')),
-      weak?el('div',{class:'small muted',style:'margin-top:8px'},'Focus area: '+esc(weak.t)+' ('+weak.pct+'%)'):'',
+      weak?el('div',{class:'small muted',style:'margin-top:8px'},'Focus area: '+weak.t+' ('+weak.pct+'%)'):'',
       el('div',{class:'row',style:'margin-top:10px'},el('button',{class:'btn sm',onclick:()=>{CFG.activeProfileId=p.id;saveCfg();refreshHeaderProfile();toast('Switched to '+p.name);viewHistory();}},'Open '+esc(p.name.split(' ')[0])+'’s history')));
   });
   show(el('div',{},backBar('All students',()=>viewHome()),
