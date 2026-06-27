@@ -77,6 +77,19 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   keeping every COMPLETE question (skips a bad one, stops at a truncated tail) —
   never throws, returns `[]` if nothing is recoverable. `parseQuestions()` in
   index.html just maps its output to the app shape (+`sanitizeSvg`).
+- **Reference library + grounding** — `viewRefs` ("📚 Reference library", home menu)
+  manages real past papers in the `refs` store, **shared** (`profileId:'all'`) and
+  tagged `{exam,subject,level,year}`. Import auto-tags from the filename
+  (`autoTagFromName`, e.g. "ICAS Maths Paper C 2019.pdf"); tags are editable.
+  Scanned PDFs yield no pdf.js text but are sent inline to Gemini. `bestRef(s,refs)`
+  picks the closest paper to a practice setup (subject required; then exam, level
+  overlap, newest year; null if no subject match — which is also the *fallback*
+  for exams without papers, e.g. ground Rangitoto Maths on an ICAS Maths paper).
+  `topUpBank` auto-grounds: if `bestRef` hits, it makes ONE grounded
+  `generateQuestions` call (the paper is sent once → fresh questions in its style)
+  and banks them — frugal (no per-practice image sends; reused from the bank).
+  Import the working subset, NOT the whole multi-GB archive (IndexedDB/Drive-sync
+  size). 25 MB/file cap.
 - **Reliable large batches** — big single requests truncate (2.5-flash thinking
   budget can cut a 40-question response off mid-item). `generateMany(s,files,
   target,onProgress)` instead loops `GEN_CHUNK` (12)-sized calls, de-duping and
