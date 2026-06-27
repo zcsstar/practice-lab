@@ -116,6 +116,11 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     "Data &amp; graphs"). `esc()` is only for `{html:...}` / attribute strings.
 - **Read-aloud** — `speak()` (Web Speech) reads a question/explanation aloud,
   using `plainMath()` to strip LaTeX/markdown. 🔊 buttons in runner + results.
+  Settings → Read-aloud (`buildVoiceCard()`) picks the voice (`CFG.voiceURI`,
+  device-dependent list from `speechSynthesis.getVoices()`, async via
+  `voiceschanged`), speed (`CFG.voiceRate`) and pitch (`CFG.voicePitch`, higher =
+  younger — the API has no age metadata). `voiceGender()` is a best-effort
+  name-based label only.
 - **Streaks / daily goal** — Home shows a 🔥 day-streak tile (`computeStreak`,
   UTC-based) and a daily-goal bar (`CFG.dailyGoal`, default 10, vs questions
   answered today). Generate-similar: `practiceTopic(topic)` builds a bank-first

@@ -351,6 +351,7 @@ const DEFAULT_CFG={
   drive:{enabled:true,clientId:''},
   webSearch:true,
   dailyGoal:10,    // questions per day target (for the streak / goal widget)
+  voiceURI:'', voiceRate:0.95, voicePitch:1,  // read-aloud voice (Web Speech)
   examContext:{}   // saved per-exam extra context text, keyed by exam id
 };
 let CFG=loadCfg();
@@ -1067,6 +1068,8 @@ function viewSettings(){
         gateActive()?el('button',{class:'btn',onclick:()=>signOut()},'🔓 Sign out'):null)),
     sec('AI'),
     buildAICard(parent),
+    sec('Read-aloud'),
+    buildVoiceCard(),
     parent?sec('Notifications'):null,
     parent?el('div',{class:'card'},el('h2',{},'📧 Email summaries'),el('p',{class:'sub'},'Email a recap (including the questions to review) when a practice finishes.'),
       toggle('Send summary emails',CFG.emailEnabled,v=>CFG.emailEnabled=v),
@@ -1162,8 +1165,45 @@ async function testAI(){if(!CFG.apiKey)return toast('Add an API key first.');sav
 function initEmailJS(){try{if(CFG.emailjs.publicKey&&window.emailjs)emailjs.init({publicKey:CFG.emailjs.publicKey});}catch(e){}}
 function plainMath(s){return String(s||'').replace(/\$\$?/g,'').replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g,'($1)/($2)').replace(/\\times/g,'×').replace(/\\div/g,'÷').replace(/\\cdot/g,'·').replace(/\\(le|leq)/g,'≤').replace(/\\(ge|geq)/g,'≥').replace(/\\(degree|circ)/g,'°').replace(/\\sqrt\{([^{}]*)\}/g,'√($1)').replace(/\\[a-zA-Z]+/g,'').replace(/[{}]/g,'').replace(/\s+/g,' ').trim();}
 /* Read-aloud (Web Speech) — strips LaTeX and markdown so it sounds natural. */
-function speak(text){const sy=window.speechSynthesis;if(!sy)return toast('Read-aloud isn’t supported on this device.');try{sy.cancel();const u=new SpeechSynthesisUtterance(plainMath(String(text||'')).replace(/\*+/g,''));u.rate=.95;u.lang='en-NZ';sy.speak(u);}catch(e){toast('Couldn’t start read-aloud.');}}
+function plVoices(){try{return (window.speechSynthesis&&speechSynthesis.getVoices())||[];}catch(e){return [];}}
+function pickVoice(){const vs=plVoices();if(!vs.length||!CFG.voiceURI)return null;return vs.find(v=>v.voiceURI===CFG.voiceURI)||null;}
+// Best-effort gender hint from the voice name (the Web Speech API exposes no
+// gender/age metadata, so this is just a label where the name makes it obvious).
+function voiceGender(name){const n=String(name||'').toLowerCase();
+  if(/\b(female|woman|girl)\b|samantha|victoria|karen|moira|tessa|fiona|zira|susan|linda|amelia|serena|allison|joanna|salli|kimberly|\bava\b|catherine|hazel|sonia|\bzoe\b/.test(n))return 'female';
+  if(/\b(male|man|boy)\b|daniel|\bfred\b|\balex\b|oliver|thomas|george|\bjames\b|david|\bmark\b|\bguy\b|matthew|brian|arthur|gordon|ryan/.test(n))return 'male';
+  return '';}
+function speak(text){const sy=window.speechSynthesis;if(!sy)return toast('Read-aloud isn’t supported on this device.');
+  try{sy.cancel();const u=new SpeechSynthesisUtterance(plainMath(String(text||'')).replace(/\*+/g,''));
+    u.rate=CFG.voiceRate||0.95;u.pitch=(CFG.voicePitch!=null?CFG.voicePitch:1);u.lang='en-NZ';
+    const v=pickVoice();if(v){u.voice=v;u.lang=v.lang;}
+    sy.speak(u);}catch(e){toast('Couldn’t start read-aloud.');}}
 function qSpeakText(q){let t=q.question||'';if(q.type==='multiple_choice'&&q.options)t+='. The options are: '+q.options.map((o,i)=>String.fromCharCode(65+i)+', '+o).join('. ');return t;}
+// Settings card: choose the read-aloud voice + pitch (higher = younger) + speed.
+function buildVoiceCard(){
+  const card=el('div',{class:'card'});
+  const sel=el('select',{onchange:e=>{CFG.voiceURI=e.target.value;saveCfg();}});
+  function fill(){
+    const all=plVoices();const en=all.filter(v=>/^en/i.test(v.lang));const list=en.length?en:all;
+    sel.innerHTML='';sel.append(el('option',{value:''},'Default voice'));
+    list.forEach(v=>{const g=voiceGender(v.name);sel.append(el('option',{value:v.voiceURI},v.name+' · '+v.lang+(g?' · '+g:'')));});
+    sel.value=CFG.voiceURI||'';
+    note.textContent=list.length?`${list.length} voice${list.length>1?'s':''} available on this device.`:'No voices detected on this device yet — they may load in a moment, or this browser has none.';
+  }
+  const note=el('div',{class:'small muted',style:'margin-top:6px'});
+  fill();
+  if(!plVoices().length&&window.speechSynthesis&&speechSynthesis.addEventListener)speechSynthesis.addEventListener('voiceschanged',fill,{once:true});
+  const rate=el('input',{type:'range',min:'0.6',max:'1.3',step:'0.05',value:String(CFG.voiceRate||0.95),oninput:e=>{CFG.voiceRate=+e.target.value;saveCfg();}});
+  const pitch=el('input',{type:'range',min:'0.5',max:'1.6',step:'0.05',value:String(CFG.voicePitch!=null?CFG.voicePitch:1),oninput:e=>{CFG.voicePitch=+e.target.value;saveCfg();}});
+  card.append(
+    el('h2',{},'🔊 Read-aloud voice'),
+    el('p',{class:'sub',style:'margin-bottom:10px'},'The voice used when reading questions and explanations aloud. Available voices depend on this device/browser.'),
+    field('Voice','',sel),note,
+    field('Speed','(slower ↔ faster)',rate),
+    field('Pitch','(lower = older ↔ higher = younger)',pitch),
+    el('button',{class:'btn',style:'margin-top:8px',onclick:()=>speak('Hi! This is how I will read your questions. Two plus two equals four.')},'▶ Test voice'));
+  return card;
+}
 function ansStrings(r){
   const your=r.type==='multiple_choice'?(r.userAns==null||r.userAns===-1?'(left blank)':String.fromCharCode(65+r.userAns)+'. '+plainMath(r.options?.[r.userAns]||'')):(r.userAns?plainMath(String(r.userAns)):'(left blank)');
   const corr=r.type==='multiple_choice'?(String.fromCharCode(65+r.answerIndex)+'. '+plainMath(r.options?.[r.answerIndex]||r.answer)):plainMath(r.answer);
@@ -1307,7 +1347,7 @@ async function startApp(){
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   viewHome();
 }
-const APP_VERSION='v10';
+const APP_VERSION='v11';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
