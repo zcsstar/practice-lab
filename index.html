@@ -170,6 +170,12 @@
 
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1c1c1e;color:#fff;padding:11px 16px;border-radius:var(--radius-ctrl);box-shadow:var(--shadow);z-index:200;font-size:14px;max-width:90vw;opacity:0;pointer-events:none;transition:.25s}
   .toast.show{opacity:1}
+  .speakbar{position:fixed;left:50%;bottom:78px;transform:translateX(-50%) translateY(16px);display:flex;gap:8px;align-items:center;background:#1c1c1e;color:#fff;padding:8px 10px 8px 16px;border-radius:999px;box-shadow:var(--shadow);z-index:190;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+  .speakbar.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
+  .speakbar .sb-ic{font-size:16px}
+  .speakbar .sb-lbl{font-size:14px;margin-right:4px}
+  .speakbar .btn{padding:6px 12px;border:none;background:#3a3a3c;color:#fff}
+  .speakbar .btn.danger{background:#ff453a;color:#fff}
   .loader{display:grid;place-items:center;padding:40px 0;text-align:center}
   .spinner{width:46px;height:46px;border-radius:50%;border:4px solid #e2e8f0;border-top-color:var(--brand);animation:spin 1s linear infinite;margin-bottom:14px}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -205,6 +211,11 @@
   <footer class="appfoot">© <span id="footYear">2026</span> Cheez · <span id="footVer">v8</span></footer>
 </div>
 <div class="toast" id="toast"></div>
+<div class="speakbar" id="speakbar" role="region" aria-label="Read aloud controls">
+  <span class="sb-ic">🔊</span><span class="sb-lbl">Reading aloud…</span>
+  <button class="btn sm" id="sbPause" onclick="speakPauseToggle()">⏸ Pause</button>
+  <button class="btn sm danger" onclick="speakStop()">⏹ Stop</button>
+</div>
 
 <!-- Robust question-JSON parser (recovers partial/truncated/malformed AI output). Classic script: works on file:// and GitHub Pages. -->
 <script src="parse.js"></script>
@@ -728,7 +739,7 @@ function startSession(settings,questions,mode='practice'){S={id:uid(),mode,setti
 const app=()=>$('#app');
 const reduceMotion=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 function animateIn(scope){if(reduceMotion||!window.gsap)return;const root=scope.firstElementChild;if(!root)return;const items=[...root.children].filter(n=>n.nodeType===1);if(!items.length)return;gsap.from(items,{autoAlpha:0,y:14,duration:.34,ease:'power2.out',stagger:.045,clearProps:'all'});}
-function show(node){const a=app();a.innerHTML='';a.append(node);renderMath(a);window.scrollTo(0,0);animateIn(a);}
+function show(node){try{window.speechSynthesis&&window.speechSynthesis.cancel();}catch(e){}if(typeof refreshSpeakBar==='function')refreshSpeakBar();const a=app();a.innerHTML='';a.append(node);renderMath(a);window.scrollTo(0,0);animateIn(a);}
 function backBar(title,back){return el('div',{class:'row between',style:'margin-bottom:22px'},el('button',{class:'btn ghost',onclick:back},'← Back'),el('div',{class:'small muted'},title),el('div',{style:'width:60px'}));}
 function field(lbl,hint,control){return el('label',{class:'field'},el('span',{class:'lbl'},lbl,hint?el('span',{class:'hint'},' '+hint):''),control);}
 function tile(n,l){return el('div',{class:'tile'},el('div',{class:'n'},(n&&n.nodeType)?n:String(n)),el('div',{class:'l'},l));}
@@ -1365,11 +1376,28 @@ function voiceGender(name){const n=String(name||'').toLowerCase();
   if(/\b(female|woman|girl)\b|samantha|victoria|karen|moira|tessa|fiona|zira|susan|linda|amelia|serena|allison|joanna|salli|kimberly|\bava\b|catherine|hazel|sonia|\bzoe\b/.test(n))return 'female';
   if(/\b(male|man|boy)\b|daniel|\bfred\b|\balex\b|oliver|thomas|george|\bjames\b|david|\bmark\b|\bguy\b|matthew|brian|arthur|gordon|ryan/.test(n))return 'male';
   return '';}
+// Floating read-aloud control bar — auto-shows while speaking/paused, hides when
+// idle; the Pause button flips to Resume; Stop cancels. Polled (400ms) as well as
+// event-driven because Chrome's speech end/pause events are unreliable.
+let _speakTimer=null;
+function refreshSpeakBar(){
+  const sy=window.speechSynthesis,bar=$('#speakbar');if(!bar)return;
+  const active=!!(sy&&(sy.speaking||sy.paused));
+  bar.classList.toggle('show',active);
+  const pb=$('#sbPause');if(pb)pb.textContent=(sy&&sy.paused)?'▶ Resume':'⏸ Pause';
+  if(!active&&_speakTimer){clearInterval(_speakTimer);_speakTimer=null;}
+}
+function speakPauseToggle(){const sy=window.speechSynthesis;if(!sy)return;try{if(sy.paused)sy.resume();else if(sy.speaking)sy.pause();}catch(e){}setTimeout(refreshSpeakBar,30);}
+function speakStop(){try{window.speechSynthesis&&window.speechSynthesis.cancel();}catch(e){}refreshSpeakBar();}
 function speak(text){const sy=window.speechSynthesis;if(!sy)return toast('Read-aloud isn’t supported on this device.');
   try{sy.cancel();const u=new SpeechSynthesisUtterance(plainMath(String(text||'')).replace(/\*+/g,''));
     u.rate=CFG.voiceRate||0.95;u.pitch=(CFG.voicePitch!=null?CFG.voicePitch:1);u.lang='en-NZ';
     const v=pickVoice();if(v){u.voice=v;u.lang=v.lang;}
-    sy.speak(u);}catch(e){toast('Couldn’t start read-aloud.');}}
+    u.onstart=u.onend=u.onpause=u.onresume=u.onerror=refreshSpeakBar;
+    sy.speak(u);
+    if(_speakTimer)clearInterval(_speakTimer);_speakTimer=setInterval(refreshSpeakBar,400);
+    setTimeout(refreshSpeakBar,40);
+  }catch(e){toast('Couldn’t start read-aloud.');}}
 function qSpeakText(q){let t=q.question||'';if(q.type==='multiple_choice'&&q.options)t+='. The options are: '+q.options.map((o,i)=>String.fromCharCode(65+i)+', '+o).join('. ');return t;}
 // Settings card: choose the read-aloud voice + pitch (higher = younger) + speed.
 function buildVoiceCard(){
@@ -1539,7 +1567,7 @@ async function startApp(){
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   viewHome();
 }
-const APP_VERSION='v16';
+const APP_VERSION='v17';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

@@ -153,7 +153,11 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     "Data &amp; graphs"). `esc()` is only for `{html:...}` / attribute strings.
 - **Read-aloud** — `speak()` (Web Speech) reads a question/explanation aloud,
   using `plainMath()` to strip LaTeX/markdown. 🔊 buttons in runner + results.
-  Settings → Read-aloud (`buildVoiceCard()`) picks the voice (`CFG.voiceURI`,
+  A floating control bar (`#speakbar`, `refreshSpeakBar`/`speakPauseToggle`/
+  `speakStop`) auto-appears while speaking with Pause⇄Resume + Stop, and hides when
+  idle (event-driven + 400ms poll, since Chrome speech events are flaky). `show()`
+  cancels speech on view change. Settings → Read-aloud (`buildVoiceCard()`) picks
+  the voice (`CFG.voiceURI`,
   device-dependent list from `speechSynthesis.getVoices()`, async via
   `voiceschanged`), speed (`CFG.voiceRate`) and pitch (`CFG.voicePitch`, higher =
   younger — the API has no age metadata). `voiceGender()` is a best-effort
