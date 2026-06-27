@@ -105,6 +105,17 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   Bank/Dashboard`. `show(node)` swaps `#app` and re-runs KaTeX. No router;
   functions call each other. `viewBank` = question-bank hub; `viewDashboard` =
   parent-only all-students progress overview.
+- **Mistakes notebook** (`viewReview`, home "📓 Mistakes notebook") — browses the
+  `review` items grouped by topic, each expandable to its worked answer + mastery
+  progress (`timesCorrect`/2). `startReview(items)` re-tests all or a single topic
+  (review-mode session; the `submitSession` wrapper updates mastery). Mastered
+  items drop out; an empty/all-mastered state is shown.
+- **Progress & stats** (`viewHistory`, home "📈 Progress & stats") — analytics
+  dashboard: at-a-glance tiles (questions/accuracy/time/streak), a score-trend
+  line and per-day activity bars (`chartLine`/`chartBars` — tiny inline-SVG
+  helpers; colours are literal since CSS vars don't resolve in SVG attributes),
+  accuracy-by-topic bars (weakest first, each with a `practiceTopic` drill), then
+  the past-practices list and export/import/clear.
 - **Explanation rendering** — `fmtExplain()` turns the stored explanation
   (plain text + `$LaTeX$` + `**bold**`/`*italic*` + numbered steps / `*` bullets)
   into readable HTML blocks, protecting `$…$` spans (incl. escaped `\$` for money

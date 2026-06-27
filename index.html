@@ -154,6 +154,11 @@
   .gbar{height:10px;border-radius:999px;background:var(--card2);overflow:hidden}
   .gbar-fill{height:100%;border-radius:999px;background:var(--ok);transition:width .4s ease}
   .streak{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--warn)}
+  .chart{margin:6px 0 2px}
+  .toprow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .toprow:last-child{border-bottom:none}
+  .toprow .lbl{flex:0 0 38%;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .toprow .bar{flex:1}
   .ans-line{font-size:14px;margin-top:8px}
   .ans-line b{color:#334155}
 
@@ -686,6 +691,29 @@ function field(lbl,hint,control){return el('label',{class:'field'},el('span',{cl
 function tile(n,l){return el('div',{class:'tile'},el('div',{class:'n'},(n&&n.nodeType)?n:String(n)),el('div',{class:'l'},l));}
 function menuItem(emo,t,d,onclick){return el('button',{class:'item',onclick},el('div',{class:'emo'},emo),el('div',{},el('div',{class:'t'},t),el('div',{class:'d'},d)));}
 function selOf(value,opts,onchange){const s=el('select',{onchange:e=>onchange(e.target.value)},...opts.map(o=>{const v=Array.isArray(o)?o[0]:o,l=Array.isArray(o)?o[1]:o;return el('option',{value:v},l);}));s.value=value;return s;}
+/* ---- tiny inline-SVG charts (no library). CSS vars don't resolve in SVG
+   presentation attributes, so colours are literal here. ---- */
+const CHART={brand:'#007aff',line:'#e4e4ea',muted:'#8a8a8e',ok:'#34c759',warn:'#ff9500',bad:'#ff3b30'};
+function accColor(p){return p<50?CHART.bad:p<75?CHART.warn:CHART.ok;}
+function chartLine(series){ // series: [{value 0-100}]
+  const w=320,h=120,pad=10,bot=12,n=series.length;if(!n)return el('div',{});
+  const iW=w-pad*2,iH=h-pad-bot;
+  const xs=i=>pad+(n===1?iW/2:iW*i/(n-1)),ys=v=>pad+iH*(1-Math.max(0,Math.min(100,v))/100);
+  const pts=series.map((s,i)=>`${xs(i).toFixed(1)},${ys(s.value).toFixed(1)}`).join(' ');
+  const area=`M ${series.map((s,i)=>`${xs(i).toFixed(1)},${ys(s.value).toFixed(1)}`).join(' L ')} L ${xs(n-1).toFixed(1)},${(pad+iH).toFixed(1)} L ${xs(0).toFixed(1)},${(pad+iH).toFixed(1)} Z`;
+  const grid=[0,50,100].map(v=>`<line x1="${pad}" y1="${ys(v).toFixed(1)}" x2="${w-pad}" y2="${ys(v).toFixed(1)}" stroke="${CHART.line}"/>`).join('');
+  const dots=series.map((s,i)=>`<circle cx="${xs(i).toFixed(1)}" cy="${ys(s.value).toFixed(1)}" r="2.6" fill="${CHART.brand}"/>`).join('');
+  return el('div',{class:'chart',html:`<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block">${grid}<path d="${area}" fill="rgba(0,122,255,.12)"/><polyline points="${pts}" fill="none" stroke="${CHART.brand}" stroke-width="2" stroke-linejoin="round"/>${dots}</svg>`});
+}
+function chartBars(series){ // series: [{label,value}]
+  const w=320,h=120,pad=10,bot=20,n=series.length;if(!n)return el('div',{});
+  const iW=w-pad*2,iH=h-pad-bot,max=Math.max(1,...series.map(s=>s.value)),gap=iW/n,bw=Math.min(26,gap*0.62);
+  const bars=series.map((s,i)=>{const bh=iH*s.value/max,x=pad+gap*i+(gap-bw)/2,y=pad+iH-bh;return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,bh).toFixed(1)}" rx="2" fill="${CHART.brand}" opacity="${s.value?'.85':'.18'}"/>`;}).join('');
+  const labels=series.map((s,i)=>`<text x="${(pad+gap*i+gap/2).toFixed(1)}" y="${h-6}" font-size="9" text-anchor="middle" fill="${CHART.muted}">${esc(s.label)}</text>`).join('');
+  return el('div',{class:'chart',html:`<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block">${bars}${labels}</svg>`});
+}
+// last `days` calendar days (UTC) as {key:'YYYY-MM-DD', label:'D'}
+function recentDays(days){const out=[];let cur=new Date(todayISO()+'T00:00:00Z');for(let i=0;i<days;i++){const k=dayISO(cur);out.unshift({key:k,label:String(cur.getUTCDate())});cur.setUTCDate(cur.getUTCDate()-1);}return out;}
 
 function refreshHeaderProfile(){const p=activeProfile();$('#profileName').textContent=p.name;const av=$('#profileAvatar');av.textContent=initials(p.name);av.style.background=colorFor(p.name);const caret=$('#profileCaret');if(caret)caret.style.display=isParent()?'':'none';const chip=$('#profileChip');if(chip)chip.title=isParent()?'Switch student':'Signed in';}
 
@@ -704,9 +732,9 @@ async function viewHome(){
   const goalCard=el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:8px'},el('b',{},'🎯 Today’s goal'),el('span',{class:'small muted'},doneToday+' / '+goal+' questions'+(doneToday>=goal?' · done! 🎉':''))),el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+goalPct+'%;background:'+(doneToday>=goal?'var(--ok)':'var(--brand)')})));
   const menu=el('div',{class:'menu'},
     menuItem('🚀','Start a practice','Generate fresh exam-style questions',()=>viewSetup()),
-    menuItem('🔁','Review mistakes',review.length?`${review.length} question${review.length>1?'s':''} waiting`:'Nothing to review — nice!',()=>review.length?viewReview():toast('No mistakes saved yet.')),
+    menuItem('📓','Mistakes notebook',review.length?`${review.length} question${review.length>1?'s':''} to revise`:'Nothing to revise — nice!',()=>review.length?viewReview():toast('No mistakes saved yet.')),
     menuItem('🗄️','Question bank',bankN?`${bankN} saved — practise with no AI`:'Pre-generate questions to save AI calls',()=>viewBank()),
-    menuItem('📚','History & progress','Past results, trends and weak topics',()=>viewHistory()),
+    menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
     isParent()?menuItem('👨‍👩‍👧','All students','Compare progress across the family',()=>viewDashboard()):null,
     menuItem('📄','Reference papers','Upload real past papers for the AI to match',()=>viewRefs()),
   );
@@ -950,29 +978,84 @@ function viewResults(a){
 }
 async function regrade(a,i,status){const r=a.results[i];if(r.status===status)return;r.status=status;a.correct=a.results.filter(x=>x.status==='correct').length;a.wrong=a.results.filter(x=>x.status==='wrong').length;a.needsReview=a.results.filter(x=>x.status==='review').length;a.gotMarks=a.results.reduce((s,x)=>s+(x.status==='correct'?x.marks:0),0);a.percent=a.totalMarks?Math.round(a.gotMarks/a.totalMarks*100):0;await dbPut('attempts',a);scheduleDriveSync();toast('Updated.');viewResults(a);}
 
-/* ----- REVIEW ----- */
-async function viewReview(){
-  stopTimer();
-  let items=(await dbAll('review')).filter(r=>r.profileId===pid()&&!r.mastered).sort((a,b)=>a.timesCorrect-b.timesCorrect||a.createdAt-b.createdAt);
-  if(!items.length)return show(el('div',{},backBar('Review mistakes',()=>viewHome()),el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'🎉'),el('div',{},'No mistakes to review. You’re all caught up!')))));
+/* ----- MISTAKES NOTEBOOK ----- */
+// Start a re-test session from a list of review items (oldest/least-mastered first, capped).
+function startReview(items){
   const pick=items.slice(0,Math.min(15,items.length));
+  if(!pick.length)return toast('Nothing to practise here.');
   const qs=pick.map((it,i)=>({id:'q'+i,reviewId:it.id,topic:it.topic,type:it.type,question:it.question,svg:it.svg,options:it.options,answerIndex:it.answerIndex,answer:it.answer,acceptedAnswers:it.acceptedAnswers,explanation:it.explanation,marks:it.marks}));
-  startSession({country:'',subject:'Review',exam:pick[0].exam||'general',examLabel:'Review of past mistakes',level:'Mixed',topics:[],difficulty:3,style:'mixed',timeLimitMin:0},qs,'review');
+  startSession({country:'',subject:'Review',exam:pick[0].exam||'general',examLabel:'Mistakes notebook re-test',level:'Mixed',topics:[],difficulty:3,style:'mixed',timeLimitMin:0},qs,'review');
   viewRun();
 }
+const reasonTag={wrong:'✗ got wrong',review:'self-check',flagged:'🚩 flagged'};
+async function viewReview(){
+  stopTimer();
+  const all=(await dbAll('review')).filter(r=>r.profileId===pid());
+  const active=all.filter(r=>!r.mastered).sort((a,b)=>(a.timesCorrect-b.timesCorrect)||(a.createdAt-b.createdAt));
+  const masteredN=all.length-active.length;
+  if(!all.length)return show(el('div',{},backBar('Mistakes notebook',()=>viewHome()),el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'📓'),el('div',{},'Your notebook is empty. Mistakes and flagged questions from practices land here for revision.')))));
+  if(!active.length)return show(el('div',{},backBar('Mistakes notebook',()=>viewHome()),el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'🎉'),el('div',{},`All ${masteredN} mistake${masteredN===1?'':'s'} mastered. Nothing left to revise — great work!`)))));
+  // group by topic
+  const groups={};active.forEach(it=>{const t=it.topic||'General';(groups[t]=groups[t]||[]).push(it);});
+  const groupEls=Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).map(([topic,items])=>{
+    const rows=items.map(it=>{
+      const corr=it.type==='multiple_choice'?(String.fromCharCode(65+it.answerIndex)+'. '+((it.options||[])[it.answerIndex]??it.answer)):(it.answer||'');
+      return el('details',{class:'qresult',style:'cursor:pointer'},
+        el('summary',{style:'list-style:none'},el('div',{class:'row between'},
+          el('div',{class:'qtext',style:'font-size:15px;margin:0;flex:1',html:esc(it.question)}),
+          el('span',{class:'pill',style:'flex:none;margin-left:8px'},(it.timesCorrect||0)+'/2'))),
+        it.svg?el('div',{class:'figure',html:it.svg}):'',
+        el('div',{class:'ans-line'},el('b',{},'Correct answer: '),el('span',{html:esc(corr)})),
+        el('div',{class:'small muted',style:'margin-top:4px'},(reasonTag[it.reason]||'to revise')+' · seen '+(it.timesSeen||0)+'× · '+(it.timesCorrect||0)+'/2 correct to master'),
+        el('div',{class:'explain'},el('div',{class:'row between'},el('div',{class:'h'},'How to solve it'),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:(e)=>{e.preventDefault();speak((it.question||'')+'. '+it.explanation);}},'🔊')),el('div',{html:fmtExplain(it.explanation)})));
+    });
+    return el('div',{class:'card'},
+      el('div',{class:'row between'},el('h2',{style:'margin:0'},topic),el('button',{class:'btn sm primary',onclick:()=>startReview(items)},'Re-test ('+items.length+')')),
+      el('p',{class:'sub',style:'margin:6px 0 6px'},items.length+' to revise · tap a question to see the worked answer'),
+      ...rows);
+  });
+  show(el('div',{},backBar('Mistakes notebook',()=>viewHome()),
+    el('div',{class:'card'},el('h2',{},'📓 Mistakes notebook'),
+      el('p',{class:'sub',style:'margin-bottom:10px'},`${active.length} to revise across ${Object.keys(groups).length} topic${Object.keys(groups).length===1?'':'s'}`+(masteredN?` · ${masteredN} mastered 🎉`:'')+'. A question is mastered after you get it right twice.'),
+      el('button',{class:'btn primary block lg',onclick:()=>startReview(active)},'🔁 Re-test '+(active.length>15?'15 most important':'all'))),
+    ...groupEls));
+}
 
-/* ----- HISTORY ----- */
+/* ----- PROGRESS & HISTORY (analytics) ----- */
 async function viewHistory(){
   stopTimer();
   const attempts=(await dbAll('attempts')).filter(a=>a.profileId===pid()).sort((a,b)=>b.startedAt-a.startedAt);
-  if(!attempts.length)return show(el('div',{},backBar('History',()=>viewHome()),el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'📚'),el('div',{},'No practices yet. Start one from the home screen!')))));
-  const topicStat={};attempts.forEach(a=>a.results.forEach(r=>{const t=r.topic||'General';topicStat[t]=topicStat[t]||{n:0,c:0};topicStat[t].n++;if(r.status==='correct')topicStat[t].c++;}));
-  const weak=Object.entries(topicStat).map(([t,s])=>({t,pct:Math.round(s.c/s.n*100),n:s.n})).filter(x=>x.n>=2).sort((a,b)=>a.pct-b.pct).slice(0,6);
+  const importRow=el('div',{class:'row'},el('button',{class:'btn',onclick:()=>exportData()},'⬇️ Export data'),el('label',{class:'btn',style:'cursor:pointer'},'⬆️ Import',el('input',{type:'file',accept:'.json',style:'display:none',onchange:e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{importData(JSON.parse(rd.result)).then(()=>viewHistory());}catch(err){toast('Bad file');}};rd.readAsText(f);}})),attempts.length?el('button',{class:'btn danger',onclick:()=>clearAll()},'Clear my history'):'');
+  if(!attempts.length)return show(el('div',{},backBar('Progress & history',()=>viewHome()),el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'📈'),el('div',{},'No practices yet. Start one from the home screen!'))),importRow));
+
+  // ---- aggregates ----
+  const totalQ=attempts.reduce((s,a)=>s+(a.count||0),0);
+  const totalCorrect=attempts.reduce((s,a)=>s+(a.correct||0),0);
+  const overallAcc=totalQ?Math.round(totalCorrect/totalQ*100):0;
+  const totalMin=Math.round(attempts.reduce((s,a)=>s+(a.elapsed||0),0)/60);
+  const streak=computeStreak(attempts.map(a=>a.date));
+  const topicStat={};attempts.forEach(a=>(a.results||[]).forEach(r=>{const t=r.topic||'General';topicStat[t]=topicStat[t]||{n:0,c:0};topicStat[t].n++;if(r.status==='correct')topicStat[t].c++;}));
+  const topics=Object.entries(topicStat).map(([t,s])=>({t,pct:Math.round(s.c/s.n*100),n:s.n})).filter(x=>x.n>=2).sort((a,b)=>a.pct-b.pct);
+  const chron=[...attempts].reverse();                 // oldest → newest
+  const trend=chron.slice(-20).map(a=>({value:a.percent}));
+  const byDate={};attempts.forEach(a=>{byDate[a.date]=(byDate[a.date]||0)+(a.count||0);});
+  const activity=recentDays(14).map(d=>({label:d.label,value:byDate[d.key]||0}));
+
+  const tiles=el('div',{class:'tiles'},tile(totalQ,'Questions'),tile(overallAcc+'%','Accuracy'),tile(totalMin+'m','Time'),tile(el('span',{class:'streak'},'🔥 '+streak),'Day streak'));
   const rows=attempts.map(a=>el('div',{class:'qresult',style:'cursor:pointer',onclick:()=>viewResults(a)},el('div',{class:'row between'},el('div',{},el('b',{},a.percent+'%'),el('span',{class:'small muted'},'  '+(a.examLabel||'')+' · '+(a.subject||'')+' · '+(a.level||''))),el('span',{class:'small muted'},a.date)),el('div',{class:'small muted',style:'margin-top:4px'},`${a.correct}/${a.count} correct · ${fmtTime(a.elapsed)} · difficulty ${a.difficulty}`)));
-  show(el('div',{},backBar('History & progress',()=>viewHome()),
-    weak.length?el('div',{class:'card'},el('h2',{},'Topics to work on'),el('p',{class:'sub'},'Lowest accuracy across '+esc(activeProfile().name)+'’s practices'),...weak.map(w=>el('div',{class:'row between',style:'padding:8px 0;border-bottom:1px solid var(--line)'},el('span',{},esc(w.t)),el('div',{class:'row',style:'gap:10px;align-items:center'},el('b',{style:'color:'+(w.pct<50?'var(--bad)':w.pct<75?'var(--warn)':'var(--ok)')},w.pct+'%'),el('button',{class:'btn sm',onclick:()=>practiceTopic(w.t)},'Practice'))))):'',
+
+  show(el('div',{},backBar('Progress & history',()=>viewHome()),
+    el('div',{class:'card'},el('h2',{},'At a glance'),el('p',{class:'sub'},esc(activeProfile().name)+'’s progress so far'),tiles),
+    trend.length>=2?el('div',{class:'card'},el('h2',{},'Score trend'),el('p',{class:'sub',style:'margin-bottom:6px'},'Your score on the last '+trend.length+' practices'),chartLine(trend)):'',
+    el('div',{class:'card'},el('h2',{},'Activity'),el('p',{class:'sub',style:'margin-bottom:6px'},'Questions answered per day (last 14 days)'),chartBars(activity)),
+    topics.length?el('div',{class:'card'},el('h2',{},'Accuracy by topic'),el('p',{class:'sub',style:'margin-bottom:6px'},'Weakest first — tap Practice for a focused drill'),
+      ...topics.map(w=>el('div',{class:'toprow'},
+        el('span',{class:'lbl',title:w.t},w.t),
+        el('div',{class:'bar'},el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+w.pct+'%;background:'+(w.pct<50?'var(--bad)':w.pct<75?'var(--warn)':'var(--ok)')}))),
+        el('b',{style:'flex:none;width:42px;text-align:right;color:'+(w.pct<50?'var(--bad)':w.pct<75?'var(--warn)':'var(--ok)')},w.pct+'%'),
+        el('button',{class:'btn sm',style:'flex:none',onclick:()=>practiceTopic(w.t)},'Practice')))):'',
     el('div',{class:'card'},el('h2',{},'Past practices'),el('p',{class:'sub'},'Tap any to review the questions'),...rows),
-    el('div',{class:'row'},el('button',{class:'btn',onclick:()=>exportData()},'⬇️ Export data'),el('label',{class:'btn',style:'cursor:pointer'},'⬆️ Import',el('input',{type:'file',accept:'.json',style:'display:none',onchange:e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{importData(JSON.parse(rd.result)).then(()=>viewHistory());}catch(err){toast('Bad file');}};rd.readAsText(f);}})),el('button',{class:'btn danger',onclick:()=>clearAll()},'Clear my history'))));
+    importRow));
 }
 
 /* ----- QUESTION BANK ----- */
@@ -1347,7 +1430,7 @@ async function startApp(){
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   viewHome();
 }
-const APP_VERSION='v11';
+const APP_VERSION='v12';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
