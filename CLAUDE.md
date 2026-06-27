@@ -81,9 +81,13 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   manages real past papers in the `refs` store, **shared** (`profileId:'all'`) and
   tagged `{exam,subject,level,year}`. Import auto-tags from the filename
   (`autoTagFromName`, e.g. "ICAS Maths Paper C 2019.pdf"); tags are editable.
-  Scanned PDFs yield no pdf.js text, so for grounding they're rendered to the
-  first few downscaled JPEGs (`pdfPagesToImages`/`refToInlineFiles`) and those are
-  sent inline — a whole multi-MB scanned PDF overloads Gemini (503). `bestRef(s,refs)`
+  Scanned PDFs yield no pdf.js text, so for grounding they're rendered to ~10
+  downscaled JPEGs SAMPLED EVENLY ACROSS the whole paper (`pdfPagesToImages`
+  spread-samples; `refToInlineFiles`) — small enough not to overload Gemini (a
+  whole multi-MB PDF 503s) yet representing the paper's full topic + easy→hard
+  range. `buildPrompt` adds a `s.paperImages` instruction telling the model the
+  images are sampled from a complete paper and to span all topics/difficulties.
+  `bestRef(s,refs)`
   picks the closest paper to a practice setup (subject required; then exam, level
   overlap, newest year; null if no subject match — which is also the *fallback*
   for exams without papers, e.g. ground Rangitoto Maths on an ICAS Maths paper).

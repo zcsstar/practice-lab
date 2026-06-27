@@ -483,6 +483,7 @@ FORMAT: ${styleLine}`;
   if(s.context&&s.context.trim())p+=`\n\nADDITIONAL CONTEXT FROM PARENT (follow closely):\n${s.context.trim()}`;
   if(refsText&&refsText.trim())p+=`\n\nREAL PAST-PAPER REFERENCE MATERIAL — closely match the style, wording, format, topic coverage and difficulty of these genuine questions. Do NOT copy them verbatim; create fresh equivalents:\n"""\n${refsText.slice(0,12000)}\n"""`;
   else if(s.webSearch)p+=`\n\nUse your knowledge of real ${exam.label} ${s.subject} papers for ${s.country} ${s.level} to match authentic style, topics and difficulty as closely as possible.`;
+  if(s.paperImages)p+=`\n\nThe attached images are pages SAMPLED FROM ACROSS A COMPLETE real past paper (beginning, middle and end). A full paper deliberately covers MANY DIFFERENT TOPICS and RAMPS from easy early questions to hard later ones. Study the whole sample, then generate a FULL, VARIED set that mirrors the paper's authentic style and format and reproduces its BREADTH: span the SAME RANGE OF TOPICS and the COMPLETE difficulty range — from the easy warm-ups through to the hardest competition-level questions. Do NOT produce only easy questions, and do NOT limit yourself to the handful of topics visible on any single sampled page. Create fresh originals; never copy a question verbatim.`;
   p+=`
 
 REQUIREMENTS:
@@ -666,19 +667,25 @@ function gradeAnswer(q,userAns){
 function abToB64(ab){let bin='';const bytes=new Uint8Array(ab);const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));return btoa(bin);}
 async function ensurePdfJs(){if(window.pdfjsLib)return;await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';}
 async function extractPdfText(ab){await ensurePdfJs();const pdf=await pdfjsLib.getDocument({data:ab.slice(0)}).promise;let t='';for(let p=1;p<=Math.min(pdf.numPages,30);p++){const page=await pdf.getPage(p);const c=await page.getTextContent();t+=c.items.map(i=>i.str).join(' ')+'\n';}return t.trim();}
-// Render the first `maxPages` of a PDF to downscaled JPEGs. Sending a few light
-// images instead of a whole scanned PDF keeps the multimodal request small —
-// big payloads are what make Gemini 503 / time out, and it's far more frugal.
+// Render up to `maxPages` of a PDF to downscaled JPEGs, SAMPLED EVENLY across the
+// whole document (not just the first pages) so the reference captures the paper's
+// full topic range and its easy→hard difficulty progression. Light images instead
+// of a whole scanned PDF keep the multimodal request small (big payloads are what
+// make Gemini 503) while still representing the entire paper.
 async function pdfPagesToImages(u8,maxPages){
   await ensurePdfJs();
   const pdf=await pdfjsLib.getDocument({data:u8.slice(0)}).promise;
-  const out=[],n=Math.min(pdf.numPages,maxPages||4);
-  for(let p=1;p<=n;p++){
+  const total=pdf.numPages,want=Math.min(total,maxPages||10);
+  const pages=[];
+  if(want>=total){for(let p=1;p<=total;p++)pages.push(p);}
+  else for(let k=0;k<want;k++)pages.push(1+Math.round(k*(total-1)/(want-1)));
+  const uniq=[...new Set(pages)],out=[];
+  for(const p of uniq){
     const page=await pdf.getPage(p),base=page.getViewport({scale:1});
-    const scale=Math.min(2,1100/base.width),vp=page.getViewport({scale});
+    const scale=Math.min(2,1000/base.width),vp=page.getViewport({scale});
     const cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
     await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
-    out.push({mime:'image/jpeg',dataB64:cv.toDataURL('image/jpeg',0.7).split(',')[1]});
+    out.push({mime:'image/jpeg',dataB64:cv.toDataURL('image/jpeg',0.6).split(',')[1]});
   }
   return out;
 }
@@ -927,8 +934,11 @@ async function doGenerate(){
   CFG.examContext[setupState.exam]=setupState.context||'';CFG.webSearch=setupState.webSearch;saveCfg();
   const allRefs=await dbAll('refs');
   const chosen=setupState.refIds.map(id=>allRefs.find(r=>r.id===id)).filter(Boolean);
-  // Convert each chosen paper to a light inline payload (PDF → first pages as JPEGs).
-  const files=(await Promise.all(chosen.map(r=>refToInlineFiles(r,3)))).flat();
+  // Convert each chosen paper to a light inline payload (PDF → pages sampled across
+  // the whole paper as JPEGs, so the full topic/difficulty range is represented).
+  const perPaper=chosen.length>1?5:9;
+  const files=(await Promise.all(chosen.map(r=>refToInlineFiles(r,perPaper)))).flat();
+  setupState.paperImages=files.length>0;
   show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Getting your questions ready…'),el('div',{class:'muted small',style:'margin-top:6px'},`${setupState.count} ${EXAMS[setupState.exam].label} · ${setupState.subject} · ${setupState.level}`+(files.length?` · using ${files.length} past paper(s)`:(CFG.provider==='gemini'&&setupState.webSearch?' · searching for real exam style':'')))))));
   try{
     const set=await buildPracticeSet({...setupState,examLabel:EXAMS[setupState.exam].label},files);
@@ -1176,10 +1186,11 @@ async function topUpBank(s){
   try{
     let gen;
     if(ref){
-      // GROUNDED: send only the first few pages (as light JPEGs) once → fresh
-      // questions in the paper's style. Keeps the request small so it won't 503.
-      const files=await refToInlineFiles(ref,4);
-      gen=await generateQuestions({...s,count:Math.min(BANK_DEEP,20),examLabel:EXAMS[s.exam].label},files);
+      // GROUNDED: sample ~10 pages from across the whole paper (light JPEGs) once
+      // → fresh questions spanning its full topic + difficulty range. Small enough
+      // not to 503, broad enough not to miss the harder/later topics.
+      const files=await refToInlineFiles(ref,10);
+      gen=await generateQuestions({...s,count:Math.min(BANK_DEEP,24),paperImages:true,examLabel:EXAMS[s.exam].label},files);
     }else{
       // No matching paper → chunked generation as before.
       gen=await generateMany({...s,examLabel:EXAMS[s.exam].label},[],BANK_DEEP,(have,target)=>{try{sub.textContent=`Generated ${have} of ${target}…`;}catch(e){}});
@@ -1515,7 +1526,7 @@ async function startApp(){
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   viewHome();
 }
-const APP_VERSION='v14';
+const APP_VERSION='v15';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
