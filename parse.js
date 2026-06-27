@@ -77,8 +77,33 @@
   }
 
   // Double any backslash that isn't a valid JSON escape — repairs raw LaTeX like
-  // "\frac" or "\$" that the model forgot to escape.
+  // "\$", "\sqrt" or "\div" that the model forgot to escape and that therefore
+  // make JSON.parse throw (so this repair gets a chance to run).
   function fixEsc(s) { return s.replace(/\\(?!["\\/bfnrtu])/g, '\\\\'); }
+
+  // The SILENT cousin of the above: when the model writes a LaTeX command whose
+  // first letter happens to be a valid JSON escape char — "\frac", "\beta",
+  // "\times", "\theta", "\rho" — JSON.parse does NOT throw. It quietly turns
+  // "\f" into a form-feed (U+000C), "\b" into a backspace (U+0008), "\t" into a
+  // tab and "\r" into a carriage-return, leaving e.g. "$<FF>rac{1}{2}$" — which
+  // KaTeX then renders in red error text. fixEsc never sees these because the
+  // parse succeeded. None of those control chars legitimately appear in question
+  // text, so we map them back to their LaTeX command. "\n" (newline) is left
+  // alone: it is genuinely used to separate explanation lines (see fmtExplain).
+  function unmangleLatex(s) {
+    return s
+      .replace(/\x0c(?=[A-Za-z])/g, '\\f')   // \frac \frown \fbox …
+      .replace(/\x08(?=[A-Za-z])/g, '\\b')   // \beta \binom \boxed \begin \bar …
+      .replace(/\t(?=[a-z])/g, '\\t')        // \times \theta \tan \text \to \tfrac …
+      .replace(/\r(?=[A-Za-z])/g, '\\r');    // \rho \right \rightarrow …
+  }
+  // Apply unmangleLatex to every string leaf of a recovered object (in place).
+  function deepUnmangle(v) {
+    if (typeof v === 'string') return unmangleLatex(v);
+    if (Array.isArray(v)) return v.map(deepUnmangle);
+    if (v && typeof v === 'object') { for (const k in v) v[k] = deepUnmangle(v[k]); return v; }
+    return v;
+  }
 
   function repairs(s) { return [s, sanitizeCtrl(s), fixEsc(s), fixEsc(sanitizeCtrl(s))]; }
   function tryParse(s) { try { return JSON.parse(s); } catch (e) { return undefined; } }
@@ -145,11 +170,11 @@
     txt = txt.replace(/^```[a-zA-Z]*\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
     if (!txt) return [];
     const fast = fastParse(txt);
-    if (fast.length) return fast;
-    return recoverObjects(txt);
+    const out = fast.length ? fast : recoverObjects(txt);
+    return out.map(deepUnmangle);
   }
 
-  const api = { extractQuestions, qText, qOpts, looksQ, getArr, extractBalanced, sanitizeCtrl, fixEsc };
+  const api = { extractQuestions, qText, qOpts, looksQ, getArr, extractBalanced, sanitizeCtrl, fixEsc, unmangleLatex };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.PLParse = api;
 })(typeof window !== 'undefined' ? window : globalThis);

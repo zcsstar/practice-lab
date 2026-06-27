@@ -18,6 +18,17 @@ ok(n('Let me think... actually the answer is tricky.\n{"questions":[{"question":
 ok(n('{"questions":[{"question":"What is $\\frac{1}{2}$?","answer":"0.5"}]}') === 1, 'raw \\frac repaired');
 ok(n('{"questions":[{"question":"Cost is $\\$5$","answer":"5"}]}') === 1, 'raw \\$ repaired');
 
+// 3b. CONTENT of single-backslash LaTeX must survive (these JSON-parse WITHOUT
+// error into control chars — form-feed/backspace/tab — so the count was always
+// 1 but the text was silently mangled to "$<FF>rac{1}{2}$" before this fix).
+const qt = (raw) => P.qText(P.extractQuestions(raw)[0]);
+ok(qt('{"questions":[{"question":"What is $\\frac{1}{2}$?","answer":"0.5"}]}') === 'What is $\\frac{1}{2}$?', '\\frac survives as a literal backslash command');
+ok(qt('{"questions":[{"question":"$3 \\times 4$","answer":"12"}]}') === '$3 \\times 4$', '\\times survives (tab collision)');
+ok(qt('{"questions":[{"question":"angle $\\theta$","answer":"x"}]}') === 'angle $\\theta$', '\\theta survives (tab collision)');
+ok(qt('{"questions":[{"question":"$\\beta$ greater?","answer":"x"}]}') === '$\\beta$ greater?', '\\beta survives (backspace collision)');
+// genuine newlines in explanations must NOT be clobbered by the repair above
+ok(P.extractQuestions('{"questions":[{"question":"q","explanation":"Step 1\\nStep 2","answer":"1"}]}')[0].explanation === 'Step 1\nStep 2', 'genuine \\n newline preserved');
+
 // 4. Raw control chars inside strings
 ok(n('{"questions":[{"question":"line1\nline2","answer":"1"}]}') === 1, 'raw newline in string');
 
