@@ -192,6 +192,16 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   (EmailJS keys, Drive, login, key sharing) live in `<details class="adv">` to
   keep the screen uncluttered. `buildAICard(parent)` / `buildVaultInner()` /
   `buildLoginInner()` build the AI + access blocks.
+- **Parent dashboard** — a logged-in parent LANDS on `viewDashboard` (and the 🏠
+  button returns there); students land on their own `viewHome`. Each student card
+  shows tiles + streak + **Open** (`openStudent(id,view)` switches active profile →
+  their home) / **Progress** / **Mistakes**. Cross-device data requires Drive sync.
+- **Synced settings** — a whitelist `SYNC_SETTINGS` (emailEnabled, emailTo,
+  emailjs, dailyGoal, webSearch, examContext — NOT the API key, NOT device-specific
+  voice/active-student) syncs via Drive with newest-edit-wins: `markSettingsChanged()`
+  stamps `CFG.settingsAt` on Settings-save; `driveSyncNow` uploads `{settings,
+  settingsAt}`; `mergeRemote` adopts remote settings if `settingsAt` is newer. So
+  turning on email summaries on one device propagates to the others.
 - **Drive sync** — optional; Google Identity token client + Drive `appDataFolder`
   REST. Merge-on-id (no conflict resolution beyond "keep both / first wins").
   Only works on an https origin. `scheduleDriveSync()` debounces writes.

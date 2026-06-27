@@ -367,9 +367,17 @@ const DEFAULT_CFG={
   drive:{enabled:true,clientId:''},
   webSearch:true,
   dailyGoal:10,    // questions per day target (for the streak / goal widget)
-  voiceURI:'', voiceRate:0.95, voicePitch:1,  // read-aloud voice (Web Speech)
+  voiceURI:'', voiceRate:0.95, voicePitch:1,  // read-aloud voice (Web Speech) — device-specific, NOT synced
+  settingsAt:0,    // last-edited timestamp for the synced-settings whitelist below
   examContext:{}   // saved per-exam extra context text, keyed by exam id
 };
+// Non-secret, device-independent settings that sync across devices via Drive
+// (newest edit wins). Excludes the API key (use KEYVAULT) and device-specific
+// things like the chosen voice, active student and Drive config.
+const SYNC_SETTINGS=['emailEnabled','emailTo','emailjs','dailyGoal','webSearch','examContext'];
+function pickSyncSettings(){const o={};for(const k of SYNC_SETTINGS)o[k]=CFG[k];return o;}
+function applySyncSettings(s){if(!s)return;for(const k of SYNC_SETTINGS)if(s[k]!==undefined)CFG[k]=s[k];}
+function markSettingsChanged(){CFG.settingsAt=Date.now();}
 let CFG=loadCfg();
 function loadCfg(){
   let raw={};try{raw=JSON.parse(localStorage.getItem(CFG_KEY)||localStorage.getItem('practicelab.config.v1')||'{}');}catch(e){}
@@ -1232,12 +1240,16 @@ async function clearBank(){
 }
 
 /* ----- PARENT DASHBOARD ----- */
+// Switch the active student then open one of their views.
+function openStudent(id,view){CFG.activeProfileId=id;saveCfg();refreshHeaderProfile();(view||viewHome)();}
 async function viewDashboard(){
   stopTimer();
   if(!isParent())return viewHome();
   const allAttempts=await dbAll('attempts');
   const allReview=(await dbAll('review')).filter(r=>!r.mastered);
-  const cards=CFG.profiles.map(p=>{
+  const students=CFG.profiles.filter(p=>!isParentName(p.name));
+  const list=students.length?students:CFG.profiles;
+  const cards=list.map(p=>{
     const at=allAttempts.filter(a=>a.profileId===p.id).sort((a,b)=>b.startedAt-a.startedAt);
     const avg=at.length?Math.round(at.reduce((s,a)=>s+a.percent,0)/at.length):0;
     const streak=computeStreak(at.map(a=>a.date));
@@ -1251,11 +1263,15 @@ async function viewDashboard(){
         el('span',{class:'streak'},'🔥 '+streak)),
       el('div',{class:'tiles',style:'margin-top:12px'},tile(at.length,'Practices'),tile(avg+'%','Avg score'),tile(toReview,'To review'),tile(weak?weak.pct+'%':'—','Weakest')),
       weak?el('div',{class:'small muted',style:'margin-top:8px'},'Focus area: '+weak.t+' ('+weak.pct+'%)'):'',
-      el('div',{class:'row',style:'margin-top:10px'},el('button',{class:'btn sm',onclick:()=>{CFG.activeProfileId=p.id;saveCfg();refreshHeaderProfile();toast('Switched to '+p.name);viewHistory();}},'Open '+esc(p.name.split(' ')[0])+'’s history')));
+      el('div',{class:'row',style:'margin-top:12px;gap:8px;flex-wrap:wrap'},
+        el('button',{class:'btn sm primary',onclick:()=>openStudent(p.id,viewHome)},'Open'),
+        el('button',{class:'btn sm',onclick:()=>openStudent(p.id,viewHistory)},'📈 Progress'),
+        el('button',{class:'btn sm'+(toReview?'':' ghost'),onclick:()=>openStudent(p.id,viewReview)},'📓 Mistakes'+(toReview?' ('+toReview+')':''))));
   });
-  show(el('div',{},backBar('All students',()=>viewHome()),
-    el('div',{class:'card'},el('h2',{},'👨‍👩‍👧 Family progress'),el('p',{class:'sub'},'A quick read on how each student is doing.')),
-    ...cards));
+  show(el('div',{},
+    el('div',{class:'card'},el('h2',{},'👨‍👩‍👧 Family dashboard'),el('p',{class:'sub'},'Each student’s progress at a glance. Tap Open to practise as them, or dig into Progress / Mistakes.')),
+    ...cards,
+    el('div',{class:'small muted',style:'text-align:center;margin-top:6px'},driveToken?'☁️ Synced with Google Drive':'💡 Connect Google Drive (Settings) on each device to see everyone’s progress here.')));
 }
 
 /* ----- SETTINGS ----- */
@@ -1291,7 +1307,7 @@ function viewSettings(){
           field('OAuth Client ID','Already configured for this app — only change if you made your own.',el('input',{type:'text',value:CFG.drive.clientId,placeholder:DRIVE_CLIENT_ID,oninput:e=>CFG.drive.clientId=e.target.value.trim()}))),
         el('div',{class:'row',style:'margin-top:10px'},el('button',{class:'btn',onclick:()=>{CFG.drive.enabled=true;saveCfg();driveConnect(true);}},'Connect & sync now'),el('span',{class:'small muted',style:'align-self:center'},el('span',{class:'statusdot'+(driveToken?' on':'')}),driveToken?'Connected':'Not connected'))),
       el('details',{class:'adv'},el('summary',{},'Login / passwords'),buildLoginInner()) ):null,
-    el('div',{class:'row',style:'margin-top:18px'},el('button',{class:'btn primary',onclick:()=>{saveCfg();initEmailJS();refreshHeaderProfile();toast('Settings saved ✓');}},'Save settings'),el('button',{class:'btn',onclick:()=>{saveCfg();viewHome();}},'Save & go home')),
+    el('div',{class:'row',style:'margin-top:18px'},el('button',{class:'btn primary',onclick:()=>{markSettingsChanged();saveCfg();initEmailJS();refreshHeaderProfile();scheduleDriveSync();toast('Settings saved ✓');}},'Save settings'),el('button',{class:'btn',onclick:()=>{markSettingsChanged();saveCfg();scheduleDriveSync();viewHome();}},'Save & go home')),
     el('p',{class:'small muted',style:'text-align:center;margin-top:14px'},'Keys are stored only in this browser. Nothing is sent anywhere except directly to the AI / email service you set up.')
   ));
 }
@@ -1467,8 +1483,10 @@ function driveReady(){return CFG.drive.enabled&&driveClientId()&&window.google&&
 function driveConnect(interactive){if(!driveClientId())return toast('No OAuth Client ID configured.');if(!window.google||!google.accounts||!google.accounts.oauth2)return toast('Google library not loaded (need internet + https).');if(!tokenClient)tokenClient=google.accounts.oauth2.initTokenClient({client_id:driveClientId(),scope:'https://www.googleapis.com/auth/drive.appdata',callback:r=>{if(r.access_token){driveToken=r.access_token;toast('☁️ Connected to Drive');driveSyncNow();}}});tokenClient.requestAccessToken({prompt:interactive?'consent':''});}
 function scheduleDriveSync(){if(!driveReady())return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>{if(driveToken)driveSyncNow();else driveConnect(false);},1500);}
 async function driveFindFile(){const r=await fetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D'practice-lab.json'&fields=files(id,name)",{headers:{Authorization:'Bearer '+driveToken}});if(!r.ok)throw new Error('drive list '+r.status);return (await r.json()).files?.[0]?.id||null;}
-async function driveSyncNow(){if(!driveToken)return;try{const fileId=await driveFindFile();if(fileId){const rr=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+driveToken}});if(rr.ok)await mergeRemote(await rr.json());}const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:await dbAll('refs'),bank:await dbAll('bank'),profiles:CFG.profiles,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+async function driveSyncNow(){if(!driveToken)return;try{const fileId=await driveFindFile();if(fileId){const rr=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+driveToken}});if(rr.ok)await mergeRemote(await rr.json());}const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:await dbAll('refs'),bank:await dbAll('bank'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
+  // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
+  if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
   if(Array.isArray(remote.profiles))for(const rp of remote.profiles){
     const lp=CFG.profiles.find(x=>x.id===rp.id||x.name.toLowerCase()===String(rp.name).toLowerCase());
     if(!lp){CFG.profiles.push(rp);}
@@ -1483,7 +1501,7 @@ async function mergeRemote(remote){
 }
 
 /* ============================================================ Nav + boot ============================================================ */
-$('#navHome').addEventListener('click',()=>{if(S&&!S.submitted&&!confirm('Leave the current practice?'))return;stopTimer();viewHome();});
+$('#navHome').addEventListener('click',()=>{if(S&&!S.submitted&&!confirm('Leave the current practice?'))return;stopTimer();if(gateActive()&&isParent())viewDashboard();else viewHome();});
 $('#navSettings').addEventListener('click',()=>viewSettings());
 $('#profileChip').addEventListener('click',()=>viewProfiles());
 
@@ -1565,9 +1583,10 @@ async function startApp(){
   await reconcileProfiles();
   initEmailJS();refreshHeaderProfile();
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
-  viewHome();
+  // Parents land on the family dashboard; students land on their own home.
+  if(gateActive()&&isParent())viewDashboard();else viewHome();
 }
-const APP_VERSION='v17';
+const APP_VERSION='v18';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
