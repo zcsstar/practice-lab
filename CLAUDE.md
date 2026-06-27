@@ -120,6 +120,13 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   through export/import and Drive merge like the other stores.
 - **Marking** — `gradeAnswer()`: MC by index; numeric by tolerant numeric match;
   short answers that don't match become `review` (self-check toggle on results).
+  The AI occasionally mis-keys a question (right explanation, wrong `answerIndex`).
+  Mitigations: (1) prompt has a CRITICAL self-check requiring key == explanation
+  result; (2) `parseQuestions` re-points `answerIndex` if the model's `answer`
+  TEXT matches a different option (handles LaTeX-fraction vs plain); (3) results
+  show **"✓ My answer was actually right"** on wrong items (and "Mark as wrong" on
+  correct) → `regrade()` recomputes the score and removes the matching mistakes-
+  notebook entry. So a bad key is always correctable by the parent/student.
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
   Bank/Dashboard`. `show(node)` swaps `#app` and re-runs KaTeX. No router;
   functions call each other. `viewBank` = question-bank hub; `viewDashboard` =

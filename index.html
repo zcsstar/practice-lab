@@ -494,6 +494,7 @@ REQUIREMENTS:
 - Write the FINAL, already-correct explanation only. Do NOT think out loud, second-guess, recheck, or show false starts (never "wait", "let me recheck", "I made a mistake", "actually", "this is not correct", "let's re-think"). Work out the answer privately, then write only the clean, confident solution.
 - Structure each explanation as numbered steps: put each step on its OWN line beginning with "1. ", "2. ", etc., separated by a real newline (\n). Bold the key idea of a step with **double asterisks**. One short sentence per step where possible. Do NOT use asterisk bullets or markdown emphasis in the "question" text itself.
 - multiple_choice: give "options" (array of 4 strings) and "answerIndex" (0-3); distractors should reflect common mistakes.
+- CRITICAL — answer accuracy: actually SOLVE each question and double-check the arithmetic. The "answer"/"answerIndex" MUST be the correct result AND must equal the final result your explanation arrives at. For multiple_choice, the option at "answerIndex" must be exactly that correct result (and "answer" must be that option's text). If your worked explanation ends at a value, the key MUST point to the option showing that value — never a different one.
 - numeric/short: give "answer" (exact) plus "acceptedAnswers" (equivalent correct forms, e.g. ["0.5","1/2"]).
 - "marks": whole number; harder questions worth more.
 - DIAGRAMS (optional but encouraged where a picture truly helps — geometry, shapes, fractions, bar models, number lines, clocks, simple data/charts): add an "svg" field containing a clean, self-contained inline SVG diagram. Use a viewBox (e.g. "0 0 300 200"), readable labels, clear strokes and light fills, NO <script>, NO external images/links, NO width/height in px (let it scale). Keep it simple and uncluttered, suitable for a child. Omit "svg" entirely when a diagram adds nothing.
@@ -560,9 +561,16 @@ function parseQuestions(raw){
   const P=(typeof PLParse!=='undefined')?PLParse:null;
   if(!P)throw new Error('Parser module (parse.js) failed to load.');
   const arr=P.extractQuestions(raw);
-  return arr.map((q,i)=>{const opts=P.qOpts(q);const ai=(typeof q.answerIndex==='number')?q.answerIndex:(typeof q.correctIndex==='number'?q.correctIndex:null);
+  return arr.map((q,i)=>{const opts=P.qOpts(q);let ai=(typeof q.answerIndex==='number')?q.answerIndex:(typeof q.correctIndex==='number'?q.correctIndex:null);
+    const type=(q.type||(opts&&opts.length?'multiple_choice':'short'));
+    // MC self-consistency: if the model's stated answer TEXT clearly matches a
+    // different option than answerIndex, trust the text (catches some mis-keys).
+    if(type==='multiple_choice'&&opts&&opts.length&&q.answer!=null){
+      const norm=x=>String(x).toLowerCase().replace(/\$/g,'').replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g,'$1/$2').replace(/\\[a-z]+/g,'').replace(/[^a-z0-9/.]/g,'');
+      const t=norm(q.answer);if(t){const j=opts.findIndex(o=>norm(o)===t);if(j>=0&&j!==ai)ai=j;}
+    }
     return {id:'q'+i,topic:q.topic||q.category||q.strand||'General',
-      type:(q.type||(opts&&opts.length?'multiple_choice':'short')),
+      type,
       question:P.qText(q),options:opts,answerIndex:ai,
       answer:(q.answer!=null)?String(q.answer):(opts&&typeof ai==='number'?String(opts[ai]):''),
       acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):(Array.isArray(q.accepted)?q.accepted.map(String):[]),
@@ -1017,6 +1025,8 @@ function viewResults(a){
       el('div',{class:'ans-line'},el('b',{},'Your answer: '),el('span',{html:esc(yourAns)})),
       el('div',{class:'ans-line'},el('b',{},'Correct answer: '),el('span',{html:esc(correctAns)})),
       r.status==='review'?el('div',{class:'row',style:'margin-top:10px;gap:8px'},el('button',{class:'btn sm',onclick:()=>regrade(a,i,'correct')},'I got it right'),el('button',{class:'btn sm danger',onclick:()=>regrade(a,i,'wrong')},'I got it wrong')):'',
+      r.status==='wrong'?el('div',{class:'row',style:'margin-top:10px;gap:8px;align-items:center'},el('button',{class:'btn sm',onclick:()=>regrade(a,i,'correct')},'✓ My answer was actually right'),el('span',{class:'small muted'},'(if the key looks wrong)')):'',
+      r.status==='correct'?el('div',{class:'row',style:'margin-top:10px'},el('button',{class:'btn sm ghost',onclick:()=>regrade(a,i,'wrong')},'Mark as wrong')):'',
       el('div',{class:'explain'},el('div',{class:'row between'},el('div',{class:'h'},'How to solve it'),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak(qSpeakText(r)+'. '+r.explanation)},'🔊')),el('div',{html:fmtExplain(r.explanation)}))));
   });
   show(el('div',{},backBar('Results',()=>viewHome()),
@@ -1027,7 +1037,10 @@ function viewResults(a){
     el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>viewSetup()},'New practice'),el('button',{class:'btn',onclick:()=>viewHome()},'Home'))));
   if(window.gsap&&!reduceMotion){const pctEl=$('.scorehero .pct');if(pctEl){const o={v:0};gsap.to(o,{v:a.percent,duration:.9,ease:'power2.out',onUpdate:()=>pctEl.textContent=Math.round(o.v)+'%'});}gsap.from('.qresult',{autoAlpha:0,y:16,duration:.3,stagger:.04,ease:'power2.out',delay:.12,clearProps:'all'});}
 }
-async function regrade(a,i,status){const r=a.results[i];if(r.status===status)return;r.status=status;a.correct=a.results.filter(x=>x.status==='correct').length;a.wrong=a.results.filter(x=>x.status==='wrong').length;a.needsReview=a.results.filter(x=>x.status==='review').length;a.gotMarks=a.results.reduce((s,x)=>s+(x.status==='correct'?x.marks:0),0);a.percent=a.totalMarks?Math.round(a.gotMarks/a.totalMarks*100):0;await dbPut('attempts',a);scheduleDriveSync();toast('Updated.');viewResults(a);}
+async function regrade(a,i,status){const r=a.results[i];if(r.status===status)return;r.status=status;a.correct=a.results.filter(x=>x.status==='correct').length;a.wrong=a.results.filter(x=>x.status==='wrong').length;a.needsReview=a.results.filter(x=>x.status==='review').length;a.gotMarks=a.results.reduce((s,x)=>s+(x.status==='correct'?x.marks:0),0);a.percent=a.totalMarks?Math.round(a.gotMarks/a.totalMarks*100):0;await dbPut('attempts',a);
+  // If now marked correct, drop the matching mistakes-notebook entry (unless flagged).
+  if(status==='correct'&&!r.flagged){try{for(const x of (await dbAll('review')).filter(x=>x.attemptId===a.id&&x.question===r.question))await dbDel('review',x.id);}catch(e){}}
+  scheduleDriveSync();toast('Updated.');viewResults(a);}
 
 /* ----- REFERENCE LIBRARY (real past papers → authentic grounding) ----- */
 // Best-effort tags from a filename, e.g. "ICAS Maths Paper C 2019.pdf".
@@ -1526,7 +1539,7 @@ async function startApp(){
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   viewHome();
 }
-const APP_VERSION='v15';
+const APP_VERSION='v16';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
