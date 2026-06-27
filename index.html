@@ -151,6 +151,20 @@
   .figure{margin:4px 0 16px;display:flex;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:12px}
   .figure svg{max-width:100%;height:auto;display:block}
   .qresult .figure{background:#fff}
+  .packbox{display:block;width:100%;border:2px dashed var(--brand);background:var(--feature);border-radius:var(--radius);padding:22px;cursor:pointer;text-align:center}
+  .pcard{display:inline-block;background:#fff;border:3px solid var(--line);border-radius:16px;padding:14px 18px;position:relative}
+  .pcard .pname{font-weight:800;font-size:18px;margin-top:4px}
+  .pcard .ptier{font-weight:700;font-size:13px;margin-top:2px}
+  .pcard .shiny{position:absolute;top:8px;right:10px;font-size:12px;font-weight:800;color:#f59e0b}
+  .dexgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
+  .dexcell{border:2px solid var(--line);border-radius:12px;padding:8px 6px;text-align:center;position:relative;background:#fff}
+  .dexcell.own{background:#fff}
+  .dexcell .dn{font-size:11.5px;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dexcell .dn.muted{color:var(--muted);font-weight:500}
+  .dexcell .ds{font-size:10px;letter-spacing:1px}
+  .dexcell .cnt{position:absolute;top:4px;right:6px;font-size:11px;font-weight:800;color:var(--ink);background:var(--card2);border-radius:999px;padding:0 6px}
+  .dexcell .shy{position:absolute;top:4px;left:6px;font-size:12px}
+  .dexcell .sil img{filter:brightness(0);opacity:.22}
   .gbar{height:10px;border-radius:999px;background:var(--card2);overflow:hidden}
   .gbar-fill{height:100%;border-radius:999px;background:var(--ok);transition:width .4s ease}
   .streak{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--warn)}
@@ -396,8 +410,8 @@ function activeProfile(){return CFG.profiles.find(p=>p.id===CFG.activeProfileId)
 function pid(){return activeProfile().id;}
 
 /* ---------- IndexedDB ---------- */
-const DB_NAME='practicelab',DB_VER=3;let _db=null;
-function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains('attempts'))db.createObjectStore('attempts',{keyPath:'id'});if(!db.objectStoreNames.contains('review'))db.createObjectStore('review',{keyPath:'id'});if(!db.objectStoreNames.contains('refs'))db.createObjectStore('refs',{keyPath:'id'});if(!db.objectStoreNames.contains('bank'))db.createObjectStore('bank',{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
+const DB_NAME='practicelab',DB_VER=4;let _db=null;
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains('attempts'))db.createObjectStore('attempts',{keyPath:'id'});if(!db.objectStoreNames.contains('review'))db.createObjectStore('review',{keyPath:'id'});if(!db.objectStoreNames.contains('refs'))db.createObjectStore('refs',{keyPath:'id'});if(!db.objectStoreNames.contains('bank'))db.createObjectStore('bank',{keyPath:'id'});if(!db.objectStoreNames.contains('cards'))db.createObjectStore('cards',{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
 function tx(store,mode='readonly'){return _db.transaction(store,mode).objectStore(store);}
 function dbAll(store){return new Promise((res,rej)=>{const out=[];const c=tx(store).openCursor();c.onsuccess=e=>{const cur=e.target.result;if(cur){out.push(cur.value);cur.continue();}else res(out);};c.onerror=e=>rej(e.target.error);});}
 function dbPut(store,val){return new Promise((res,rej)=>{const r=tx(store,'readwrite').put(val);r.onsuccess=()=>res();r.onerror=e=>rej(e.target.error);});}
@@ -800,6 +814,7 @@ async function viewHome(){
   const attempts=(await dbAll('attempts')).filter(a=>a.profileId===pid()).sort((a,b)=>b.startedAt-a.startedAt);
   const review=(await dbAll('review')).filter(r=>r.profileId===pid()&&!r.mastered);
   const bankN=(await bankStats()).total;
+  const caughtN=(await cardsForProfile()).length;
   const avg=attempts.length?Math.round(attempts.reduce((s,a)=>s+a.percent,0)/attempts.length):0;
   const streak=computeStreak(attempts.map(a=>a.date));
   const goal=CFG.dailyGoal||10;
@@ -812,6 +827,7 @@ async function viewHome(){
     menuItem('📓','Mistakes notebook',review.length?`${review.length} question${review.length>1?'s':''} to revise`:'Nothing to revise — nice!',()=>review.length?viewReview():toast('No mistakes saved yet.')),
     menuItem('🗄️','Question bank',bankN?`${bankN} saved — practise with no AI`:'Pre-generate questions to save AI calls',()=>viewBank()),
     menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
+    menuItem('🎴','My cards',caughtN?caughtN+' of '+POKEDEX.length+' caught — open packs by practising':'Finish a practice to earn your first card!',()=>viewCards()),
     isParent()?menuItem('👨‍👩‍👧','All students','Compare progress across the family',()=>viewDashboard()):null,
     menuItem('📚','Reference library','Real past papers — ground questions in authentic exam style',()=>viewRefs()),
   );
@@ -1036,6 +1052,17 @@ async function submitSession(){
     results:results.map(r=>({topic:r.q.topic,type:r.q.type,question:r.q.question,svg:r.q.svg,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,userAns:r.userAns,flagged:r.flagged,status:r.status,auto:r.auto}))};
   await dbPut('attempts',attempt);
   for(const r of results){if(r.status==='wrong'||r.status==='review'||r.flagged){await dbPut('review',{id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),attemptId:S.id,exam:S.settings.exam,subject:S.settings.subject,level:S.settings.level,topic:r.q.topic,reason:r.flagged?'flagged':(r.status==='review'?'review':'wrong'),timesSeen:1,timesCorrect:0,mastered:false,question:r.q.question,svg:r.q.svg,type:r.q.type,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks});}}
+  // Earn a Poké-Pack: practice mode only, ≥PACK_MIN_Q questions, within the daily cap.
+  // Rarity is rolled from THIS result (accuracy/difficulty/streak) and stored on the
+  // attempt so the results screen reveals it (and re-opening shows the same card).
+  if(S.mode==='practice'&&S.questions.length>=PACK_MIN_Q&&packsToday()<PACK_DAILY_CAP){
+    try{
+      const streak=computeStreak((await dbAll('attempts')).filter(a=>a.profileId===pid()).map(a=>a.date));
+      const card=rollCard(attempt.percent,attempt.difficulty||3,streak);
+      await cardAward(card);bumpPacks();
+      attempt.reward=card;await dbPut('attempts',attempt);
+    }catch(e){console.warn('pack',e);}
+  }
   scheduleDriveSync();
   sendSummaryEmail(attempt).catch(e=>console.warn('email',e));
   viewResults(attempt);
@@ -1067,6 +1094,7 @@ function viewResults(a){
     el('div',{class:'card'},el('div',{class:'scorehero'},el('div',{style:'font-size:46px'},emoji),el('div',{class:'pct'},a.percent+'%'),el('div',{class:'frac'},`${a.gotMarks} / ${a.totalMarks} marks · ${a.correct}/${a.count} correct · ${fmtTime(a.elapsed)}`),el('p',{style:'margin:12px 0 0;font-weight:600'},msg)),
       el('div',{class:'tiles',style:'margin-top:16px'},tile(a.correct,'Correct'),tile(a.wrong,'Wrong'),tile(a.needsReview,'Self-check'),tile(a.flagged,'Flagged')),
       el('div',{class:'small muted',style:'text-align:center;margin-top:12px'},CFG.emailEnabled?'📧 A summary email is on its way to '+esc(CFG.emailTo):'💡 Turn on email summaries in Settings to get a recap sent to a parent.')),
+    a.reward?packRevealCard(a.reward):'',
     el('div',{class:'card'},el('h2',{},'Question by question'),el('p',{class:'sub'},'Read the explanations — that’s where the learning happens.'),list),
     el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>viewSetup()},'New practice'),el('button',{class:'btn',onclick:()=>viewHome()},'Home'))));
   if(window.gsap&&!reduceMotion){const pctEl=$('.scorehero .pct');if(pctEl){const o={v:0};gsap.to(o,{v:a.percent,duration:.9,ease:'power2.out',onUpdate:()=>pctEl.textContent=Math.round(o.v)+'%'});}gsap.from('.qresult',{autoAlpha:0,y:16,duration:.3,stagger:.04,ease:'power2.out',delay:.12,clearProps:'all'});}
@@ -1075,6 +1103,61 @@ async function regrade(a,i,status){const r=a.results[i];if(r.status===status)ret
   // If now marked correct, drop the matching mistakes-notebook entry (unless flagged).
   if(status==='correct'&&!r.flagged){try{for(const x of (await dbAll('review')).filter(x=>x.attemptId===a.id&&x.question===r.question))await dbDel('review',x.id);}catch(e){}}
   scheduleDriveSync();toast('Updated.');viewResults(a);}
+
+/* ----- POKÉ-PACK reveal + collection UI ----- */
+function pokeImg(dexId,shiny,size){
+  const s=size||120;
+  const img=el('img',{src:pokeSprite(dexId,shiny),alt:(POKE_BY_ID[dexId]?POKE_BY_ID[dexId].name:'Pokémon'),loading:'lazy',style:`width:${s}px;height:${s}px;object-fit:contain`});
+  img.addEventListener('error',()=>{try{img.replaceWith(el('div',{style:`width:${s}px;height:${s}px;display:grid;place-items:center;font-size:${Math.round(s/3)}px`},'❔'));}catch(e){}});
+  return img;
+}
+function cardFace(reward,size){
+  const rr=RARITY[reward.tier];
+  return el('div',{class:'pcard',style:'border-color:'+rr.color+';box-shadow:0 0 0 3px '+rr.color+'33,0 12px 30px -12px '+rr.color},
+    reward.shiny?el('div',{class:'shiny'},'✨ Shiny! ✨'):'',
+    pokeImg(reward.dexId,reward.shiny,size||150),
+    el('div',{class:'pname'},(POKE_BY_ID[reward.dexId]?POKE_BY_ID[reward.dexId].name:reward.name||'Pokémon')),
+    el('div',{class:'ptier',style:'color:'+rr.color},rarityStars(reward.tier)+' '+rr.name));
+}
+function confettiBurst(){
+  if(!window.gsap||reduceMotion)return;
+  const colors=['#ff3b30','#ff9500','#34c759','#007aff','#a855f7','#ffd60a'];
+  const box=el('div',{style:'position:fixed;inset:0;pointer-events:none;z-index:300;overflow:hidden'});document.body.append(box);
+  for(let i=0;i<30;i++){const c=el('div',{style:'position:absolute;top:-14px;left:'+(Math.random()*100)+'%;width:9px;height:14px;background:'+colors[i%colors.length]+';border-radius:2px'});box.append(c);
+    gsap.to(c,{y:window.innerHeight+50,x:'+='+(Math.random()*180-90),rotation:Math.random()*720,duration:1.5+Math.random(),ease:'power1.in',delay:Math.random()*0.3,onComplete:()=>c.remove()});}
+  setTimeout(()=>{try{box.remove();}catch(e){}},3200);
+}
+function packRevealCard(reward){
+  const host=el('div',{class:'card',style:'text-align:center'});
+  const closed=el('button',{class:'packbox',type:'button'},el('div',{style:'font-size:54px'},'🎁'),el('div',{style:'font-weight:700;margin-top:6px'},'You earned a card!'),el('div',{class:'small muted'},'Tap to open your pack'));
+  closed.addEventListener('click',()=>{
+    const face=cardFace(reward,150);
+    host.innerHTML='';host.append(el('h2',{style:'margin:0 0 10px'},'You got a card! 🎉'),face,el('div',{class:'row',style:'justify-content:center;margin-top:12px'},el('button',{class:'btn sm',onclick:()=>viewCards()},'🎴 See collection')));
+    if(window.gsap&&!reduceMotion)gsap.from(face,{scale:.3,autoAlpha:0,rotation:-8,duration:.5,ease:'back.out(1.7)'});
+    if(reward.tier>=4)confettiBurst();
+  });
+  host.append(closed);return host;
+}
+function dexCell(p,rec){
+  const rr=RARITY[p.t];
+  if(rec)return el('div',{class:'dexcell own',style:'border-color:'+rr.color},
+    rec.count>1?el('span',{class:'cnt'},'×'+rec.count):'',rec.shiny?el('span',{class:'shy'},'✨'):'',
+    pokeImg(p.id,rec.shiny,74),el('div',{class:'dn'},p.name),el('div',{class:'ds',style:'color:'+rr.color},rarityStars(p.t)));
+  return el('div',{class:'dexcell'},el('div',{class:'sil'},pokeImg(p.id,false,74)),el('div',{class:'dn muted'},'???'),el('div',{class:'ds',style:'color:'+rr.color},rarityStars(p.t)));
+}
+async function viewCards(){
+  stopTimer();
+  const owned=await cardsForProfile();const byId={};owned.forEach(c=>byId[c.dexId]=c);
+  const caught=POKEDEX.filter(p=>byId[p.id]).length,total=POKEDEX.length;
+  const pct=Math.round(caught/total*100);
+  const sorted=POKEDEX.slice().sort((a,b)=>(b.t-a.t)||(a.id-b.id));
+  const grid=el('div',{class:'dexgrid'},...sorted.map(p=>dexCell(p,byId[p.id])));
+  show(el('div',{},backBar('My cards',()=>viewHome()),
+    el('div',{class:'card'},el('h2',{},'🎴 '+esc(activeProfile().name)+'’s card collection'),
+      el('p',{class:'sub',style:'margin-bottom:8px'},'Caught '+caught+' / '+total+' · finish a practice to earn a pack. Better accuracy = rarer cards!'),
+      el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:var(--brand)'}))),
+    el('div',{class:'card'},grid)));
+}
 
 /* ----- REFERENCE LIBRARY (real past papers → authentic grounding) ----- */
 // Best-effort tags from a filename, e.g. "ICAS Maths Paper C 2019.pdf".
@@ -1104,6 +1187,50 @@ function bestRef(s,refs){
   return cand.map(r=>({r,sc:score(r)})).sort((a,b)=>b.sc-a.sc)[0].r;
 }
 function refScope(r){return r.profileId==='all';}
+
+/* ----- POKÉ-PACKS (collectible reward) -----
+   A completed practice earns a "pack" that reveals a random Pokémon card; higher
+   accuracy/difficulty/streak shifts the odds toward rarer cards. Sprites are
+   HOTLINKED from the public PokéAPI mirror (no copyrighted images in the repo).
+   Cards live per-profile in the `cards` store and sync like everything else. */
+const RARITY=[null,
+  {name:'Common',color:'#9aa3af'},{name:'Uncommon',color:'#22c55e'},{name:'Rare',color:'#3b82f6'},
+  {name:'Epic',color:'#a855f7'},{name:'Legendary',color:'#f59e0b'}];
+function rarityStars(t){return '★'.repeat(t);}
+const POKEDEX=[
+  {id:10,name:'Caterpie',t:1},{id:13,name:'Weedle',t:1},{id:16,name:'Pidgey',t:1},{id:19,name:'Rattata',t:1},{id:41,name:'Zubat',t:1},{id:129,name:'Magikarp',t:1},{id:399,name:'Bidoof',t:1},{id:161,name:'Sentret',t:1},{id:163,name:'Hoothoot',t:1},{id:265,name:'Wurmple',t:1},{id:263,name:'Zigzagoon',t:1},{id:504,name:'Patrat',t:1},
+  {id:1,name:'Bulbasaur',t:2},{id:4,name:'Charmander',t:2},{id:7,name:'Squirtle',t:2},{id:25,name:'Pikachu',t:2},{id:52,name:'Meowth',t:2},{id:54,name:'Psyduck',t:2},{id:58,name:'Growlithe',t:2},{id:133,name:'Eevee',t:2},{id:104,name:'Cubone',t:2},{id:152,name:'Chikorita',t:2},{id:155,name:'Cyndaquil',t:2},{id:158,name:'Totodile',t:2},{id:255,name:'Torchic',t:2},{id:258,name:'Mudkip',t:2},{id:252,name:'Treecko',t:2},
+  {id:38,name:'Ninetales',t:3},{id:59,name:'Arcanine',t:3},{id:131,name:'Lapras',t:3},{id:143,name:'Snorlax',t:3},{id:123,name:'Scyther',t:3},{id:130,name:'Gyarados',t:3},{id:115,name:'Kangaskhan',t:3},{id:142,name:'Aerodactyl',t:3},{id:282,name:'Gardevoir',t:3},{id:700,name:'Sylveon',t:3},{id:227,name:'Skarmory',t:3},{id:359,name:'Absol',t:3},
+  {id:3,name:'Venusaur',t:4},{id:6,name:'Charizard',t:4},{id:9,name:'Blastoise',t:4},{id:94,name:'Gengar',t:4},{id:149,name:'Dragonite',t:4},{id:248,name:'Tyranitar',t:4},{id:448,name:'Lucario',t:4},{id:445,name:'Garchomp',t:4},{id:376,name:'Metagross',t:4},{id:373,name:'Salamence',t:4},{id:658,name:'Greninja',t:4},{id:286,name:'Breloom',t:4},
+  {id:150,name:'Mewtwo',t:5},{id:151,name:'Mew',t:5},{id:144,name:'Articuno',t:5},{id:145,name:'Zapdos',t:5},{id:146,name:'Moltres',t:5},{id:249,name:'Lugia',t:5},{id:250,name:'Ho-Oh',t:5},{id:384,name:'Rayquaza',t:5},{id:382,name:'Kyogre',t:5},{id:383,name:'Groudon',t:5},{id:487,name:'Giratina',t:5},{id:643,name:'Reshiram',t:5},{id:644,name:'Zekrom',t:5}
+];
+const POKE_BY_ID={};POKEDEX.forEach(p=>POKE_BY_ID[p.id]=p);
+function pokeSprite(id,shiny){return 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/'+(shiny?'shiny/':'')+id+'.png';}
+const PACK_DAILY_CAP=5,PACK_MIN_Q=5;
+// Roll a rarity tier 1-5 from performance: accuracy dominates, difficulty + streak nudge up.
+function rollTier(accuracy,difficulty,streak){
+  const L=Math.max(0,Math.min(1,(accuracy/100)*0.7+((Math.max(1,difficulty||1)-1)/4)*0.2+(Math.min(streak||0,10)/10)*0.1));
+  const w=[0,70*(1-L)+10,35,45*L+5,30*L*L,16*L*L*L];
+  let tot=w[1]+w[2]+w[3]+w[4]+w[5],r=Math.random()*tot;
+  for(let t=1;t<=5;t++){if(r<w[t])return t;r-=w[t];}
+  return 1;
+}
+function rollCard(accuracy,difficulty,streak){
+  const t=rollTier(accuracy,difficulty,streak),pool=POKEDEX.filter(p=>p.t===t);
+  const p=pool[Math.floor(Math.random()*pool.length)];
+  const shiny=Math.random()<(0.012+0.03*(accuracy/100));
+  return {dexId:p.id,name:p.name,tier:t,shiny};
+}
+function packsToday(){try{return (JSON.parse(localStorage.getItem('practicelab.packs')||'{}'))[todayISO()]||0;}catch(e){return 0;}}
+function bumpPacks(){const k='practicelab.packs';let u={};try{u=JSON.parse(localStorage.getItem(k)||'{}');}catch(e){}u[todayISO()]=(u[todayISO()]||0)+1;const ks=Object.keys(u).sort();while(ks.length>14)delete u[ks.shift()];localStorage.setItem(k,JSON.stringify(u));}
+async function cardAward(card){
+  const id=pid()+':'+card.dexId,all=await dbAll('cards');
+  let rec=all.find(c=>c.id===id);
+  if(rec){rec.count=(rec.count||1)+1;if(card.shiny)rec.shiny=true;}
+  else rec={id,profileId:pid(),dexId:card.dexId,tier:card.tier,count:1,shiny:!!card.shiny,firstAt:Date.now()};
+  await dbPut('cards',rec);return rec;
+}
+async function cardsForProfile(){return (await dbAll('cards')).filter(c=>c.profileId===pid());}
 
 /* ----- MISTAKES NOTEBOOK ----- */
 // Start a re-test session from a list of review items (oldest/least-mastered first, capped).
@@ -1488,8 +1615,8 @@ async function sendSummaryEmail(a,isTest=false){
 }
 
 /* ============================================================ Export / import / clear ============================================================ */
-async function exportData(){const data={exportedAt:new Date().toISOString(),profiles:CFG.profiles,attempts:await dbAll('attempts'),review:await dbAll('review'),refs:(await dbAll('refs')).map(r=>({...r})),bank:await dbAll('bank')};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=el('a',{href:url,download:'practice-lab-backup-'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);toast('Backup downloaded');}
-async function importData(obj){if(Array.isArray(obj.profiles))obj.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();if(obj.attempts)for(const a of obj.attempts)await dbPut('attempts',a);if(obj.review)for(const r of obj.review)await dbPut('review',r);if(obj.refs)for(const r of obj.refs)await dbPut('refs',r);if(obj.bank)for(const b of obj.bank)await dbPut('bank',b);toast('Data imported ✓');}
+async function exportData(){const data={exportedAt:new Date().toISOString(),profiles:CFG.profiles,attempts:await dbAll('attempts'),review:await dbAll('review'),refs:(await dbAll('refs')).map(r=>({...r})),bank:await dbAll('bank'),cards:await dbAll('cards')};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=el('a',{href:url,download:'practice-lab-backup-'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);toast('Backup downloaded');}
+async function importData(obj){if(Array.isArray(obj.profiles))obj.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();if(obj.attempts)for(const a of obj.attempts)await dbPut('attempts',a);if(obj.review)for(const r of obj.review)await dbPut('review',r);if(obj.refs)for(const r of obj.refs)await dbPut('refs',r);if(obj.bank)for(const b of obj.bank)await dbPut('bank',b);if(obj.cards)for(const c of obj.cards)await dbPut('cards',c);toast('Data imported ✓');}
 async function clearAll(){if(!confirm('Delete '+activeProfile().name+'’s practices and review items on this device? This cannot be undone.'))return;for(const a of (await dbAll('attempts')).filter(a=>a.profileId===pid()))await dbDel('attempts',a.id);for(const r of (await dbAll('review')).filter(r=>r.profileId===pid()))await dbDel('review',r.id);toast('History cleared');viewHome();}
 
 /* ============================================================ Google Drive ============================================================ */
@@ -1498,7 +1625,7 @@ function driveReady(){return CFG.drive.enabled&&driveClientId()&&window.google&&
 function driveConnect(interactive){if(!driveClientId())return toast('No OAuth Client ID configured.');if(!window.google||!google.accounts||!google.accounts.oauth2)return toast('Google library not loaded (need internet + https).');if(!tokenClient)tokenClient=google.accounts.oauth2.initTokenClient({client_id:driveClientId(),scope:'https://www.googleapis.com/auth/drive.appdata',callback:r=>{if(r.access_token){driveToken=r.access_token;toast('☁️ Connected to Drive');driveSyncNow();}}});tokenClient.requestAccessToken({prompt:interactive?'consent':''});}
 function scheduleDriveSync(){if(!driveReady())return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>{if(driveToken)driveSyncNow();else driveConnect(false);},1500);}
 async function driveFindFile(){const r=await fetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D'practice-lab.json'&fields=files(id,name)",{headers:{Authorization:'Bearer '+driveToken}});if(!r.ok)throw new Error('drive list '+r.status);return (await r.json()).files?.[0]?.id||null;}
-async function driveSyncNow(){if(!driveToken)return;try{const fileId=await driveFindFile();if(fileId){const rr=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+driveToken}});if(rr.ok)await mergeRemote(await rr.json());}const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:await dbAll('refs'),bank:await dbAll('bank'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+async function driveSyncNow(){if(!driveToken)return;try{const fileId=await driveFindFile();if(fileId){const rr=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+driveToken}});if(rr.ok)await mergeRemote(await rr.json());}const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:await dbAll('refs'),bank:await dbAll('bank'),cards:await dbAll('cards'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
   // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
   if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
@@ -1512,6 +1639,8 @@ async function mergeRemote(remote){
   const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[]))if(!lr.has(r.id))await dbPut('review',r);
   const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[]))if(!lf.has(r.id))await dbPut('refs',r);
   const lb=new Map((await dbAll('bank')).map(b=>[b.id,b]));for(const b of(remote.bank||[]))if(!lb.has(b.id))await dbPut('bank',b);
+  // Cards: merge by id keeping the higher count + any shiny (so neither device loses cards).
+  const lc=new Map((await dbAll('cards')).map(c=>[c.id,c]));for(const c of(remote.cards||[])){const cur=lc.get(c.id);if(!cur)await dbPut('cards',c);else if((c.count||1)>(cur.count||1)||(c.shiny&&!cur.shiny)){cur.count=Math.max(cur.count||1,c.count||1);cur.shiny=cur.shiny||c.shiny;await dbPut('cards',cur);}}
   await reconcileProfiles();
 }
 
@@ -1603,7 +1732,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v1.1';
+const APP_VERSION='v1.2';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

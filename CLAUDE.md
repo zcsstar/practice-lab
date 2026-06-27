@@ -164,6 +164,17 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `voiceschanged`), speed (`CFG.voiceRate`) and pitch (`CFG.voicePitch`, higher =
   younger — the API has no age metadata). `voiceGender()` is a best-effort
   name-based label only.
+- **Poké-Packs (collectible reward)** — finishing a practice (≥`PACK_MIN_Q` 5
+  questions, ≤`PACK_DAILY_CAP` 5/day) earns a card. `rollCard()` rolls a rarity
+  tier 1-5 from a luck score (accuracy-dominant + difficulty + streak), then a
+  random Pokémon of that tier from `POKEDEX` (~64, 5 tiers); small shiny chance.
+  Rolled in `submitSession`, stored on `attempt.reward`, revealed on results
+  (`packRevealCard` → `cardFace`, confetti for tier≥4). Cards persist per-profile
+  in the `cards` store (id `profileId:dexId`, count + shiny), shown in `viewCards`
+  (Pokédex grid: owned in colour + rarity border + ×count, unowned as
+  silhouettes). Sprites are **hotlinked** from the public PokéAPI mirror
+  (`pokeSprite`) — NO copyrighted images in the repo (private family use). `cards`
+  flows through Drive sync (merge keeps higher count + any shiny) + export/import.
 - **Streaks / daily goal** — Home shows a 🔥 day-streak tile (`computeStreak`,
   UTC-based) and a daily-goal bar (`CFG.dailyGoal`, default 10, vs questions
   answered today). Generate-similar: `practiceTopic(topic)` builds a bank-first
