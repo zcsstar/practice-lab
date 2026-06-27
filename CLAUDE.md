@@ -213,6 +213,10 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   after every `show()`. New views with maths must be inside `show()` or call
   `renderMath` themselves.
 - User-entered HTML is always `esc()`-aped before insertion.
+- **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
+  so the string is just a visible deploy marker): scheme is **v1.x** — bump the
+  minor (v1.1, v1.2, …) on each release; reserve a major bump (**v2.0**) for a big
+  feature release. Claude suggests the next number on each deploy; Chi decides.
 
 ## Verifying changes
 1. **Parser tests:** `node parse.test.js` (covers the `parse.js` module: clean,
