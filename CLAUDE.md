@@ -26,11 +26,13 @@ are in [SETUP.md](SETUP.md).
 - **CFG** — config object in `localStorage` key `practicelab.config.v2`
   (migrates from `.v1`). Holds provider/key/model, profiles, email + drive
   settings, `webSearch`, and `examContext` (per-exam saved context text).
-- **IndexedDB** (`practicelab`, v2), three stores:
+- **IndexedDB** (`practicelab`, v3), four stores:
   - `attempts` — every completed practice (full question + result snapshot)
   - `review` — wrong/unsure questions for spaced revision (`mastered` after 2
     correct re-answers)
   - `refs` — uploaded reference papers (base64 + extracted text + tags)
+  - `bank` — pre-generated question surplus, keyed by setup (see AI layer); cuts
+    API calls by reusing one generation across many practices
   - All records are tagged with `profileId` and filtered by the active profile.
 - **Profiles** — `CFG.profiles[]` + `activeProfileId`. Header chip switches
   student; each has isolated attempts/review. Each profile may carry
@@ -62,10 +64,35 @@ are in [SETUP.md](SETUP.md).
     inline to Gemini, images inline to OpenAI/Claude.
   - When search is on, JSON mime-type is dropped (incompatible) and we rely on
     `parseQuestions()`'s tolerant JSON extraction.
+- **Question bank (AI-usage reduction)** — `buildPracticeSet(s,files)` is the
+  entry point used by `doGenerate()`/`practiceTopic()` instead of calling
+  `generateQuestions()` directly. It serves matching questions from the `bank`
+  store first (0 API calls); on a miss it generates a `BANK_PREFILL` (20) batch,
+  uses what's needed and banks the unused surplus (`bankAdd` de-dupes by
+  `qhash`/`normQ`). Bank key = `country|subject|exam|level|difficulty|style`
+  (`bankKey`); `bankTake` honours selected topics strictly and rotates
+  least-served-first. **Attached past papers or per-session notes always force a
+  fresh generation and are NOT banked.** Daily call count lives in `localStorage`
+  `practicelab.usage`; `freeDailyLimit()` is 20 for Gemini. `viewBank()` is the
+  hub (usage meter, per-setup counts, manual pre-generate, clear). Bank flows
+  through export/import and Drive merge like the other stores.
 - **Marking** — `gradeAnswer()`: MC by index; numeric by tolerant numeric match;
   short answers that don't match become `review` (self-check toggle on results).
-- **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs`.
-  `show(node)` swaps `#app` and re-runs KaTeX. No router; functions call each other.
+- **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
+  Bank/Dashboard`. `show(node)` swaps `#app` and re-runs KaTeX. No router;
+  functions call each other. `viewBank` = question-bank hub; `viewDashboard` =
+  parent-only all-students progress overview.
+- **Explanation rendering** — `fmtExplain()` turns the stored explanation
+  (plain text + `$LaTeX$` + `**bold**`/`*italic*` + numbered steps / `*` bullets)
+  into readable HTML blocks, protecting `$…$` spans so KaTeX still renders them.
+  Questions may carry an optional `svg` diagram (`sanitizeSvg()` strips scripts /
+  external refs / handlers); rendered in runner + results.
+- **Read-aloud** — `speak()` (Web Speech) reads a question/explanation aloud,
+  using `plainMath()` to strip LaTeX/markdown. 🔊 buttons in runner + results.
+- **Streaks / daily goal** — Home shows a 🔥 day-streak tile (`computeStreak`,
+  UTC-based) and a daily-goal bar (`CFG.dailyGoal`, default 10, vs questions
+  answered today). Generate-similar: `practiceTopic(topic)` builds a bank-first
+  drill, surfaced from the History weak-topics list.
 - **Email** — EmailJS (`buildSummary` → `sendSummaryEmail`) on submit. Template
   receives `summary_html`, `summary_text`, `to_email`, `subject`, `student_name`.
   The summary lists every wrong/self-check/flagged question with the student's
