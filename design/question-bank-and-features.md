@@ -39,17 +39,32 @@ question snapshot plus:
    (`source:'fresh'`) — accuracy/specificity when the user explicitly wants it
    is never compromised by stale bank content.
 
-### Getting the most out of one call
+### Getting the most out of each call — reliably
+Big single requests are unreliable: a 40-question response truncates (and the
+2.5-flash thinking budget can cut it off *inside the first question*, so there's
+nothing to salvage). The robust design has two layers:
+
+- **Bulletproof parsing — [parse.js](../parse.js) (`PLParse`).** A standalone,
+  unit-tested module ([parse.test.js](../parse.test.js)) that recovers questions
+  from any imperfect response: strips fences/prose, repairs raw LaTeX backslashes
+  and control chars, and on a malformed/truncated array walks it object-by-object,
+  keeping every COMPLETE question, skipping a single bad one, and stopping at a
+  truncated tail. Never throws — returns `[]` if nothing is recoverable.
+- **Chunked generation — `generateMany()`.** Instead of one huge call, it loops
+  `GEN_CHUNK` (12)-sized calls, de-duping by `qhash` and tolerating partial
+  chunks, until the target / an empty streak / an attempt cap (re-throws a 429
+  only if nothing's been collected). So a degraded model still banks a useful
+  amount instead of failing outright.
 - **Output-token budget scales with batch size.** `outTokens(count,cap)` =
   `min(cap, max(16384, 4096 + count*1000))`, capped per provider (Gemini 65536,
-  OpenAI 16384, Claude 8192). The old fixed `16384` is the floor, so small
-  practices are unchanged while big batches get the room to finish without
-  truncating. Combined with `salvageQuestions()`, a batch that *does* stop early
-  still banks every complete question.
-- **Manual deep top-up.** The bank hub's **Pre-generate** button uses
-  `BANK_DEEP` (40) — one deliberately large call that stocks the bank for many
-  free practices. Interactive misses use the smaller `BANK_PREFILL` (24) so the
-  child isn't kept waiting.
+  OpenAI 16384, Claude 8192). 16384 is the floor (proven-good), so small calls
+  are unchanged.
+- **Two paths:** the bank hub's **Pre-generate** uses `generateMany` to reach
+  `BANK_DEEP` (40) reliably across a few small calls; an interactive bank *miss*
+  uses ONE `generateQuestions` call of `BANK_PREFILL` (15, ≤ `GEN_CHUNK` so it
+  won't truncate) — fast, serves now, banks a small surplus.
+- `usageBump(1)` lives in `generateQuestions`, so every real call (including each
+  chunk) is counted in the daily meter.
 
 ### Supporting pieces
 - **`viewBank()`** — the bank hub: a daily AI-usage meter (`X / 20 free

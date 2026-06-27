@@ -6,15 +6,17 @@ marks them, explains answers, and tracks mistakes for revision. Built for a
 family (multiple children), starting with NZ maths (ICAS primary + Rangitoto
 College extension), but generalised to any country / subject / exam / level.
 
-**Everything lives in [index.html](index.html)** — one self-contained file, no
-build step, no dependencies installed locally. It runs by double-clicking the
-file or hosting it statically (GitHub Pages). Setup instructions for the user
-are in [SETUP.md](SETUP.md).
+The app is [index.html](index.html) plus a small number of sibling static files
+(currently [parse.js](parse.js)). No build step, no dependencies installed
+locally. It runs by double-clicking `index.html` or hosting it statically
+(GitHub Pages). Setup instructions for the user are in [SETUP.md](SETUP.md).
 
 ## Hard constraints (do not break these)
-- **Stay a single static file.** No bundler, no framework, no `npm install`, no
-  server. Vanilla JS + CDN libraries only. It must keep working when opened as a
-  local `file://` and when hosted on GitHub Pages.
+- **Stay static — no build, no server.** No bundler, no framework, no
+  `npm install`. Vanilla JS + CDN libraries only. Multiple static files are fine,
+  but **only classic `<script src>` includes** (NOT ES modules / `fetch` / XHR) so
+  it keeps working from a local `file://` double-click as well as GitHub Pages.
+  Sibling scripts must guard against load failure where it matters.
 - **No secrets in the repo.** API keys / EmailJS keys / OAuth IDs are entered by
   the user at runtime and stored in `localStorage` only. `index.html` is safe to
   commit publicly. `exportData()` strips nothing sensitive except it never
@@ -63,11 +65,29 @@ are in [SETUP.md](SETUP.md).
     injected into the prompt for ALL providers; raw files are additionally sent
     inline to Gemini, images inline to OpenAI/Claude.
   - When search is on, JSON mime-type is dropped (incompatible) and we rely on
-    `parseQuestions()`'s tolerant JSON extraction.
+    the tolerant parser.
+  - `callGemini/callClaude/callOpenAICompatible` take a `maxTokens` arg;
+    `generateQuestions` sizes it via `outTokens(count,cap)` (floor 16384; caps
+    Gemini 65536 / OpenAI 16384 / Claude 8192) and bumps `usageBump(1)` per real
+    call. It throws if the parser recovers nothing.
+- **Parser** — [parse.js](parse.js) (`window.PLParse`, also a Node module so it's
+  unit-tested in [parse.test.js](parse.test.js)). `PLParse.extractQuestions(raw)`
+  is **bulletproof**: strips fences/prose, repairs raw LaTeX backslashes + control
+  chars, and on malformed/**truncated** output walks the array object-by-object
+  keeping every COMPLETE question (skips a bad one, stops at a truncated tail) —
+  never throws, returns `[]` if nothing is recoverable. `parseQuestions()` in
+  index.html just maps its output to the app shape (+`sanitizeSvg`).
+- **Reliable large batches** — big single requests truncate (2.5-flash thinking
+  budget can cut a 40-question response off mid-item). `generateMany(s,files,
+  target,onProgress)` instead loops `GEN_CHUNK` (12)-sized calls, de-duping and
+  tolerating partial chunks, until the target / an empty streak / an attempt cap
+  (re-throws 429 only if nothing collected yet). The bank's manual pre-generate
+  uses it for `BANK_DEEP` (40). Interactive misses still use ONE `generateQuestions`
+  call of `BANK_PREFILL` (15, ≤ `GEN_CHUNK` so it won't truncate).
 - **Question bank (AI-usage reduction)** — `buildPracticeSet(s,files)` is the
   entry point used by `doGenerate()`/`practiceTopic()` instead of calling
   `generateQuestions()` directly. It serves matching questions from the `bank`
-  store first (0 API calls); on a miss it generates a `BANK_PREFILL` (24) batch,
+  store first (0 API calls); on a miss it generates a `BANK_PREFILL` batch,
   uses what's needed and banks the unused surplus (`bankAdd` de-dupes by
   `qhash`/`normQ`). The bank hub's manual pre-generate uses a bigger `BANK_DEEP`
   (40) batch. Output-token budget scales with batch size via `outTokens(count,
@@ -87,9 +107,13 @@ are in [SETUP.md](SETUP.md).
   parent-only all-students progress overview.
 - **Explanation rendering** — `fmtExplain()` turns the stored explanation
   (plain text + `$LaTeX$` + `**bold**`/`*italic*` + numbered steps / `*` bullets)
-  into readable HTML blocks, protecting `$…$` spans so KaTeX still renders them.
-  Questions may carry an optional `svg` diagram (`sanitizeSvg()` strips scripts /
-  external refs / handlers); rendered in runner + results.
+  into readable HTML blocks, protecting `$…$` spans (incl. escaped `\$` for money
+  like `$\$5$`) so KaTeX still renders them. Prompt tells the model to write money
+  as `$\$x$`. Questions may carry an optional `svg` diagram (`sanitizeSvg()` strips
+  scripts / external refs / handlers); rendered in runner + results.
+  - **`el()` escaping gotcha:** string children are inserted via `createTextNode`
+    (already XSS-safe) — do NOT wrap child text in `esc()` (double-encodes, e.g.
+    "Data &amp; graphs"). `esc()` is only for `{html:...}` / attribute strings.
 - **Read-aloud** — `speak()` (Web Speech) reads a question/explanation aloud,
   using `plainMath()` to strip LaTeX/markdown. 🔊 buttons in runner + results.
 - **Streaks / daily goal** — Home shows a 🔥 day-streak tile (`computeStreak`,
@@ -135,11 +159,15 @@ are in [SETUP.md](SETUP.md).
 - User-entered HTML is always `esc()`-aped before insertion.
 
 ## Verifying changes
-There are no automated tests. To verify:
-1. `python -m http.server 8744` in this dir, open `http://localhost:8744/index.html`.
-2. JS syntax check without a browser:
-   `node -e "const fs=require('fs');const m=[...fs.readFileSync('index.html','utf8').matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n');new Function(m);console.log('OK')"`
-3. The app needs an AI key to generate; use **Settings → Test connection**.
+1. **Parser tests:** `node parse.test.js` (covers the `parse.js` module: clean,
+   fenced, truncated, malformed, control-chars, raw-LaTeX, money cases).
+2. **Run it:** `python -m http.server 8744` in this dir, open
+   `http://localhost:8744/index.html`.
+3. **JS syntax check** without a browser (both files):
+   `node -e "require('./parse.js');const fs=require('fs');const m=[...fs.readFileSync('index.html','utf8').matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n');new Function('PLParse',m);console.log('OK')"`
+4. The app needs an AI key to generate; use **Settings → Test connection**. For
+   pure-logic checks without a key, extract the function from `index.html` in Node
+   and stub its deps (see how `parse.test.js` is structured).
 
 ## Known limitations / future ideas
 - Short-answer auto-marking is lenient; ambiguous ones fall back to self-check.

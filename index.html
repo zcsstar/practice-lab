@@ -201,6 +201,8 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<!-- Robust question-JSON parser (recovers partial/truncated/malformed AI output). Classic script: works on file:// and GitHub Pages. -->
+<script src="parse.js"></script>
 <script>
 /* ============================================================ Practice Lab ============================================================ */
 const $=(s,el=document)=>el.querySelector(s);
@@ -384,8 +386,8 @@ function usageGet(){let u={};try{u=JSON.parse(localStorage.getItem(USAGE_KEY)||'
 function usageToday(){return usageGet()[todayISO()]||0;}
 function usageBump(n=1){const u=usageGet(),d=todayISO();u[d]=(u[d]||0)+n;const ks=Object.keys(u).sort();while(ks.length>21)delete u[ks.shift()];localStorage.setItem(USAGE_KEY,JSON.stringify(u));}
 function freeDailyLimit(){return CFG.provider==='gemini'?20:0;} // 0 = unknown / not free-tier-limited
-const BANK_PREFILL=24; // batch size when a practice misses the bank — serves now + banks the surplus
-const BANK_DEEP=40;    // batch size for a manual "stock the bank" pre-generation (one big call → many free practices)
+const BANK_PREFILL=15; // single-call batch when a practice misses the bank — serves now + banks a small surplus (kept ≤ GEN_CHUNK so it won't truncate)
+const BANK_DEEP=40;    // total for a manual "stock the bank" pre-generation — fetched reliably in small chunks via generateMany
 function normQ(s){return String(s||'').toLowerCase().replace(/\$/g,' ').replace(/[^a-z0-9]+/g,' ').trim().slice(0,180);}
 function qhash(s){const t=normQ(s);let h=2166136261>>>0;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return 'h'+(h>>>0).toString(36);}
 function bankKey(s){return [s.country,s.subject,s.exam,s.level,s.difficulty,s.style].map(x=>String(x==null?'':x).toLowerCase().trim()).join('|');}
@@ -543,55 +545,18 @@ async function callClaude(prompt,files,maxTokens){
   if(!r.ok)throw new Error('Claude '+r.status+': '+(await r.text()).slice(0,400));
   const j=await r.json();return j?.content?.map(c=>c.text).filter(Boolean).join('')||'';
 }
-// Extract the balanced {...}/[...] starting at index i (respects strings/escapes).
-function extractBalanced(s,i){
-  const open=s[i],close=open==='{'?'}':']';let d=0,inStr=false,esc=false;
-  for(let k=i;k<s.length;k++){const ch=s[k];
-    if(inStr){if(esc)esc=false;else if(ch==='\\')esc=true;else if(ch==='"')inStr=false;}
-    else{if(ch==='"')inStr=true;else if(ch===open)d++;else if(ch===close){d--;if(d===0)return s.slice(i,k+1);}}}
-  return null;
-}
-function qText(q){return q.question||q.text||q.stem||q.prompt||q.problem||q.questionText||q.q||'';}
-function qOpts(q){return Array.isArray(q.options)?q.options:(Array.isArray(q.choices)?q.choices:(Array.isArray(q.answers)?q.answers:null));}
-function looksQ(q){return q&&typeof q==='object'&&(qText(q)||qOpts(q)||q.answer!=null);}
-function getArr(p){return Array.isArray(p)?p:(p&&Array.isArray(p.questions)?p.questions:(p&&Array.isArray(p.items)?p.items:(p&&Array.isArray(p.data)?p.data:null)));}
-// Escape raw control chars (newlines/tabs) that appear INSIDE string values —
-// some models emit multi-line strings which are invalid JSON. Leaves structural
-// whitespace alone.
-function sanitizeCtrl(s){let out='',inStr=false,esc=false;for(let i=0;i<s.length;i++){const ch=s[i];
-  if(inStr){if(esc){out+=ch;esc=false;continue;}if(ch==='\\'){out+=ch;esc=true;continue;}if(ch==='"'){out+=ch;inStr=false;continue;}
-    if(ch==='\n'){out+='\\n';continue;}if(ch==='\r'){out+='\\r';continue;}if(ch==='\t'){out+='\\t';continue;}out+=ch;}
-  else{out+=ch;if(ch==='"')inStr=true;}}return out;}
-// Recover complete question objects from a truncated array (response cut off
-// before the closing brackets), then rebuild a valid wrapper.
-function salvageQuestions(s){
-  const m=s.match(/"(?:questions|items|data)"\s*:\s*\[/);
-  let start=m?(m.index+m[0].length-1):s.indexOf('[');if(start<0)return null;
-  const objs=[];let i=start+1;
-  while(i<s.length){while(i<s.length&&/[\s,]/.test(s[i]))i++;if(s[i]!=='{')break;const sub=extractBalanced(s,i);if(!sub)break;objs.push(sub);i+=sub.length;}
-  return objs.length?('{"questions":['+objs.join(',')+']}'):null;
-}
+// Parse + normalise an AI response into the app's question shape. The heavy
+// lifting (tolerant/partial JSON recovery) lives in parse.js (PLParse); here we
+// just map the recovered objects and sanitise the optional SVG. Returns [] for
+// an unrecoverable response (callers decide whether that's fatal).
 function parseQuestions(raw){
-  let txt=String(raw||'').trim().replace(/^```(json)?/i,'').replace(/```$/,'').trim();
-  const tryParse=s=>{try{return JSON.parse(s);}catch(e){return undefined;}};
-  const fixEsc=s=>s.replace(/\\(?!["\\/bfnrtu])/g,'\\\\'); // repair raw LaTeX backslashes
-  const usable=p=>{const a=getArr(p);return !!(a&&a.length&&a.some(looksQ));};
-  const variants=s=>[s,sanitizeCtrl(s),fixEsc(s),fixEsc(sanitizeCtrl(s))];
-  const pick=cs=>{for(const c of cs)for(const v of variants(c)){const p=tryParse(v);if(usable(p))return p;}return undefined;};
-  // Candidates: whole text + every balanced {…}/[…] start (ignores thinking/prose
-  // & decoy arrays). Each tried with control-char + escape repairs.
-  const candidates=[txt];
-  for(let i=0;i<txt.length;i++){const ch=txt[i];if(ch==='{'||ch==='['){const sub=extractBalanced(txt,i);if(sub)candidates.push(sub);}}
-  let obj=pick(candidates);
-  // Last resort: salvage complete questions from a truncated response.
-  if(obj===undefined){const sv=salvageQuestions(sanitizeCtrl(txt))||salvageQuestions(txt);if(sv)obj=tryParse(sv)||tryParse(fixEsc(sv));}
-  if(obj===undefined)throw new Error('AI did not return valid JSON. The model sent: '+JSON.stringify(txt.slice(0,220)));
-  const arr=(getArr(obj)||[]).filter(looksQ);
-  if(!arr.length)throw new Error('The AI response had no usable questions. It sent: '+JSON.stringify(txt.slice(0,220)));
-  return arr.map((q,i)=>{const opts=qOpts(q);const ai=(typeof q.answerIndex==='number')?q.answerIndex:(typeof q.correctIndex==='number'?q.correctIndex:null);
+  const P=(typeof PLParse!=='undefined')?PLParse:null;
+  if(!P)throw new Error('Parser module (parse.js) failed to load.');
+  const arr=P.extractQuestions(raw);
+  return arr.map((q,i)=>{const opts=P.qOpts(q);const ai=(typeof q.answerIndex==='number')?q.answerIndex:(typeof q.correctIndex==='number'?q.correctIndex:null);
     return {id:'q'+i,topic:q.topic||q.category||q.strand||'General',
       type:(q.type||(opts&&opts.length?'multiple_choice':'short')),
-      question:qText(q),options:opts,answerIndex:ai,
+      question:P.qText(q),options:opts,answerIndex:ai,
       answer:(q.answer!=null)?String(q.answer):(opts&&typeof ai==='number'?String(opts[ai]):''),
       acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):(Array.isArray(q.accepted)?q.accepted.map(String):[]),
       explanation:q.explanation||q.solution||q.working||q.reason||'',marks:Number(q.marks||q.mark||q.points)||1,
@@ -609,7 +574,35 @@ async function generateQuestions(s,files){
   if(CFG.provider==='gemini')raw=await callGemini(prompt,files,outTokens(count,65536));
   else if(CFG.provider==='claude')raw=await callClaude(prompt,files,outTokens(count,8192));
   else raw=await callOpenAICompatible(prompt,files,outTokens(count,16384));
-  return parseQuestions(raw);
+  usageBump(1); // count every real API call (incl. each chunk of a big batch)
+  const qs=parseQuestions(raw);
+  if(!qs.length)throw new Error('The AI response had no usable questions. It sent: '+JSON.stringify(String(raw||'').slice(0,220)));
+  return qs;
+}
+// How many questions to request per API call. Kept modest so a single response
+// reliably fits the output budget — large batches (e.g. 40) truncate, and the
+// 2.5-flash thinking budget can cut a too-big response off mid-question.
+const GEN_CHUNK=12;
+// Generate up to `target` questions reliably by requesting small chunks and
+// accumulating de-duped results. Tolerant of truncation / partial chunks: each
+// chunk contributes whatever complete questions it returned. Stops at the target,
+// after a couple of empty rounds, or an attempt cap (so a flaky model can't loop
+// forever and burn the daily quota). Re-throws a quota/429 error if nothing yet.
+async function generateMany(s,files,target,onProgress){
+  const seen=new Set(),got=[];
+  let attempts=0,empties=0;const maxAttempts=Math.ceil(target/GEN_CHUNK)+3;
+  while(got.length<target&&attempts<maxAttempts&&empties<2){
+    attempts++;
+    const want=Math.min(GEN_CHUNK,target-got.length+2);
+    let arr=[];
+    try{arr=await generateQuestions({...s,count:want},files);}
+    catch(e){if(/\b429\b|quota|rate limit/i.test(e.message||'')){if(got.length)break;throw e;}/* else: transient/parse fail — treat as empty round */}
+    let added=0;
+    for(const q of arr){const h=qhash(q.question);if(h&&!seen.has(h)){seen.add(h);got.push(q);added++;}}
+    empties=added?0:empties+1;
+    if(onProgress)onProgress(got.length,target);
+  }
+  return got;
 }
 /* Build a practice set with the fewest possible API calls:
    1) serve matching questions straight from the bank (0 calls);
@@ -624,9 +617,10 @@ async function buildPracticeSet(s,files){
   if(!wantsFresh)fromBank=await bankTake(s,count);
   if(fromBank.length>=count)return {questions:reindex(fromBank.slice(0,count)),source:'bank',apiCalls:0};
   const need=count-fromBank.length;
+  // One reliable call: serve `need` now, bank the modest surplus. (Big stock-ups
+  // go through generateMany via the bank hub.)
   const batch=wantsFresh?count:Math.max(BANK_PREFILL,need);
   const gen=await generateQuestions({...s,count:batch},files);
-  usageBump(1);
   const sessionGen=gen.slice(0,need);
   if(!wantsFresh)await bankAdd(s,gen.slice(need)); // bank only the unused surplus (avoids immediate repeats)
   return {questions:reindex(fromBank.concat(sessionGen)),source:fromBank.length?'mixed':(wantsFresh?'fresh':'generated'),apiCalls:1};
@@ -1017,13 +1011,13 @@ async function viewBank(){
 }
 async function topUpBank(s){
   if(!CFG.apiKey)return toast('Add an AI key in Settings first.');
-  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Filling the bank…'),el('div',{class:'muted small',style:'margin-top:6px'},`${BANK_DEEP} ${EXAMS[s.exam].label} · ${s.subject} · ${s.level} — this one call powers many free practices`)))));
+  const sub=el('div',{class:'muted small',style:'margin-top:6px'},`${EXAMS[s.exam].label} · ${s.subject} · ${s.level} — building in small batches so nothing is lost`);
+  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Filling the bank…'),sub))));
   try{
-    const gen=await generateQuestions({...s,count:BANK_DEEP,examLabel:EXAMS[s.exam].label},[]);
-    usageBump(1);
-    const added=await bankAdd({...s,examLabel:EXAMS[s.exam].label},gen);
+    const gen=await generateMany({...s,examLabel:EXAMS[s.exam].label},[],BANK_DEEP,(have,target)=>{try{sub.textContent=`Generated ${have} of ${target}…`;}catch(e){}});
+    const added=gen.length?await bankAdd({...s,examLabel:EXAMS[s.exam].label},gen):0;
     scheduleDriveSync();
-    toast(added?`Banked ${added} new question${added===1?'':'s'} ✓`:'No new questions (all were duplicates)');
+    toast(added?`Banked ${added} new question${added===1?'':'s'} ✓`:(gen.length?'No new questions (all were duplicates)':'Couldn’t generate any questions — try again.'));
   }catch(e){alert('Couldn’t pre-generate:\n\n'+(e.message||e));}
   viewBank();
 }
@@ -1313,7 +1307,7 @@ async function startApp(){
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   viewHome();
 }
-const APP_VERSION='v9';
+const APP_VERSION='v10';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
