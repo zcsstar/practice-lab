@@ -112,8 +112,10 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   (40) batch. Output-token budget scales with batch size via `outTokens(count,
   cap)` (floor 16384; caps: Gemini 65536 / OpenAI 16384 / Claude 8192) so large
   batches don't truncate; `generateQuestions` passes it per provider. Bank key = `country|subject|exam|level|difficulty|style`
-  (`bankKey`); `bankTake` honours selected topics strictly and rotates
-  least-served-first. **Attached past papers or per-session notes always force a
+  (`bankKey`); `bankTake` honours selected topics strictly; when NO topics are
+  chosen it **round-robins across distinct topics** (least-practised topic first)
+  for variety, and `buildPrompt` likewise tells the generator to spread widely
+  (≤~2 per topic) across the exam's topic list. **Attached past papers or per-session notes always force a
   fresh generation and are NOT banked.** Daily call count lives in `localStorage`
   `practicelab.usage`; `freeDailyLimit()` is 20 for Gemini. `viewBank()` is the
   hub (usage meter, per-setup counts, manual pre-generate, clear). Bank flows

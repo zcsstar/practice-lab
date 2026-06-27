@@ -436,9 +436,21 @@ async function bankTake(s,count){
   const key=bankKey(s);
   let pool=(await dbAll('bank')).filter(b=>b.profileId===pid()&&b.key===key);
   const topics=(s.topics||[]).map(t=>String(t).toLowerCase());
-  if(topics.length)pool=pool.filter(b=>topics.includes(String(b.topic||'').toLowerCase()));
-  pool.sort((a,b)=>((a.servedCount||0)-(b.servedCount||0))||((a.lastServedAt||0)-(b.lastServedAt||0))||(a.createdAt-b.createdAt));
-  const chosen=pool.slice(0,count);
+  const servedSort=(a,b)=>((a.servedCount||0)-(b.servedCount||0))||((a.lastServedAt||0)-(b.lastServedAt||0))||(a.createdAt-b.createdAt);
+  let chosen;
+  if(topics.length){
+    // specific topics requested → serve only those, least-served first.
+    pool=pool.filter(b=>topics.includes(String(b.topic||'').toLowerCase()));
+    pool.sort(servedSort);chosen=pool.slice(0,count);
+  }else{
+    // no topics chosen → round-robin across distinct topics for VARIETY, starting
+    // with the least-practised topics so coverage spreads over time.
+    const byTopic={};for(const b of pool){(byTopic[b.topic||'General']=byTopic[b.topic||'General']||[]).push(b);}
+    const names=Object.keys(byTopic);for(const t of names)byTopic[t].sort(servedSort);
+    names.sort((a,b)=>((byTopic[a][0].servedCount||0)-(byTopic[b][0].servedCount||0)));
+    chosen=[];let progressed=true;
+    while(chosen.length<count&&progressed){progressed=false;for(const t of names){const arr=byTopic[t];if(arr.length){chosen.push(arr.shift());progressed=true;if(chosen.length>=count)break;}}}
+  }
   for(const b of chosen){b.servedCount=(b.servedCount||0)+1;b.lastServedAt=Date.now();await dbPut('bank',b);}
   return chosen.map(b=>({topic:b.topic,type:b.type,question:b.question,svg:b.svg,options:b.options,answerIndex:b.answerIndex,answer:b.answer,acceptedAnswers:b.acceptedAnswers,explanation:b.explanation,marks:b.marks,fromBank:true}));
 }
@@ -484,7 +496,10 @@ function examTopics(examId,subject){const e=EXAMS[examId];return (e&&e.topics&&e
 /* ============================================================ AI generation ============================================================ */
 function buildPrompt(s,refsText){
   const exam=EXAMS[s.exam]||EXAMS.general;
-  const topics=(s.topics&&s.topics.length)?s.topics.join(', '):'a balanced mix of topics appropriate to the level';
+  const chosenTopics=(s.topics&&s.topics.length);
+  const known=examTopics(s.exam,s.subject);
+  const topics=chosenTopics?s.topics.join(', ')
+    :(known.length?('a WIDE VARIETY across these areas: '+known.join(', ')):'a balanced mix of topics appropriate to the level');
   const styleLine=s.style==='multiple_choice'?'ALL questions must be multiple choice with exactly 4 options.'
     :s.style==='short'?'All questions are short-answer (numeric or short text); do NOT provide options.'
     :'Use a mix: roughly half multiple choice (4 options) and half short-answer/numeric.';
@@ -506,7 +521,7 @@ FORMAT: ${styleLine}`;
   p+=`
 
 REQUIREMENTS:
-- Real exam quality. Vary the topics. Order from easier to harder.
+- Real exam quality. Order from easier to harder.${chosenTopics?'':` VARIETY IS IMPORTANT: spread the questions across as many DIFFERENT topic areas as the count allows — do NOT put more than about 2 questions on the same topic, so the student practises a broad range.`}
 - Use LaTeX for ALL maths, wrapped in single dollar signs, e.g. $\\frac{3}{4}$ or $x^2+5$.
 - MONEY: put the whole amount inside ONE math span with an escaped dollar sign, e.g. write $\\$27.50$ (renders as a dollar amount). NEVER leave a bare "$" in plain text — two bare $ signs get misread as a maths delimiter and garble the text.
 - EXPLANATIONS — keep them SIMPLE, SHORT and easy for a ${s.level} student to read. Match the vocabulary and sentence length to that age: for primary / elementary years use very simple words and very short sentences. Aim for 2–4 short steps; for primary levels keep the whole explanation under ~60 words. Friendly and encouraging.
@@ -1588,7 +1603,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v1.0';
+const APP_VERSION='v1.1';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
