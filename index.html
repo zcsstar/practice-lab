@@ -161,6 +161,25 @@
   .dexcell.own{background:#fff;cursor:pointer}
   .dexcell.own:active{transform:scale(.97)}
   .dexcell.picked{outline:3px solid var(--brand);outline-offset:1px}
+  /* ---- battle arena ---- */
+  .bt-card{overflow:hidden}
+  .bt-arena{position:relative;height:340px;border-radius:var(--radius);overflow:hidden;background:linear-gradient(#bfe3ff 0%,#e8f6ff 55%,#cdeccd 55%,#a6dca6 100%)}
+  .bt-floor{position:absolute;left:-10%;right:-10%;bottom:0;height:46%;background:radial-gradient(ellipse at 50% 0,#bfe6a8,#8fce82);transform:perspective(320px) rotateX(48deg);transform-origin:50% 0;opacity:.85}
+  .bt-side{position:absolute;display:flex;flex-direction:column;align-items:center;width:170px}
+  .bt-foe{top:14px;right:8px}
+  .bt-me{bottom:6px;left:8px}
+  .bt-mon img{filter:drop-shadow(0 10px 8px rgba(0,0,0,.28))}
+  .bt-info{background:#fff;border:1px solid var(--line);border-radius:10px;padding:5px 9px;width:150px;box-shadow:var(--shadow)}
+  .bt-name{font-weight:800;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bt-hpwrap{height:8px;border-radius:999px;background:#e4e4ea;overflow:hidden;margin-top:3px}
+  .bt-hp{height:100%;width:100%;background:#34c759;border-radius:999px;transition:width .5s ease,background .5s}
+  .bt-foe .bt-info{order:0}.bt-foe .bt-mon{order:1}
+  .bt-particle{position:absolute;width:9px;height:9px;border-radius:50%;pointer-events:none;z-index:5}
+  .bt-dmg{position:absolute;transform:translateX(-50%);font-weight:900;color:#ff3b30;font-size:20px;text-shadow:0 1px 2px #fff;pointer-events:none;z-index:6}
+  .bt-dmg.crit{color:#b91c1c;font-size:26px}
+  .bt-msg{text-align:center;font-weight:700;margin:12px 0 10px;min-height:22px}
+  .bt-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .bt-move{background:var(--feature);color:var(--brand);font-weight:700;border:1px solid #cfe2ff}
   .dexcell .dn{font-size:11.5px;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dexcell .dn.muted{color:var(--muted);font-weight:500}
   .dexcell .ds{font-size:10px;letter-spacing:1px}
@@ -238,6 +257,8 @@
 
 <!-- Robust question-JSON parser (recovers partial/truncated/malformed AI output). Classic script: works on file:// and GitHub Pages. -->
 <script src="parse.js"></script>
+<!-- Poké battle module (vs PC). Classic script; uses globals from the main script at call-time. -->
+<script src="battle.js"></script>
 <script>
 /* ============================================================ Practice Lab ============================================================ */
 const $=(s,el=document)=>el.querySelector(s);
@@ -1086,9 +1107,15 @@ async function submitSession(){
         card=rollCard(attempt.percent,diff,streak);
         const aw=await cardAward(card);bumpPacks();
         if(aw.dupe)candyGain+=card.tier*2; // duplicate → candy instead of a wasted card
+        // "double next pack" buff won from a battle → award a 2nd card, then clear it.
+        const tb=await trainerGet();
+        if(tb.dblPack){const c2=rollCard(attempt.percent,diff,streak);const aw2=await cardAward(c2);if(aw2.dupe)candyGain+=c2.tier*2;attempt.reward2=c2;tb.dblPack=false;tb.updatedAt=Date.now();await dbPut('trainer',tb);}
       }
+      // ⚡ Battle energy: 1 per practice, +1 at ≥80% accuracy (gates the battle game behind practising).
+      const energyGain=1+(attempt.percent>=80?1:0);
+      if(typeof battleAddEnergy==='function')await battleAddEnergy(energyGain);
       const after=await trainerAdd(xpGain,candyGain);
-      attempt.xpGain=xpGain;attempt.candyGain=candyGain;if(card)attempt.reward=card;
+      attempt.xpGain=xpGain;attempt.candyGain=candyGain;attempt.energyGain=energyGain;if(card)attempt.reward=card;
       const lvlAfter=trainerLevel(after.xp);if(lvlAfter.level>before.level)attempt.levelUp=lvlAfter.level;
       await dbPut('attempts',attempt);
     }catch(e){console.warn('rewards',e);}
@@ -1125,9 +1152,11 @@ function viewResults(a){
       el('div',{class:'tiles',style:'margin-top:16px'},tile(a.correct,'Correct'),tile(a.wrong,'Wrong'),tile(a.needsReview,'Self-check'),tile(a.flagged,'Flagged')),
       el('div',{class:'small muted',style:'text-align:center;margin-top:12px'},CFG.emailEnabled?'📧 A summary email is on its way to '+esc(CFG.emailTo):'💡 Turn on email summaries in Settings to get a recap sent to a parent.')),
     (a.xpGain!=null)?el('div',{class:'card',style:'text-align:center;padding:14px'},
-      el('div',{style:'font-weight:800;font-size:16px'},'⭐ +'+a.xpGain+' XP    🍬 +'+a.candyGain+' candy'),
-      a.levelUp?el('div',{style:'color:var(--brand);font-weight:700;margin-top:4px'},'🎉 Level up! Trainer Level '+a.levelUp):''):'',
+      el('div',{style:'font-weight:800;font-size:16px'},'⭐ +'+a.xpGain+' XP    🍬 +'+a.candyGain+' candy'+(a.energyGain?'    ⚡ +'+a.energyGain+' energy':'')),
+      a.levelUp?el('div',{style:'color:var(--brand);font-weight:700;margin-top:4px'},'🎉 Level up! Trainer Level '+a.levelUp):'',
+      a.reward2?el('div',{style:'color:var(--brand);font-weight:700;margin-top:4px'},'✨ Double pack! You got TWO cards 🎉'):''):'',
     a.reward?packRevealCard(a.reward):'',
+    a.reward2?packRevealCard(a.reward2):'',
     el('div',{class:'card'},el('h2',{},'Question by question'),el('p',{class:'sub'},'Read the explanations — that’s where the learning happens.'),list),
     el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>viewSetup()},'New practice'),el('button',{class:'btn',onclick:()=>viewHome()},'Home'))));
   if(window.gsap&&!reduceMotion){const pctEl=$('.scorehero .pct');if(pctEl){const o={v:0};gsap.to(o,{v:a.percent,duration:.9,ease:'power2.out',onUpdate:()=>pctEl.textContent=Math.round(o.v)+'%'});}gsap.from('.qresult',{autoAlpha:0,y:16,duration:.3,stagger:.04,ease:'power2.out',delay:.12,clearProps:'all'});}
@@ -1211,11 +1240,13 @@ async function viewCards(){
   const sorted=POKEDEX.slice().sort((a,b)=>(b.t-a.t)||(a.id-b.id));
   const grid=el('div',{class:'dexgrid'},...sorted.map(p=>dexCell(p,byId[p.id])));
   show(el('div',{},backBar('My cards',()=>viewHome()),
-    el('div',{class:'card'},el('div',{class:'row between'},el('h2',{style:'margin:0'},'🧢 Trainer Lv '+lv.level),el('span',{style:'font-weight:800'},'🍬 '+(t.candy||0)+' candy')),
+    el('div',{class:'card'},el('div',{class:'row between'},el('h2',{style:'margin:0'},'🧢 Trainer Lv '+lv.level),el('span',{style:'font-weight:800'},'🍬 '+(t.candy||0)+'  ⚡ '+(t.energy||0))),
       el('div',{class:'gbar',style:'margin-top:8px'},el('div',{class:'gbar-fill',style:'width:'+Math.round(lv.into/lv.need*100)+'%;background:var(--brand)'})),
-      el('div',{class:'small muted',style:'margin-top:4px'},lv.into+' / '+lv.need+' XP to Lv '+(lv.level+1)+' · earn XP + candy from every practice, spend candy to train your Pokémon')),
-    el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('p',{class:'sub',style:'margin:0'},'💡 Do a practice to earn cards 🎴, candy 🍬 and XP ⭐. Tap any card to see its moves and power it up!')),
-    el('button',{class:'btn block',style:'margin-bottom:14px',onclick:()=>viewTrades()},'🔁 Trading Post — swap Pokémon with family'),
+      el('div',{class:'small muted',style:'margin-top:4px'},lv.into+' / '+lv.need+' XP to Lv '+(lv.level+1)+' · earn XP, candy 🍬 & battle energy ⚡ from every practice')),
+    el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('p',{class:'sub',style:'margin:0'},'💡 Do a practice to earn cards 🎴, candy 🍬, XP ⭐ and battle energy ⚡. Tap any card to see its moves and power it up!')),
+    el('div',{class:'row',style:'gap:8px;margin-bottom:14px'},
+      el('button',{class:'btn primary',style:'flex:1',onclick:()=>viewBattle()},'⚔️ Battle'),
+      el('button',{class:'btn',style:'flex:1',onclick:()=>viewTrades()},'🔁 Trade')),
     el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:8px'},el('h2',{style:'margin:0'},'🎴 Collection'),el('span',{class:'small muted'},'Caught '+caught+' / '+total)),
       el('div',{class:'gbar',style:'margin-bottom:10px'},el('div',{class:'gbar-fill',style:'width:'+Math.round(caught/total*100)+'%;background:var(--ok)'})),
       grid)));
@@ -1946,7 +1977,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v1.8';
+const APP_VERSION='v2.0';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

@@ -7,7 +7,7 @@ family (multiple children), starting with NZ maths (ICAS primary + Rangitoto
 College extension), but generalised to any country / subject / exam / level.
 
 The app is [index.html](index.html) plus a small number of sibling static files
-(currently [parse.js](parse.js)). No build step, no dependencies installed
+([parse.js](parse.js), [battle.js](battle.js)). No build step, no dependencies installed
 locally. It runs by double-clicking `index.html` or hosting it statically
 (GitHub Pages). Setup instructions for the user are in [SETUP.md](SETUP.md).
 
@@ -199,7 +199,16 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `cardTakeFrom`/`trainerCandyMove`. `trades` store (DB v6) syncs (merge: resolved
   status wins over open) + export/import. **Reliable on a shared device / profile
   switching; cross-device "spends" don't propagate under the additive sync** (a
-  known limit). #4 practice-gated battles not yet built.
+  known limit).
+- **Battle vs PC ([battle.js](battle.js), `viewBattle`)** — practice-GATED: each
+  practice grants `⚡ energy` (`battleAddEnergy`, +1, +1 at ≥80%, cap 12, stored on
+  the trainer doc); a battle costs 1. Pick an owned Pokémon → fight a wild one
+  (local AI), turn-based using `cardStats`/`cardMoves`; flashy 2D arena (GSAP
+  lunges/hits/particles/HP-drain/faint, confetti) — no true 3D since we only have
+  2D sprites. `🍬 Heal` spends candy. Win → XP+candy, 30% catch the wild card, 20%
+  a `dblPack` buff (next practice gives 2 cards — consumed in `submitSession`).
+  Classic script using main-script globals at call-time. Energy/dblPack live on
+  the trainer doc (xp/candy sync by max; energy stays device-local).
 - **Streaks / daily goal** — Home shows a 🔥 day-streak tile (`computeStreak`,
   UTC-based) and a daily-goal bar (`CFG.dailyGoal`, default 10, vs questions
   answered today). Generate-similar: `practiceTopic(topic)` builds a bank-first
@@ -265,7 +274,8 @@ locally. It runs by double-clicking `index.html` or hosting it statically
    fenced, truncated, malformed, control-chars, raw-LaTeX, money cases).
 2. **Run it:** `python -m http.server 8744` in this dir, open
    `http://localhost:8744/index.html`.
-3. **JS syntax check** without a browser (both files):
+3. **JS syntax check** without a browser:
+   `node -e "new Function(require('fs').readFileSync('battle.js','utf8'))"` and
    `node -e "require('./parse.js');const fs=require('fs');const m=[...fs.readFileSync('index.html','utf8').matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n');new Function('PLParse',m);console.log('OK')"`
 4. The app needs an AI key to generate; use **Settings → Test connection**. For
    pure-logic checks without a key, extract the function from `index.html` in Node
