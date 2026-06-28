@@ -179,7 +179,20 @@
   .bt-dmg.crit{color:#b91c1c;font-size:26px}
   .bt-msg{text-align:center;font-weight:700;margin:12px 0 10px;min-height:22px}
   .bt-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .bt-move{background:var(--feature);color:var(--brand);font-weight:700;border:1px solid #cfe2ff}
+  .bt-move{background:var(--feature);color:var(--brand);font-weight:700;border:1px solid #cfe2ff;flex-wrap:wrap;gap:5px}
+  .bt-move.util{background:#fff7e6;color:#b45309;border-color:#fde68a}
+  .bt-move .mvsub{font-size:10px;font-weight:600;opacity:.75;width:100%}
+  .tchip{display:inline-block;padding:2px 8px;border-radius:999px;color:#fff;font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;line-height:1.5;text-shadow:0 1px 1px rgba(0,0,0,.22)}
+  .bt-types{display:flex;gap:4px;justify-content:center;margin-top:3px}
+  .bt-types .tchip{padding:1px 6px;font-size:8.5px}
+  .bt-dmg.miss{color:#8e8e93;font-size:17px}
+  .bt-dmg.heal{color:#34c759}
+  .bt-dmg.buff{color:#007aff;font-size:17px}
+  .bt-fx{position:absolute;transform:translateX(-50%);font-weight:900;font-size:13px;pointer-events:none;z-index:6;white-space:nowrap;text-shadow:0 1px 2px #fff}
+  .bt-fx.super{color:#16a34a}.bt-fx.resist{color:#9ca3af}.bt-fx.immune{color:#6b7280}
+  .bt-badge{display:inline-block;margin-left:5px;font-size:10px;font-weight:800;padding:0 6px;border-radius:6px;vertical-align:middle}
+  .bt-badge.burn{background:#ffe3d6;color:#c2410c}
+  .bt-badge.para{background:#fff4cc;color:#a16207}
   .dexcell .dn{font-size:11.5px;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dexcell .dn.muted{color:var(--muted);font-weight:500}
   .dexcell .ds{font-size:10px;letter-spacing:1px}
@@ -1248,10 +1261,15 @@ async function viewCard(dexId){
       rec.shiny?el('div',{style:'font-weight:800;color:#f59e0b'},'✨ Shiny'):'',
       pokeImg(dexId,rec.shiny,150),
       el('div',{style:'font-weight:800;font-size:20px'},p.name),
+      el('div',{class:'row',style:'justify-content:center;gap:6px;margin:5px 0'},...pokeTypes(dexId).map(typeChip)),
       el('div',{style:'color:'+rr.color+';font-weight:700'},rarityStars(p.t)+' '+rr.name+' · Lv '+lvl+(rec.count>1?' · ×'+rec.count:'')),
-      el('div',{class:'tiles',style:'margin-top:14px'},tile('❤️ '+st.hp,'HP'),tile('⚔️ '+st.atk,'Attack'),tile('Lv '+lvl,'Level'))),
+      el('div',{class:'tiles',style:'margin-top:14px'},tile('❤️ '+st.hp,'HP'),tile('⚔️ '+st.atk,'Attack'),tile('🛡️ '+st.def,'Defense'),tile('💨 '+st.spd,'Speed'))),
     el('div',{class:'card'},el('h2',{},'Moves'),
-      ...moves.map(m=>el('div',{class:'toprow'},el('span',{class:'lbl'},m.name),el('div',{class:'bar'},el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+Math.min(100,m.power*2)+'%;background:'+rr.color})) ),el('b',{style:'flex:none;width:48px;text-align:right'},'⚡'+m.power)))),
+      ...moves.map(m=>el('div',{style:'padding:9px 0;border-top:1px solid var(--line)'},
+        el('div',{class:'row',style:'gap:8px;align-items:center'},el('b',{},m.name),m.kind==='attack'?typeChip(m.type):el('span',{class:'tchip',style:'background:#8e8e93'},'status')),
+        el('div',{class:'small muted',style:'margin-top:3px'},m.kind==='attack'
+          ?('⚡ '+m.power+' power · '+m.acc+'% accuracy'+(m.crit>=0.15?' · 🎯 high crit':'')+(m.status?(' · may '+(m.status==='burn'?'burn 🔥':'paralyse ⚡')+' the foe'):''))
+          :(m.emoji+' '+m.msg.charAt(0).toUpperCase()+m.msg.slice(1)))))),
     el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:10px'},el('h2',{style:'margin:0'},'Train'),el('span',{style:'font-weight:800'},'🍬 '+candy)),
       el('div',{class:'row',style:'gap:8px;flex-wrap:wrap'},
         lvl<CARD_MAX_LEVEL?el('button',{class:'btn primary'+(candy<upCost?' ghost':''),onclick:async()=>{if(await trainCard(dexId))viewCard(dexId);}},'⚡ Power Up (🍬'+upCost+')'):el('button',{class:'btn',disabled:'true'},'⚡ Max level'),
@@ -1381,6 +1399,45 @@ const POKEDEX=[
 ];
 const POKE_BY_ID={};POKEDEX.forEach(p=>POKE_BY_ID[p.id]=p);
 function pokeSprite(id,shiny){return 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/'+(shiny?'shiny/':'')+id+'.png';}
+/* ---- Battle type system: real (canonical) Pokémon types so super-effective,
+   STAB and same-type moves all match what a Pokémon fan expects. ---- */
+const POKE_TYPES={
+  10:['bug'],13:['bug','poison'],16:['normal','flying'],19:['normal'],41:['poison','flying'],129:['water'],399:['normal'],161:['normal'],163:['normal','flying'],265:['bug'],263:['normal'],504:['normal'],
+  1:['grass','poison'],4:['fire'],7:['water'],25:['electric'],52:['normal'],54:['water'],58:['fire'],133:['normal'],104:['ground'],152:['grass'],155:['fire'],158:['water'],255:['fire'],258:['water'],252:['grass'],
+  38:['fire'],59:['fire'],131:['water','ice'],143:['normal'],123:['bug','flying'],130:['water','flying'],115:['normal'],142:['rock','flying'],282:['psychic','fairy'],700:['fairy'],227:['steel','flying'],359:['dark'],
+  3:['grass','poison'],6:['fire','flying'],9:['water'],94:['ghost','poison'],149:['dragon','flying'],248:['rock','dark'],448:['fighting','steel'],445:['dragon','ground'],376:['steel','psychic'],373:['dragon','flying'],658:['water','dark'],286:['grass','fighting'],
+  150:['psychic'],151:['psychic'],144:['ice','flying'],145:['electric','flying'],146:['fire','flying'],249:['psychic','flying'],250:['fire','flying'],384:['dragon','flying'],382:['water'],383:['ground'],487:['ghost','dragon'],643:['dragon','fire'],644:['dragon','electric']
+};
+function pokeTypes(id){return POKE_TYPES[id]||['normal'];}
+const TYPE_COLOR={normal:'#9b9b6f',fire:'#f08030',water:'#6890f0',grass:'#5fc55f',electric:'#e8b800',ice:'#5fb6c4',fighting:'#c03028',poison:'#a040a0',ground:'#cda94e',flying:'#8a98e0',psychic:'#f85888',bug:'#9aa81a',rock:'#a89038',ghost:'#705898',dragon:'#7038f8',dark:'#5a4a3a',steel:'#8a8aa8',fairy:'#e57aa0'};
+// Attacking type → DEFENDING types it is strong(2×)/weak(0.5×)/immune(0×) against (standard chart).
+const TYPE_FX={
+  normal:{weak:['rock','steel'],immune:['ghost']},
+  fire:{strong:['grass','ice','bug','steel'],weak:['fire','water','rock','dragon']},
+  water:{strong:['fire','ground','rock'],weak:['water','grass','dragon']},
+  grass:{strong:['water','ground','rock'],weak:['fire','grass','poison','flying','bug','dragon','steel']},
+  electric:{strong:['water','flying'],weak:['electric','grass','dragon'],immune:['ground']},
+  ice:{strong:['grass','ground','flying','dragon'],weak:['fire','water','ice','steel']},
+  fighting:{strong:['normal','ice','rock','dark','steel'],weak:['poison','flying','psychic','bug','fairy'],immune:['ghost']},
+  poison:{strong:['grass','fairy'],weak:['poison','ground','rock','ghost'],immune:['steel']},
+  ground:{strong:['fire','electric','poison','rock','steel'],weak:['grass','bug'],immune:['flying']},
+  flying:{strong:['grass','fighting','bug'],weak:['electric','rock','steel']},
+  psychic:{strong:['fighting','poison'],weak:['psychic','steel'],immune:['dark']},
+  bug:{strong:['grass','psychic','dark'],weak:['fire','fighting','poison','flying','ghost','steel','fairy']},
+  rock:{strong:['fire','ice','flying','bug'],weak:['fighting','ground','steel']},
+  ghost:{strong:['psychic','ghost'],weak:['dark'],immune:['normal']},
+  dragon:{strong:['dragon'],weak:['steel'],immune:['fairy']},
+  dark:{strong:['psychic','ghost'],weak:['fighting','dark','fairy']},
+  steel:{strong:['ice','rock','fairy'],weak:['fire','water','electric','steel']},
+  fairy:{strong:['fighting','dragon','dark'],weak:['fire','poison','steel']}
+};
+// True multiplier of an attacking type vs a defender's (1-2) types. 2/4 = super, 0.5/0.25 = resisted, 0 = immune.
+function typeMult(atk,defs){var fx=TYPE_FX[atk]||{},m=1;(defs||[]).forEach(function(d){if((fx.immune||[]).indexOf(d)>=0)m*=0;else if((fx.strong||[]).indexOf(d)>=0)m*=2;else if((fx.weak||[]).indexOf(d)>=0)m*=0.5;});return m;}
+// Signature same-type move per type (kid-recognisable names) — used for the STAB attack.
+const TYPE_MOVE={normal:{name:'Body Slam',power:9,acc:100},fire:{name:'Ember',power:9,acc:100,status:'burn',statusChance:0.18},water:{name:'Water Gun',power:9,acc:100},grass:{name:'Vine Whip',power:9,acc:100},electric:{name:'Thunder Shock',power:9,acc:100,status:'para',statusChance:0.18},ice:{name:'Ice Shard',power:9,acc:100},fighting:{name:'Karate Chop',power:10,acc:100,crit:0.18},poison:{name:'Sludge',power:9,acc:100},ground:{name:'Mud Shot',power:9,acc:100},flying:{name:'Wing Attack',power:9,acc:100},psychic:{name:'Confusion',power:9,acc:100},bug:{name:'Bug Bite',power:9,acc:100},rock:{name:'Rock Throw',power:10,acc:90},ghost:{name:'Shadow Sneak',power:9,acc:100},dragon:{name:'Dragon Claw',power:11,acc:95},dark:{name:'Bite',power:9,acc:100},steel:{name:'Metal Claw',power:9,acc:100},fairy:{name:'Fairy Wind',power:9,acc:100}};
+// Utility (status) moves — the strategic third slot. Deterministic per Pokémon.
+const UTIL_MOVES=[{name:'Guard Up',kind:'buff',stat:'def',stage:1,emoji:'🛡️',msg:'raised its Defense!'},{name:'Growl',kind:'debuff',stat:'atk',stage:-1,emoji:'😤',msg:'cut the foe’s Attack!'},{name:'Sand Attack',kind:'debuff',stat:'acc',stage:-1,emoji:'🌪️',msg:'cut the foe’s Accuracy!'},{name:'Agility',kind:'buff',stat:'spd',stage:1,emoji:'💨',msg:'raised its Speed!'},{name:'Recover',kind:'heal',amount:0.30,emoji:'❤️',msg:'restored some HP!'}];
+function typeChip(type){return el('span',{class:'tchip',style:'background:'+(TYPE_COLOR[type]||'#999')},type);}
 const PACK_DAILY_CAP=5,PACK_MIN_Q=5;
 // Roll a rarity tier 1-5 from performance: accuracy dominates, difficulty + streak nudge up.
 function rollTier(accuracy,difficulty,streak){
@@ -1433,12 +1490,19 @@ async function makeCardShiny(dexId){
   await trainerSpend(SHINY_COST);rec.shiny=true;await dbPut('cards',rec);scheduleDriveSync();toast('✨ '+(POKE_BY_ID[dexId]?POKE_BY_ID[dexId].name:'It')+' is now shiny!');return true;
 }
 // Battle-ready stats + moves, derived from tier + level (no extra storage; reused by battles).
-function cardStats(tier,level){level=level||1;return {hp:20+tier*8+(level-1)*5,atk:6+tier*3+(level-1)*2};}
-const MOVES=['Tackle','Quick Attack','Ember','Water Gun','Vine Whip','Thunder Shock','Gust','Bite','Scratch','Peck','Confusion','Rock Throw','Bubble','Spark','Razor Leaf','Headbutt'];
+function cardStats(tier,level){level=level||1;return {hp:20+tier*8+(level-1)*5,atk:6+tier*3+(level-1)*2,def:4+tier*2+Math.round((level-1)*1.5),spd:8+tier*2+(level-1)};}
+// Each Pokémon gets a 3-move kit with real trade-offs:
+//  1) STAB attack of its OWN type (reliable, gets the same-type ×1.5 bonus in battle),
+//  2) Take Down — a risky big hit (Normal coverage, high power, only 75% accuracy, high crit),
+//  3) a utility/status move (buff self, debuff foe, or heal) — chosen deterministically per dex id.
 function cardMoves(dexId,tier,level){
-  level=level||1;const a=MOVES[dexId%MOVES.length],b=MOVES[(dexId*7+3)%MOVES.length];
-  const names=a===b?[a]:[a,b];
-  return names.map((n,i)=>({name:n,power:6+tier*2+i*3+(level-1)*2}));
+  level=level||1;const types=pokeTypes(dexId);
+  const pwr=base=>base+tier*2+(level-1)*2;
+  const tm=TYPE_MOVE[types[0]]||TYPE_MOVE.normal;
+  const stab={name:tm.name,type:types[0],power:pwr(tm.power),acc:tm.acc,crit:tm.crit||0.08,kind:'attack',status:tm.status,statusChance:tm.statusChance};
+  const risky={name:'Take Down',type:'normal',power:pwr(tm.power)+6,acc:75,crit:0.18,kind:'attack'};
+  const util=Object.assign({type:'status'},UTIL_MOVES[dexId%UTIL_MOVES.length]);
+  return [stab,risky,util];
 }
 
 /* ----- Trading Post (async stall) -----
@@ -2003,7 +2067,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.2';
+const APP_VERSION='v3.0';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

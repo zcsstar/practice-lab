@@ -198,10 +198,12 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `trainer` syncs (merge keeps higher xp/candy) + export/import; card `level`
   merges by max.
 - **Card detail (`viewCard`)** — tapping an owned dex cell opens a detail screen:
-  derived **stats** (`cardStats` HP/ATK from tier+level) and **moves** (`cardMoves`,
-  deterministic per dexId, power scales with level) — reused by battles later — plus
-  flexible candy actions: **Power Up** (`trainCard`, returns bool; callers refresh)
-  and **Make shiny** (`makeCardShiny`, `SHINY_COST` 40).
+  the Pokémon's real **type chips**, derived **stats** (`cardStats` →
+  HP/Attack/Defense/Speed from tier+level) and its **3-move kit** (`cardMoves` — a
+  same-type STAB attack, a risky `Take Down`, and a status move; see Battle) shown
+  with type/power/accuracy/effect — plus flexible candy actions: **Power Up**
+  (`trainCard`, returns bool; callers refresh) and **Make shiny** (`makeCardShiny`,
+  `SHINY_COST` 40).
 - **Trading Post (`viewTrades`/`viewTradeNew`, async stall)** — a kid offers one
   owned Pokémon (escrowed via `cardTakeFrom`) and a requirement (`want`: candy
   amount OR a specific dexId); anyone in the family can `acceptTrade` later (no
@@ -212,13 +214,33 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   known limit).
 - **Battle vs PC ([battle.js](battle.js), `viewBattle`)** — practice-GATED: each
   practice grants `⚡ energy` (`battleAddEnergy`, +1, +1 at ≥80%, cap 12, stored on
-  the trainer doc); a battle costs 1. Pick an owned Pokémon → fight a wild one
-  (local AI), turn-based using `cardStats`/`cardMoves`; flashy 2D arena (GSAP
-  lunges/hits/particles/HP-drain/faint, confetti) — no true 3D since we only have
-  2D sprites. `🍬 Heal` spends candy. Win → XP+candy, 30% catch the wild card, 20%
-  a `dblPack` buff (next practice gives 2 cards — consumed in `submitSession`).
-  Classic script using main-script globals at call-time. Energy/dblPack live on
-  the trainer doc (xp/candy sync by max; energy stays device-local).
+  the trainer doc); a battle costs 1. Pick an owned Pokémon → fight a wild one,
+  turn-based; flashy 2D arena (GSAP lunges/hits/particles/HP-drain/faint, confetti)
+  — no true 3D since we only have 2D sprites. `🍬 Potion` spends candy.
+  - **Real-battle depth (v3.0, tuned for ~13-15 y/o).** Every Pokémon has
+    HP/Attack/Defense/Speed (`cardStats`) and a 3-move kit (`cardMoves`): a
+    same-type **STAB** attack, a risky **Take Down** (75% acc, high crit), and a
+    **status move** (buff self / debuff foe / heal, from `UTIL_MOVES`, deterministic
+    per dexId). A round = the foe's AI move + the player's, resolved in **Speed
+    order** (15% upset chance). Attacks can **MISS** (per-move accuracy) or be
+    **DODGED** (faster defender evades more); **DEFENSE** soaks damage
+    (`50/(50+def)` so higher level = tankier); **real TYPE effectiveness** via
+    `typeMult` (the standard chart in `TYPE_FX`, softened to ×1.6 / ×0.62 / 0 for
+    feel by `dmgTypeMult`) + **STAB ×1.5** + crit; **stat stages** (`stage.atk/def/
+    acc/spd`, `stageMul` ±25%/step capped) from buff/debuff moves; **status**:
+    burn 🔥 (end-of-turn chip + cuts Attack) and paralysis ⚡ (25% skip + half Speed).
+    The wild `aiChoose` picks its best-matchup move, heals when low, finishes you
+    when you're low. `endBattle` rewards as before (XP+candy, 30% catch, 20%
+    `dblPack`). Floating labels show Super-effective / Not very effective / Miss /
+    Dodge / Critical; `bt-badge` shows BRN/PAR.
+  - **Real types** live in `index.html` (so `viewCard` can show them too):
+    `POKE_TYPES` (canonical type[] per dex id — Charmander Fire, Garchomp
+    Dragon/Ground, etc.), `TYPE_COLOR`/`typeChip` (type pills), `TYPE_FX` (standard
+    effectiveness chart) + `typeMult`, `TYPE_MOVE` (signature same-type move per
+    type) and `UTIL_MOVES`. Tested in [battle.test.js](battle.test.js) (types,
+    chart, stat/move shapes).
+  - Classic script using main-script globals at call-time. Energy/dblPack live on
+    the trainer doc (xp/candy sync by max; energy stays device-local).
 - **Streaks / daily goal** — Home shows a 🔥 day-streak tile (`computeStreak`,
   UTC-based) and a daily-goal bar (`CFG.dailyGoal`, default 10, vs questions
   answered today). Generate-similar: `practiceTopic(topic)` builds a bank-first
@@ -284,6 +306,8 @@ locally. It runs by double-clicking `index.html` or hosting it statically
    fenced, truncated, malformed, control-chars, raw-LaTeX, money cases).
    **Mis-key backstop:** `node repoint.test.js` (extracts `repointFromExplanation`
    from index.html; covers the explanation-vs-key re-point + safety cases).
+   **Battle types:** `node battle.test.js` (extracts the type system from
+   index.html; covers canonical types, the effectiveness chart, stat/move shapes).
 2. **Run it:** `python -m http.server 8744` in this dir, open
    `http://localhost:8744/index.html`.
 3. **JS syntax check** without a browser:
