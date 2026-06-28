@@ -191,8 +191,15 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   derived **stats** (`cardStats` HP/ATK from tier+level) and **moves** (`cardMoves`,
   deterministic per dexId, power scales with level) — reused by battles later — plus
   flexible candy actions: **Power Up** (`trainCard`, returns bool; callers refresh)
-  and **Make shiny** (`makeCardShiny`, `SHINY_COST` 40). Sequence in progress:
-  #3 async trading stall + #4 practice-gated battles not yet built.
+  and **Make shiny** (`makeCardShiny`, `SHINY_COST` 40).
+- **Trading Post (`viewTrades`/`viewTradeNew`, async stall)** — a kid offers one
+  owned Pokémon (escrowed via `cardTakeFrom`) and a requirement (`want`: candy
+  amount OR a specific dexId); anyone in the family can `acceptTrade` later (no
+  simultaneous online needed). Cross-profile transfers use `cardGiveTo`/
+  `cardTakeFrom`/`trainerCandyMove`. `trades` store (DB v6) syncs (merge: resolved
+  status wins over open) + export/import. **Reliable on a shared device / profile
+  switching; cross-device "spends" don't propagate under the additive sync** (a
+  known limit). #4 practice-gated battles not yet built.
 - **Streaks / daily goal** — Home shows a 🔥 day-streak tile (`computeStreak`,
   UTC-based) and a daily-goal bar (`CFG.dailyGoal`, default 10, vs questions
   answered today). Generate-similar: `practiceTopic(topic)` builds a bank-first

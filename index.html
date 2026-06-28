@@ -160,6 +160,7 @@
   .dexcell{border:2px solid var(--line);border-radius:12px;padding:8px 6px;text-align:center;position:relative;background:#fff}
   .dexcell.own{background:#fff;cursor:pointer}
   .dexcell.own:active{transform:scale(.97)}
+  .dexcell.picked{outline:3px solid var(--brand);outline-offset:1px}
   .dexcell .dn{font-size:11.5px;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dexcell .dn.muted{color:var(--muted);font-weight:500}
   .dexcell .ds{font-size:10px;letter-spacing:1px}
@@ -414,8 +415,8 @@ function activeProfile(){return CFG.profiles.find(p=>p.id===CFG.activeProfileId)
 function pid(){return activeProfile().id;}
 
 /* ---------- IndexedDB ---------- */
-const DB_NAME='practicelab',DB_VER=5;let _db=null;
-function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains('attempts'))db.createObjectStore('attempts',{keyPath:'id'});if(!db.objectStoreNames.contains('review'))db.createObjectStore('review',{keyPath:'id'});if(!db.objectStoreNames.contains('refs'))db.createObjectStore('refs',{keyPath:'id'});if(!db.objectStoreNames.contains('bank'))db.createObjectStore('bank',{keyPath:'id'});if(!db.objectStoreNames.contains('cards'))db.createObjectStore('cards',{keyPath:'id'});if(!db.objectStoreNames.contains('trainer'))db.createObjectStore('trainer',{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
+const DB_NAME='practicelab',DB_VER=6;let _db=null;
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;for(const s of ['attempts','review','refs','bank','cards','trainer','trades'])if(!db.objectStoreNames.contains(s))db.createObjectStore(s,{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
 function tx(store,mode='readonly'){return _db.transaction(store,mode).objectStore(store);}
 function dbAll(store){return new Promise((res,rej)=>{const out=[];const c=tx(store).openCursor();c.onsuccess=e=>{const cur=e.target.result;if(cur){out.push(cur.value);cur.continue();}else res(out);};c.onerror=e=>rej(e.target.error);});}
 function dbPut(store,val){return new Promise((res,rej)=>{const r=tx(store,'readwrite').put(val);r.onsuccess=()=>res();r.onerror=e=>rej(e.target.error);});}
@@ -1213,9 +1214,65 @@ async function viewCards(){
     el('div',{class:'card'},el('div',{class:'row between'},el('h2',{style:'margin:0'},'🧢 Trainer Lv '+lv.level),el('span',{style:'font-weight:800'},'🍬 '+(t.candy||0)+' candy')),
       el('div',{class:'gbar',style:'margin-top:8px'},el('div',{class:'gbar-fill',style:'width:'+Math.round(lv.into/lv.need*100)+'%;background:var(--brand)'})),
       el('div',{class:'small muted',style:'margin-top:4px'},lv.into+' / '+lv.need+' XP to Lv '+(lv.level+1)+' · earn XP + candy from every practice, spend candy to train your Pokémon')),
+    el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('p',{class:'sub',style:'margin:0'},'💡 Do a practice to earn cards 🎴, candy 🍬 and XP ⭐. Tap any card to see its moves and power it up!')),
+    el('button',{class:'btn block',style:'margin-bottom:14px',onclick:()=>viewTrades()},'🔁 Trading Post — swap Pokémon with family'),
     el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:8px'},el('h2',{style:'margin:0'},'🎴 Collection'),el('span',{class:'small muted'},'Caught '+caught+' / '+total)),
       el('div',{class:'gbar',style:'margin-bottom:10px'},el('div',{class:'gbar-fill',style:'width:'+Math.round(caught/total*100)+'%;background:var(--ok)'})),
       grid)));
+}
+/* ----- Trading Post views ----- */
+function tradeCardRow(snap){return el('div',{class:'row',style:'gap:10px;align-items:center'},pokeImg(snap.dexId,snap.shiny,52),el('div',{},el('div',{style:'font-weight:700'},(POKE_BY_ID[snap.dexId]?POKE_BY_ID[snap.dexId].name:'Pokémon')),el('div',{class:'small muted'},rarityStars(snap.tier)+' · Lv '+(snap.level||1)+(snap.shiny?' ✨':''))));}
+async function viewTrades(){
+  stopTimer();
+  const open=await tradesOpen();
+  const mine=open.filter(t=>t.sellerId===pid()),others=open.filter(t=>t.sellerId!==pid());
+  const canMap={};for(const t of others)canMap[t.id]=await canFulfill(t.want);
+  const tr=await trainerGet();
+  const offerRow=(t,mineFlag)=>el('div',{class:'card'},
+    tradeCardRow(t.card),
+    el('div',{class:'row between',style:'margin-top:8px;gap:8px'},el('span',{class:'small'},mineFlag?'You’re offering this':('From '+esc(t.sellerName||profileName(t.sellerId)))),el('b',{},'Wants: '+wantLabel(t.want))),
+    mineFlag?el('button',{class:'btn sm danger',style:'margin-top:10px',onclick:async()=>{await cancelTrade(t.id);viewTrades();}},'Cancel offer')
+      :(canMap[t.id]?el('button',{class:'btn sm primary',style:'margin-top:10px',onclick:async()=>{await acceptTrade(t.id);viewTrades();}},'✅ Take this deal')
+        :el('div',{class:'small muted',style:'margin-top:10px'},'You need '+wantLabel(t.want)+' first')));
+  show(el('div',{},backBar('Trading Post',()=>viewCards()),
+    el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('h2',{},'🔁 Trading Post'),
+      el('p',{class:'sub',style:'margin:0'},'Offer one of your Pokémon and say what you want. Anyone in the family can take the deal later — you don’t both need to be here! You have 🍬 '+(tr.candy||0)+' candy.')),
+    el('button',{class:'btn primary block',style:'margin-bottom:6px',onclick:()=>viewTradeNew()},'➕ Make a new offer'),
+    others.length?el('div',{class:'seclabel'},'Deals you can take'):'',
+    ...others.map(t=>offerRow(t,false)),
+    mine.length?el('div',{class:'seclabel'},'Your offers'):'',
+    ...mine.map(t=>offerRow(t,true)),
+    (!open.length)?el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'🔁'),el('div',{},'No offers yet. Tap “Make a new offer” to start trading with your family!'))):''));
+}
+let tradeDraft=null;
+async function viewTradeNew(){
+  stopTimer();
+  tradeDraft={card:null,want:null,wantPick:false};
+  const owned=await cardsForProfile();
+  if(!owned.length)return show(el('div',{},backBar('New offer',()=>viewTrades()),el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'🎴'),el('div',{},'You have no cards yet. Do some practice to earn Pokémon first!')))));
+  const host=el('div',{});
+  function render(){
+    host.innerHTML='';
+    const cardGrid=el('div',{class:'dexgrid'});
+    owned.forEach(c=>{const p=POKE_BY_ID[c.dexId];if(!p)return;const sel=tradeDraft.card&&tradeDraft.card.dexId===c.dexId;
+      cardGrid.append(el('div',{class:'dexcell own'+(sel?' picked':''),style:'border-color:'+RARITY[p.t].color,onclick:()=>{tradeDraft.card={dexId:c.dexId,tier:p.t,level:c.level||1,shiny:!!c.shiny};render();}},
+        c.count>1?el('span',{class:'cnt'},'×'+c.count):'',pokeImg(c.dexId,c.shiny,56),el('div',{class:'dn'},p.name),el('div',{class:'lv'},'Lv '+(c.level||1))));});
+    host.append(el('div',{class:'card'},el('h2',{},'1. Choose a Pokémon to offer'),el('p',{class:'sub',style:'margin-bottom:8px'},'Tap one of your Pokémon to give away.'),cardGrid));
+    if(tradeDraft.card){
+      const wantHost=el('div',{});
+      const renderWant=()=>{wantHost.innerHTML='';
+        const candyRow=el('div',{class:'row',style:'gap:8px;flex-wrap:wrap'},...[10,20,30,50].map(a=>el('button',{class:'btn sm'+(tradeDraft.want&&tradeDraft.want.type==='candy'&&tradeDraft.want.amount===a?' primary':''),onclick:()=>{tradeDraft.want={type:'candy',amount:a};tradeDraft.wantPick=false;renderWant();}},'🍬 '+a)));
+        const pickBtn=el('button',{class:'btn sm'+(tradeDraft.want&&tradeDraft.want.type==='card'?' primary':''),onclick:()=>{tradeDraft.wantPick=!tradeDraft.wantPick;renderWant();}},(tradeDraft.want&&tradeDraft.want.type==='card')?('🎴 '+(POKE_BY_ID[tradeDraft.want.dexId]?POKE_BY_ID[tradeDraft.want.dexId].name:'Pokémon')):'🎴 Ask for a Pokémon');
+        wantHost.append(el('div',{class:'small muted',style:'margin-bottom:6px'},'Ask for candy:'),candyRow,el('div',{style:'margin-top:10px'},pickBtn));
+        if(tradeDraft.wantPick){const g=el('div',{class:'dexgrid',style:'margin-top:8px'});POKEDEX.slice().sort((a,b)=>(b.t-a.t)||(a.id-b.id)).forEach(p=>g.append(el('div',{class:'dexcell own',style:'border-color:'+RARITY[p.t].color,onclick:()=>{tradeDraft.want={type:'card',dexId:p.id};tradeDraft.wantPick=false;renderWant();}},pokeImg(p.id,false,50),el('div',{class:'dn'},p.name),el('div',{class:'ds',style:'color:'+RARITY[p.t].color},rarityStars(p.t)))));wantHost.append(g);}
+      };
+      renderWant();
+      host.append(el('div',{class:'card'},el('h2',{},'2. What do you want for it?'),wantHost));
+      host.append(el('button',{class:'btn primary lg block'+(tradeDraft.want?'':' ghost'),onclick:async()=>{if(!tradeDraft.want)return toast('Pick what you want first.');await postTrade(tradeDraft.card.dexId,tradeDraft.want);viewTrades();}},'Post offer'));
+    }
+  }
+  render();
+  show(el('div',{},backBar('New offer',()=>viewTrades()),host));
 }
 
 /* ----- REFERENCE LIBRARY (real past papers → authentic grounding) ----- */
@@ -1325,6 +1382,59 @@ function cardMoves(dexId,tier,level){
   level=level||1;const a=MOVES[dexId%MOVES.length],b=MOVES[(dexId*7+3)%MOVES.length];
   const names=a===b?[a]:[a,b];
   return names.map((n,i)=>({name:n,power:6+tier*2+i*3+(level-1)*2}));
+}
+
+/* ----- Trading Post (async stall) -----
+   Post one of your Pokémon and what you want for it; anyone in the family can
+   take the deal later (no need to be online together). Transfers happen locally
+   on whatever device does them (perfect on a shared device / profile switching);
+   offers + results sync best-effort. Want types kept kid-simple: candy or a
+   specific Pokémon. */
+// Cross-profile card give/take (by profileId, not just the active one).
+async function cardGiveTo(profileId,snap){
+  const id=profileId+':'+snap.dexId,rec=(await dbAll('cards')).find(c=>c.id===id);
+  if(rec){rec.count=(rec.count||1)+1;rec.level=Math.max(rec.level||1,snap.level||1);if(snap.shiny)rec.shiny=true;await dbPut('cards',rec);}
+  else await dbPut('cards',{id,profileId,dexId:snap.dexId,tier:snap.tier,count:1,level:snap.level||1,shiny:!!snap.shiny,firstAt:Date.now()});
+}
+async function cardTakeFrom(profileId,dexId){
+  const id=profileId+':'+dexId,rec=(await dbAll('cards')).find(c=>c.id===id);
+  if(!rec||(rec.count||1)<1)return null;
+  const snap={dexId,tier:rec.tier,level:rec.level||1,shiny:!!rec.shiny};
+  rec.count=(rec.count||1)-1;if(rec.count<=0)await dbDel('cards',rec.id);else await dbPut('cards',rec);
+  return snap;
+}
+async function trainerGetFor(profileId){return (await dbAll('trainer')).find(t=>t.id===profileId)||{id:profileId,xp:0,candy:0};}
+async function trainerCandyMove(profileId,delta){const t=await trainerGetFor(profileId);t.candy=Math.max(0,(t.candy||0)+delta);t.updatedAt=Date.now();await dbPut('trainer',t);}
+function profileName(id){const p=CFG.profiles.find(x=>x.id===id);return p?p.name:'A player';}
+function wantLabel(w){return w.type==='candy'?('🍬 '+w.amount+' candy'):(POKE_BY_ID[w.dexId]?POKE_BY_ID[w.dexId].name:'a Pokémon');}
+async function tradesOpen(){return (await dbAll('trades')).filter(t=>t.status==='open');}
+// Does the ACTIVE profile meet an offer's requirement?
+async function canFulfill(w){
+  if(w.type==='candy')return (await trainerGetFor(pid())).candy>=w.amount;
+  if(w.type==='card')return !!(await cardsForProfile()).find(c=>c.dexId===w.dexId&&(c.count||1)>=1);
+  return false;
+}
+async function postTrade(dexId,want){
+  const snap=await cardTakeFrom(pid(),dexId);if(!snap)return toast('You don’t have that card to offer.');
+  await dbPut('trades',{id:uid(),sellerId:pid(),sellerName:activeProfile().name,card:snap,want,status:'open',createdAt:Date.now()});
+  scheduleDriveSync();toast('Offer posted! Someone can take it anytime. 🎉');
+}
+async function cancelTrade(id){
+  const t=(await dbAll('trades')).find(x=>x.id===id);if(!t||t.status!=='open'||t.sellerId!==pid())return;
+  await cardGiveTo(pid(),t.card);t.status='cancelled';t.resolvedAt=Date.now();await dbPut('trades',t);scheduleDriveSync();toast('Offer cancelled — card returned.');
+}
+async function acceptTrade(id){
+  const t=(await dbAll('trades')).find(x=>x.id===id);
+  if(!t||t.status!=='open')return toast('That deal is no longer available.');
+  if(t.sellerId===pid())return toast('That’s your own offer!');
+  if(!await canFulfill(t.want))return toast('You don’t have what this trade needs yet.');
+  // pay the requirement from buyer → seller
+  if(t.want.type==='candy'){await trainerCandyMove(pid(),-t.want.amount);await trainerCandyMove(t.sellerId,t.want.amount);}
+  else if(t.want.type==='card'){const paid=await cardTakeFrom(pid(),t.want.dexId);if(!paid)return toast('You don’t have that Pokémon anymore.');await cardGiveTo(t.sellerId,paid);}
+  // give the offered card to the buyer
+  await cardGiveTo(pid(),t.card);
+  t.status='done';t.takenBy=pid();t.takenByName=activeProfile().name;t.resolvedAt=Date.now();await dbPut('trades',t);
+  scheduleDriveSync();toast('Trade complete! You got '+(POKE_BY_ID[t.card.dexId]?POKE_BY_ID[t.card.dexId].name:'a Pokémon')+'. 🎉');
 }
 
 /* ----- MISTAKES NOTEBOOK ----- */
@@ -1710,8 +1820,8 @@ async function sendSummaryEmail(a,isTest=false){
 }
 
 /* ============================================================ Export / import / clear ============================================================ */
-async function exportData(){const data={exportedAt:new Date().toISOString(),profiles:CFG.profiles,attempts:await dbAll('attempts'),review:await dbAll('review'),refs:(await dbAll('refs')).map(r=>({...r})),bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer')};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=el('a',{href:url,download:'practice-lab-backup-'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);toast('Backup downloaded');}
-async function importData(obj){if(Array.isArray(obj.profiles))obj.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();if(obj.attempts)for(const a of obj.attempts)await dbPut('attempts',a);if(obj.review)for(const r of obj.review)await dbPut('review',r);if(obj.refs)for(const r of obj.refs)await dbPut('refs',r);if(obj.bank)for(const b of obj.bank)await dbPut('bank',b);if(obj.cards)for(const c of obj.cards)await dbPut('cards',c);if(obj.trainer)for(const t of obj.trainer)await dbPut('trainer',t);toast('Data imported ✓');}
+async function exportData(){const data={exportedAt:new Date().toISOString(),profiles:CFG.profiles,attempts:await dbAll('attempts'),review:await dbAll('review'),refs:(await dbAll('refs')).map(r=>({...r})),bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades')};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=el('a',{href:url,download:'practice-lab-backup-'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);toast('Backup downloaded');}
+async function importData(obj){if(Array.isArray(obj.profiles))obj.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();if(obj.attempts)for(const a of obj.attempts)await dbPut('attempts',a);if(obj.review)for(const r of obj.review)await dbPut('review',r);if(obj.refs)for(const r of obj.refs)await dbPut('refs',r);if(obj.bank)for(const b of obj.bank)await dbPut('bank',b);if(obj.cards)for(const c of obj.cards)await dbPut('cards',c);if(obj.trainer)for(const t of obj.trainer)await dbPut('trainer',t);if(obj.trades)for(const t of obj.trades)await dbPut('trades',t);toast('Data imported ✓');}
 async function clearAll(){if(!confirm('Delete '+activeProfile().name+'’s practices and review items on this device? This cannot be undone.'))return;for(const a of (await dbAll('attempts')).filter(a=>a.profileId===pid()))await dbDel('attempts',a.id);for(const r of (await dbAll('review')).filter(r=>r.profileId===pid()))await dbDel('review',r.id);toast('History cleared');viewHome();}
 
 /* ============================================================ Google Drive ============================================================ */
@@ -1724,7 +1834,7 @@ async function driveSyncNow(){if(!driveToken)return;try{const fileId=await drive
 // extracted text + tags travel; the PDF/image stays on the device that imported
 // it (where grounding/pre-generation happens). Keeps the sync blob light.
 const refsLite=(await dbAll('refs')).map(({dataB64,...r})=>r);
-const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
   // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
   if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
@@ -1742,6 +1852,9 @@ async function mergeRemote(remote){
   const lc=new Map((await dbAll('cards')).map(c=>[c.id,c]));for(const c of(remote.cards||[])){const cur=lc.get(c.id);if(!cur)await dbPut('cards',c);else if((c.count||1)>(cur.count||1)||(c.level||1)>(cur.level||1)||(c.shiny&&!cur.shiny)){cur.count=Math.max(cur.count||1,c.count||1);cur.level=Math.max(cur.level||1,c.level||1);cur.shiny=cur.shiny||c.shiny;await dbPut('cards',cur);}}
   // Trainer XP/candy: keep the higher of each (additive merge can't sum safely across devices).
   const lt=new Map((await dbAll('trainer')).map(t=>[t.id,t]));for(const t of(remote.trainer||[])){const cur=lt.get(t.id);if(!cur)await dbPut('trainer',t);else if((t.xp||0)>(cur.xp||0)||(t.candy||0)>(cur.candy||0)){cur.xp=Math.max(cur.xp||0,t.xp||0);cur.candy=Math.max(cur.candy||0,t.candy||0);await dbPut('trainer',cur);}}
+  // Trades: a resolved (done/cancelled) status always wins over open, so a taken offer can't reopen.
+  const rank=s=>s==='open'?0:1;
+  const lq=new Map((await dbAll('trades')).map(t=>[t.id,t]));for(const t of(remote.trades||[])){const cur=lq.get(t.id);if(!cur)await dbPut('trades',t);else if(rank(t.status)>rank(cur.status)||(t.resolvedAt||0)>(cur.resolvedAt||0))await dbPut('trades',t);}
   await reconcileProfiles();
 }
 
@@ -1833,7 +1946,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v1.7';
+const APP_VERSION='v1.8';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
