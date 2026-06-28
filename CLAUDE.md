@@ -214,10 +214,23 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   known limit).
 - **Battle vs PC ([battle.js](battle.js), `viewBattle`)** — practice-GATED: each
   practice grants `⚡ energy` (`battleAddEnergy`, +1, +1 at ≥80%, cap 12, stored on
-  the trainer doc); a battle costs 1. Pick an owned Pokémon → fight a wild one,
-  turn-based; flashy 2D arena (GSAP lunges/hits/particles/HP-drain/faint, confetti)
-  — no true 3D since we only have 2D sprites. `🍬 Potion` spends candy.
-  - **Real-battle depth (v2.3, tuned for ~13-15 y/o).** Every Pokémon has
+  the trainer doc); a battle costs 1. `viewBattle` is a **team builder**: pick up
+  to `TEAM_MAX` (3) Pokémon → fight a wild side that fields a **matched team** the
+  same size (`wildTeam`, scaled to your average level / lead tier, distinct
+  species). Win when the foe's WHOLE team faints; lose when yours does. Flashy 2D
+  arena (GSAP lunges/hits/particles/HP-drain/faint, confetti) — no true 3D since we
+  only have 2D sprites. `🍬 Potion` spends candy.
+  - **Teams & switching (v2.4).** State is `myTeam`/`foeTeam` arrays + `meIdx`/
+    `foeIdx`; `MA()`/`FA()` are the active fighters and `paintSide(side)` repaints a
+    side from them (sprite/name/types/HP/`bt-badge`/`bt-pip` team dots). **Switch**
+    (`🔄`, capped at `SWITCHES` 4 voluntary/battle) **costs your turn** — the switch
+    resolves first, then the foe gets a free move; `doSwitch` resets the outgoing
+    Pokémon's stat stages (status persists). When a Pokémon faints, `faint(side)`
+    sends the next: the foe auto-picks its best type-matchup (`pickFoeNext`), the
+    player chooses via `playerPick` (forced, free, doesn't use the cap); a faint
+    ends the round (`roundBreak`). All-fainted → `endBattle`. Win rewards sum XP/
+    candy across the defeated foe team + 35% to catch one of them.
+  - **Real-battle depth (tuned for ~13-15 y/o).** Every Pokémon has
     HP/Attack/Defense/Speed (`cardStats`) and a 3-move kit (`cardMoves`): a
     same-type **STAB** attack, a risky **Take Down** (75% acc, high crit), and a
     **status move** (buff self / debuff foe / heal, from `UTIL_MOVES`, deterministic

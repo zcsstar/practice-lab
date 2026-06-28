@@ -193,6 +193,12 @@
   .bt-badge{display:inline-block;margin-left:5px;font-size:10px;font-weight:800;padding:0 6px;border-radius:6px;vertical-align:middle}
   .bt-badge.burn{background:#ffe3d6;color:#c2410c}
   .bt-badge.para{background:#fff4cc;color:#a16207}
+  .dexcell.sel{outline:3px solid var(--brand);outline-offset:-3px}
+  .dexcell .selnum{position:absolute;top:4px;left:4px;background:var(--brand);color:#fff;font-size:11px;font-weight:800;min-width:18px;height:18px;padding:0 4px;border-radius:999px;display:flex;align-items:center;justify-content:center;z-index:2}
+  .bt-team{display:flex;gap:3px;margin-top:4px;justify-content:center}
+  .bt-pip{width:10px;height:10px;border-radius:50%;background:#34c759;border:1px solid rgba(0,0,0,.18)}
+  .bt-pip.dead{background:#c7c7cc}
+  .bt-pip.act{box-shadow:0 0 0 2px #007aff}
   .dexcell .dn{font-size:11.5px;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dexcell .dn.muted{color:var(--muted);font-weight:500}
   .dexcell .ds{font-size:10px;letter-spacing:1px}
@@ -2067,7 +2073,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.3';
+const APP_VERSION='v2.4';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
