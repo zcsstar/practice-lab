@@ -128,8 +128,18 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   The AI occasionally mis-keys a question (right explanation, wrong `answerIndex`).
   Mitigations: (1) prompt has a CRITICAL self-check requiring key == explanation
   result; (2) `parseQuestions` re-points `answerIndex` if the model's `answer`
-  TEXT matches a different option (handles LaTeX-fraction vs plain); (3) results
-  show **"✓ My answer was actually right"** on wrong items (and "Mark as wrong" on
+  TEXT matches a different option (handles LaTeX-fraction vs plain); (3)
+  `repointFromExplanation(q)` is the stronger backstop for when the model keys
+  BOTH `answer` and `answerIndex` to the same wrong option while the worked
+  explanation reaches a different value (e.g. explains "80×2.5=200 km" but keys
+  180; lists 9 divisors of 36 then keys 6). It scans the explanation's numbers
+  from the END and re-points the key to the option that UNIQUELY matches the last
+  concluding value — skipping distractor mentions ("a common mistake is 180",
+  "not 6") and no-op'ing when the key already agrees (so correct questions are
+  never touched; non-numeric/non-MC are left to guard 2). Applied at parse time
+  AND on serve (`buildPracticeSet`, `startReview`) so already-banked mis-keys are
+  fixed too. Tested in [repoint.test.js](repoint.test.js); (4) results show
+  **"✓ My answer was actually right"** on wrong items (and "Mark as wrong" on
   correct) → `regrade()` recomputes the score and removes the matching mistakes-
   notebook entry. So a bad key is always correctable by the parent/student.
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
@@ -272,6 +282,8 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 ## Verifying changes
 1. **Parser tests:** `node parse.test.js` (covers the `parse.js` module: clean,
    fenced, truncated, malformed, control-chars, raw-LaTeX, money cases).
+   **Mis-key backstop:** `node repoint.test.js` (extracts `repointFromExplanation`
+   from index.html; covers the explanation-vs-key re-point + safety cases).
 2. **Run it:** `python -m http.server 8744` in this dir, open
    `http://localhost:8744/index.html`.
 3. **JS syntax check** without a browser:

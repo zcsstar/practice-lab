@@ -652,13 +652,39 @@ function parseQuestions(raw){
       const norm=x=>String(x).toLowerCase().replace(/\$/g,'').replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g,'$1/$2').replace(/\\[a-z]+/g,'').replace(/[^a-z0-9/.]/g,'');
       const t=norm(q.answer);if(t){const j=opts.findIndex(o=>norm(o)===t);if(j>=0&&j!==ai)ai=j;}
     }
-    return {id:'q'+i,topic:q.topic||q.category||q.strand||'General',
+    const o={id:'q'+i,topic:q.topic||q.category||q.strand||'General',
       type,
       question:P.qText(q),options:opts,answerIndex:ai,
       answer:(q.answer!=null)?String(q.answer):(opts&&typeof ai==='number'?String(opts[ai]):''),
       acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):(Array.isArray(q.accepted)?q.accepted.map(String):[]),
       explanation:q.explanation||q.solution||q.working||q.reason||'',marks:Number(q.marks||q.mark||q.points)||1,
-      svg:sanitizeSvg(q.svg||q.figure||q.diagram||q.image||'')};});
+      svg:sanitizeSvg(q.svg||q.figure||q.diagram||q.image||'')};return repointFromExplanation(o);});
+}
+// Mis-key backstop: trust the worked explanation's CONCLUDED value over a
+// possibly wrong answer key. Models sometimes set BOTH "answer" and
+// "answerIndex" to the same wrong option while their step-by-step explanation
+// correctly arrives at a different value (e.g. explains "80 × 2.5 = 200 km" but
+// keys 180; or lists the 9 divisors of 36 then keys 6). When the explanation's
+// final numeric value UNIQUELY matches a different option, re-point the key to
+// it. No-op when the key already agrees, so correctly-keyed questions are never
+// touched. Distractor mentions ("a common mistake is 180", "not 6") are skipped.
+function repointFromExplanation(q){
+  if(!q||q.type!=='multiple_choice'||!Array.isArray(q.options)||q.options.length<2||!q.explanation)return q;
+  const RE=/-?\d+(?:\.\d+)?\s*\/\s*-?\d+(?:\.\d+)?|-?\d+(?:\.\d+)?/g;
+  const clean=s=>plainMath(String(s==null?'':s)).replace(/\(\s*(-?\d+(?:\.\d+)?)\s*\)\s*\/\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)/g,'$1/$2').replace(/,/g,'');
+  const toNum=tok=>{tok=tok.replace(/\s+/g,'');if(tok.indexOf('/')>=0){const p=tok.split('/').map(Number);return (p.length===2&&p[1])?p[0]/p[1]:null;}const n=Number(tok);return isFinite(n)?n:null;};
+  const optNums=q.options.map(o=>{const m=clean(o).match(RE);return m?toNum(m[0]):null;});
+  if(!optNums.some(n=>n!=null))return q; // non-numeric options — leave to the answer-text guard
+  const plain=clean(q.explanation),toks=[...plain.matchAll(RE)];
+  for(let k=toks.length-1;k>=0;k--){
+    const val=toNum(toks[k][0]);if(val==null)continue;
+    const pre=plain.slice(Math.max(0,toks[k].index-24),toks[k].index).toLowerCase();
+    if(/(not|n't|rather than|instead of|exclud|rule[ds]? out|mistake|error|wrong|incorrect|avoid|trap)/.test(pre))continue;
+    const hits=[];optNums.forEach((n,idx)=>{if(n!=null&&Math.abs(n-val)<1e-6)hits.push(idx);});
+    if(hits.length===1){if(hits[0]!==q.answerIndex)q.answerIndex=hits[0];return q;}
+    if(hits.indexOf(q.answerIndex)>=0)return q; // explanation's last value agrees with the key — stop
+  }
+  return q;
 }
 // Output-token budget needed for a batch. Each question (with a short
 // explanation, options and maybe a small SVG) is ~900 tokens; give headroom so
@@ -713,7 +739,7 @@ async function buildPracticeSet(s,files){
   const wantsFresh=(files&&files.length>0)||!!(s.notes&&s.notes.trim());
   let fromBank=[];
   if(!wantsFresh)fromBank=await bankTake(s,count);
-  if(fromBank.length>=count)return {questions:reindex(fromBank.slice(0,count)),source:'bank',apiCalls:0};
+  if(fromBank.length>=count)return {questions:reindex(fromBank.slice(0,count)).map(repointFromExplanation),source:'bank',apiCalls:0};
   const need=count-fromBank.length;
   // One reliable call: serve `need` now, bank the modest surplus. (Big stock-ups
   // go through generateMany via the bank hub.)
@@ -721,7 +747,7 @@ async function buildPracticeSet(s,files){
   const gen=await generateQuestions({...s,count:batch},files);
   const sessionGen=gen.slice(0,need);
   if(!wantsFresh)await bankAdd(s,gen.slice(need)); // bank only the unused surplus (avoids immediate repeats)
-  return {questions:reindex(fromBank.concat(sessionGen)),source:fromBank.length?'mixed':(wantsFresh?'fresh':'generated'),apiCalls:1};
+  return {questions:reindex(fromBank.concat(sessionGen)).map(repointFromExplanation),source:fromBank.length?'mixed':(wantsFresh?'fresh':'generated'),apiCalls:1};
 }
 // "Practice more like this": a focused drill on one topic, served from the bank first.
 async function practiceTopic(topic){
@@ -1473,7 +1499,7 @@ async function acceptTrade(id){
 function startReview(items){
   const pick=items.slice(0,Math.min(15,items.length));
   if(!pick.length)return toast('Nothing to practise here.');
-  const qs=pick.map((it,i)=>({id:'q'+i,reviewId:it.id,topic:it.topic,type:it.type,question:it.question,svg:it.svg,options:it.options,answerIndex:it.answerIndex,answer:it.answer,acceptedAnswers:it.acceptedAnswers,explanation:it.explanation,marks:it.marks}));
+  const qs=pick.map((it,i)=>repointFromExplanation({id:'q'+i,reviewId:it.id,topic:it.topic,type:it.type,question:it.question,svg:it.svg,options:it.options,answerIndex:it.answerIndex,answer:it.answer,acceptedAnswers:it.acceptedAnswers,explanation:it.explanation,marks:it.marks}));
   startSession({country:'',subject:'Review',exam:pick[0].exam||'general',examLabel:'Mistakes notebook re-test',level:'Mixed',topics:[],difficulty:3,style:'mixed',timeLimitMin:0},qs,'review');
   viewRun();
 }
@@ -1977,7 +2003,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.1';
+const APP_VERSION='v2.2';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
