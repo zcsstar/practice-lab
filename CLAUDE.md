@@ -110,7 +110,8 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `generateQuestions()` directly. It serves matching questions from the `bank`
   store first (0 API calls); on a miss it generates a `BANK_PREFILL` batch,
   uses what's needed and banks the unused surplus (`bankAdd` de-dupes by
-  `qhash`/`normQ`). The bank hub's manual pre-generate uses a bigger `BANK_DEEP`
+  `qhash`/`normQ`, then `bankPrune` caps each key at `BANK_CAP` 60, dropping
+  most-served/oldest). The bank hub's manual pre-generate uses a bigger `BANK_DEEP`
   (40) batch. Output-token budget scales with batch size via `outTokens(count,
   cap)` (floor 16384; caps: Gemini 65536 / OpenAI 16384 / Claude 8192) so large
   batches don't truncate; `generateQuestions` passes it per provider. Bank key = `country|subject|exam|level|difficulty|style`
@@ -218,6 +219,10 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   settingsAt}`; `mergeRemote` adopts remote settings if `settingsAt` is newer. So
   turning on email summaries on one device propagates to the others.
 - **Drive sync** — optional; Google Identity token client + Drive `appDataFolder`
+  REST. **Ref papers are synced WITHOUT their base64 binary** (text + tags only;
+  `refsLite` in `driveSyncNow`) to keep the blob light — the PDF/image stays on
+  the importing device, so `bestRef`/`refToInlineFiles` require `dataB64` and a
+  metadata-only ref shows "synced — file on another device" and can't ground there.
   REST. Merge-on-id (no conflict resolution beyond "keep both / first wins").
   Only works on an https origin. `scheduleDriveSync()` debounces writes.
 

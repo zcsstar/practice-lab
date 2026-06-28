@@ -443,7 +443,16 @@ async function bankAdd(s,questions){
       answer:q.answer,acceptedAnswers:q.acceptedAnswers,explanation:q.explanation,marks:q.marks});
     added++;
   }
+  if(added)await bankPrune(key);
   return added;
+}
+const BANK_CAP=60; // max banked questions kept per setup-key, so the bank can't grow forever
+// Keep the freshest, least-practised questions for a key; drop the most-served/oldest beyond the cap.
+async function bankPrune(key){
+  const pool=(await dbAll('bank')).filter(b=>b.profileId===pid()&&b.key===key);
+  if(pool.length<=BANK_CAP)return;
+  pool.sort((a,b)=>((b.servedCount||0)-(a.servedCount||0))||(a.createdAt-b.createdAt)); // most-served & oldest first
+  for(const b of pool.slice(0,pool.length-BANK_CAP))await dbDel('bank',b.id);
 }
 // Pull up to `count` matching questions, marking them served. Honours selected topics strictly.
 async function bankTake(s,count){
@@ -749,8 +758,9 @@ async function pdfPagesToImages(u8,maxPages){
 // becomes its first few pages as JPEGs; images pass through; falls back to the
 // original file if rendering fails.
 async function refToInlineFiles(ref,maxPages){
+  if(!ref||!ref.dataB64)return []; // metadata-only ref (e.g. synced from another device) → not groundable here
   try{
-    if(ref.mime==='application/pdf'&&ref.dataB64){
+    if(ref.mime==='application/pdf'){
       const imgs=await pdfPagesToImages(b64d(ref.dataB64),maxPages||4);
       if(imgs.length)return imgs;
     }
@@ -882,7 +892,7 @@ async function viewRefs(){
   if(!refs.length)list.append(el('div',{class:'empty'},el('div',{class:'big'},'📚'),el('div',{},'No reference papers yet. Import real past papers (e.g. your ICAS PDFs) and tag them — the AI then grounds new questions in their authentic style.')));
   refs.forEach(r=>{
     const t=r.tags||{};
-    const kind=r.mime==='application/pdf'?(r.text?`PDF · ${r.text.length} chars read`:'PDF (scanned — sent to Gemini)'):r.mime.startsWith('image/')?'Image':r.text?'Text':r.mime;
+    const kind=!r.dataB64?'synced — file is on another device':r.mime==='application/pdf'?(r.text?`PDF · ${r.text.length} chars read`:'PDF (scanned — sent to Gemini)'):r.mime.startsWith('image/')?'Image':r.text?'Text':r.mime;
     const tagline=[EXAMS[t.exam]?EXAMS[t.exam].label:t.exam,t.subject,t.level,t.year].filter(Boolean).join(' · ')||'untagged';
     const subSel=selOf(t.subject||'Mathematics',SUBJECTS,()=>{});
     const examSel=selOf(EXAMS[t.exam]?t.exam:'icas',Object.entries(EXAMS).map(([k,v])=>[k,v.label]),()=>{});
@@ -1175,7 +1185,9 @@ function autoTagFromName(name){
 // then prefer same exam, overlapping level, newest year). Returns null if none.
 function bestRef(s,refs){
   const sub=String(s.subject||'').toLowerCase();
-  const cand=(refs||[]).filter(r=>r&&r.tags&&String(r.tags.subject||'').toLowerCase()===sub);
+  // Require the binary to be on THIS device (dataB64) — metadata-only refs synced
+  // from another device can't be used for grounding here.
+  const cand=(refs||[]).filter(r=>r&&r.tags&&r.dataB64&&String(r.tags.subject||'').toLowerCase()===sub);
   if(!cand.length)return null;
   const stoks=String(s.level||'').toLowerCase().match(/[a-z]+|\d+/g)||[];
   const score=r=>{const t=r.tags||{};let sc=0;
@@ -1625,7 +1637,11 @@ function driveReady(){return CFG.drive.enabled&&driveClientId()&&window.google&&
 function driveConnect(interactive){if(!driveClientId())return toast('No OAuth Client ID configured.');if(!window.google||!google.accounts||!google.accounts.oauth2)return toast('Google library not loaded (need internet + https).');if(!tokenClient)tokenClient=google.accounts.oauth2.initTokenClient({client_id:driveClientId(),scope:'https://www.googleapis.com/auth/drive.appdata',callback:r=>{if(r.access_token){driveToken=r.access_token;toast('☁️ Connected to Drive');driveSyncNow();}}});tokenClient.requestAccessToken({prompt:interactive?'consent':''});}
 function scheduleDriveSync(){if(!driveReady())return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>{if(driveToken)driveSyncNow();else driveConnect(false);},1500);}
 async function driveFindFile(){const r=await fetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D'practice-lab.json'&fields=files(id,name)",{headers:{Authorization:'Bearer '+driveToken}});if(!r.ok)throw new Error('drive list '+r.status);return (await r.json()).files?.[0]?.id||null;}
-async function driveSyncNow(){if(!driveToken)return;try{const fileId=await driveFindFile();if(fileId){const rr=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+driveToken}});if(rr.ok)await mergeRemote(await rr.json());}const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:await dbAll('refs'),bank:await dbAll('bank'),cards:await dbAll('cards'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+async function driveSyncNow(){if(!driveToken)return;try{const fileId=await driveFindFile();if(fileId){const rr=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+driveToken}});if(rr.ok)await mergeRemote(await rr.json());}// Sync ref papers WITHOUT their base64 binary (the big space hog) — only the
+// extracted text + tags travel; the PDF/image stays on the device that imported
+// it (where grounding/pre-generation happens). Keeps the sync blob light.
+const refsLite=(await dbAll('refs')).map(({dataB64,...r})=>r);
+const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
   // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
   if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
@@ -1732,7 +1748,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v1.3';
+const APP_VERSION='v1.4';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
