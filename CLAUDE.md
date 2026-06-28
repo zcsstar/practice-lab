@@ -178,6 +178,15 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   silhouettes). Sprites are **hotlinked** from the public PokéAPI mirror
   (`pokeSprite`) — NO copyrighted images in the repo (private family use). `cards`
   flows through Drive sync (merge keeps higher count + any shiny) + export/import.
+- **Trainer progression (Phase A meta-game)** — every practice grants **XP**
+  (`correct × (2+difficulty)` — quality) and **candy** (effort; even low accuracy
+  earns some) via `trainerAdd`, stored in the `trainer` store (per-profile xp +
+  candy). `trainerLevel(xp)` is an infinite curve (L1→2 = 100 XP, +50 each). Pack
+  **duplicates convert to candy** (so they're never wasted). Candy is spent in
+  `viewCards` to **train** a card up a level (`trainCard`, `trainCost`, cap
+  `CARD_MAX_LEVEL` 20). Rewards shown on results (`xpGain`/`candyGain`/`levelUp`).
+  `trainer` syncs (merge keeps higher xp/candy) + export/import; card `level`
+  merges by max. Phase B (shop + sibling trading) not yet built.
 - **Streaks / daily goal** — Home shows a 🔥 day-streak tile (`computeStreak`,
   UTC-based) and a daily-goal bar (`CFG.dailyGoal`, default 10, vs questions
   answered today). Generate-similar: `practiceTopic(topic)` builds a bank-first

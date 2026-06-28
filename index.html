@@ -165,6 +165,9 @@
   .dexcell .cnt{position:absolute;top:4px;right:6px;font-size:11px;font-weight:800;color:var(--ink);background:var(--card2);border-radius:999px;padding:0 6px}
   .dexcell .shy{position:absolute;top:4px;left:6px;font-size:12px}
   .dexcell .sil img{filter:brightness(0);opacity:.22}
+  .dexcell .lv{font-size:10.5px;font-weight:700;color:var(--ink);margin-top:2px}
+  .dexcell .trainbtn{margin-top:4px;font-size:11px;font-weight:700;border:none;background:var(--feature);color:var(--brand);border-radius:999px;padding:3px 8px;cursor:pointer}
+  .dexcell .maxed{margin-top:4px;font-size:10px;font-weight:800;color:var(--ok)}
   .gbar{height:10px;border-radius:999px;background:var(--card2);overflow:hidden}
   .gbar-fill{height:100%;border-radius:999px;background:var(--ok);transition:width .4s ease}
   .streak{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--warn)}
@@ -410,8 +413,8 @@ function activeProfile(){return CFG.profiles.find(p=>p.id===CFG.activeProfileId)
 function pid(){return activeProfile().id;}
 
 /* ---------- IndexedDB ---------- */
-const DB_NAME='practicelab',DB_VER=4;let _db=null;
-function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains('attempts'))db.createObjectStore('attempts',{keyPath:'id'});if(!db.objectStoreNames.contains('review'))db.createObjectStore('review',{keyPath:'id'});if(!db.objectStoreNames.contains('refs'))db.createObjectStore('refs',{keyPath:'id'});if(!db.objectStoreNames.contains('bank'))db.createObjectStore('bank',{keyPath:'id'});if(!db.objectStoreNames.contains('cards'))db.createObjectStore('cards',{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
+const DB_NAME='practicelab',DB_VER=5;let _db=null;
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains('attempts'))db.createObjectStore('attempts',{keyPath:'id'});if(!db.objectStoreNames.contains('review'))db.createObjectStore('review',{keyPath:'id'});if(!db.objectStoreNames.contains('refs'))db.createObjectStore('refs',{keyPath:'id'});if(!db.objectStoreNames.contains('bank'))db.createObjectStore('bank',{keyPath:'id'});if(!db.objectStoreNames.contains('cards'))db.createObjectStore('cards',{keyPath:'id'});if(!db.objectStoreNames.contains('trainer'))db.createObjectStore('trainer',{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
 function tx(store,mode='readonly'){return _db.transaction(store,mode).objectStore(store);}
 function dbAll(store){return new Promise((res,rej)=>{const out=[];const c=tx(store).openCursor();c.onsuccess=e=>{const cur=e.target.result;if(cur){out.push(cur.value);cur.continue();}else res(out);};c.onerror=e=>rej(e.target.error);});}
 function dbPut(store,val){return new Promise((res,rej)=>{const r=tx(store,'readwrite').put(val);r.onsuccess=()=>res();r.onerror=e=>rej(e.target.error);});}
@@ -1062,16 +1065,28 @@ async function submitSession(){
     results:results.map(r=>({topic:r.q.topic,type:r.q.type,question:r.q.question,svg:r.q.svg,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,userAns:r.userAns,flagged:r.flagged,status:r.status,auto:r.auto}))};
   await dbPut('attempts',attempt);
   for(const r of results){if(r.status==='wrong'||r.status==='review'||r.flagged){await dbPut('review',{id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),attemptId:S.id,exam:S.settings.exam,subject:S.settings.subject,level:S.settings.level,topic:r.q.topic,reason:r.flagged?'flagged':(r.status==='review'?'review':'wrong'),timesSeen:1,timesCorrect:0,mastered:false,question:r.q.question,svg:r.q.svg,type:r.q.type,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks});}}
-  // Earn a Poké-Pack: practice mode only, ≥PACK_MIN_Q questions, within the daily cap.
-  // Rarity is rolled from THIS result (accuracy/difficulty/streak) and stored on the
-  // attempt so the results screen reveals it (and re-opening shows the same card).
-  if(S.mode==='practice'&&S.questions.length>=PACK_MIN_Q&&packsToday()<PACK_DAILY_CAP){
+  // Rewards (practice mode): XP from correct answers × difficulty (quality), candy
+  // for completing (effort — even low accuracy earns some), and a Poké-Pack card if
+  // ≥PACK_MIN_Q and within the daily cap. Rarity is rolled from THIS result;
+  // duplicates convert to candy. All stored on the attempt so results can show them.
+  if(S.mode==='practice'&&S.questions.length>=1){
     try{
-      const streak=computeStreak((await dbAll('attempts')).filter(a=>a.profileId===pid()).map(a=>a.date));
-      const card=rollCard(attempt.percent,attempt.difficulty||3,streak);
-      await cardAward(card);bumpPacks();
-      attempt.reward=card;await dbPut('attempts',attempt);
-    }catch(e){console.warn('pack',e);}
+      const diff=attempt.difficulty||3;
+      const before=trainerLevel((await trainerGet()).xp);
+      let xpGain=attempt.correct*(2+diff);
+      let candyGain=Math.max(1,Math.round(attempt.count/3))+(attempt.percent>=70?2:0);
+      let card=null;
+      if(S.questions.length>=PACK_MIN_Q&&packsToday()<PACK_DAILY_CAP){
+        const streak=computeStreak((await dbAll('attempts')).filter(a=>a.profileId===pid()).map(a=>a.date));
+        card=rollCard(attempt.percent,diff,streak);
+        const aw=await cardAward(card);bumpPacks();
+        if(aw.dupe)candyGain+=card.tier*2; // duplicate → candy instead of a wasted card
+      }
+      const after=await trainerAdd(xpGain,candyGain);
+      attempt.xpGain=xpGain;attempt.candyGain=candyGain;if(card)attempt.reward=card;
+      const lvlAfter=trainerLevel(after.xp);if(lvlAfter.level>before.level)attempt.levelUp=lvlAfter.level;
+      await dbPut('attempts',attempt);
+    }catch(e){console.warn('rewards',e);}
   }
   scheduleDriveSync();
   sendSummaryEmail(attempt).catch(e=>console.warn('email',e));
@@ -1104,6 +1119,9 @@ function viewResults(a){
     el('div',{class:'card'},el('div',{class:'scorehero'},el('div',{style:'font-size:46px'},emoji),el('div',{class:'pct'},a.percent+'%'),el('div',{class:'frac'},`${a.gotMarks} / ${a.totalMarks} marks · ${a.correct}/${a.count} correct · ${fmtTime(a.elapsed)}`),el('p',{style:'margin:12px 0 0;font-weight:600'},msg)),
       el('div',{class:'tiles',style:'margin-top:16px'},tile(a.correct,'Correct'),tile(a.wrong,'Wrong'),tile(a.needsReview,'Self-check'),tile(a.flagged,'Flagged')),
       el('div',{class:'small muted',style:'text-align:center;margin-top:12px'},CFG.emailEnabled?'📧 A summary email is on its way to '+esc(CFG.emailTo):'💡 Turn on email summaries in Settings to get a recap sent to a parent.')),
+    (a.xpGain!=null)?el('div',{class:'card',style:'text-align:center;padding:14px'},
+      el('div',{style:'font-weight:800;font-size:16px'},'⭐ +'+a.xpGain+' XP    🍬 +'+a.candyGain+' candy'),
+      a.levelUp?el('div',{style:'color:var(--brand);font-weight:700;margin-top:4px'},'🎉 Level up! Trainer Level '+a.levelUp):''):'',
     a.reward?packRevealCard(a.reward):'',
     el('div',{class:'card'},el('h2',{},'Question by question'),el('p',{class:'sub'},'Read the explanations — that’s where the learning happens.'),list),
     el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>viewSetup()},'New practice'),el('button',{class:'btn',onclick:()=>viewHome()},'Home'))));
@@ -1150,23 +1168,29 @@ function packRevealCard(reward){
 }
 function dexCell(p,rec){
   const rr=RARITY[p.t];
-  if(rec)return el('div',{class:'dexcell own',style:'border-color:'+rr.color},
-    rec.count>1?el('span',{class:'cnt'},'×'+rec.count):'',rec.shiny?el('span',{class:'shy'},'✨'):'',
-    pokeImg(p.id,rec.shiny,74),el('div',{class:'dn'},p.name),el('div',{class:'ds',style:'color:'+rr.color},rarityStars(p.t)));
-  return el('div',{class:'dexcell'},el('div',{class:'sil'},pokeImg(p.id,false,74)),el('div',{class:'dn muted'},'???'),el('div',{class:'ds',style:'color:'+rr.color},rarityStars(p.t)));
+  if(rec){const lvl=rec.level||1;
+    return el('div',{class:'dexcell own',style:'border-color:'+rr.color},
+      rec.count>1?el('span',{class:'cnt'},'×'+rec.count):'',rec.shiny?el('span',{class:'shy'},'✨'):'',
+      pokeImg(p.id,rec.shiny,64),el('div',{class:'dn'},p.name),el('div',{class:'ds',style:'color:'+rr.color},rarityStars(p.t)),
+      el('div',{class:'lv'},'Lv '+lvl),
+      lvl<CARD_MAX_LEVEL?el('button',{class:'trainbtn',title:'Train with candy',onclick:()=>trainCard(p.id)},'🍬 '+trainCost(lvl)):el('span',{class:'maxed'},'MAX'));
+  }
+  return el('div',{class:'dexcell'},el('div',{class:'sil'},pokeImg(p.id,false,64)),el('div',{class:'dn muted'},'???'),el('div',{class:'ds',style:'color:'+rr.color},rarityStars(p.t)));
 }
 async function viewCards(){
   stopTimer();
+  const t=await trainerGet(),lv=trainerLevel(t.xp);
   const owned=await cardsForProfile();const byId={};owned.forEach(c=>byId[c.dexId]=c);
   const caught=POKEDEX.filter(p=>byId[p.id]).length,total=POKEDEX.length;
-  const pct=Math.round(caught/total*100);
   const sorted=POKEDEX.slice().sort((a,b)=>(b.t-a.t)||(a.id-b.id));
   const grid=el('div',{class:'dexgrid'},...sorted.map(p=>dexCell(p,byId[p.id])));
   show(el('div',{},backBar('My cards',()=>viewHome()),
-    el('div',{class:'card'},el('h2',{},'🎴 '+esc(activeProfile().name)+'’s card collection'),
-      el('p',{class:'sub',style:'margin-bottom:8px'},'Caught '+caught+' / '+total+' · finish a practice to earn a pack. Better accuracy = rarer cards!'),
-      el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:var(--brand)'}))),
-    el('div',{class:'card'},grid)));
+    el('div',{class:'card'},el('div',{class:'row between'},el('h2',{style:'margin:0'},'🧢 Trainer Lv '+lv.level),el('span',{style:'font-weight:800'},'🍬 '+(t.candy||0)+' candy')),
+      el('div',{class:'gbar',style:'margin-top:8px'},el('div',{class:'gbar-fill',style:'width:'+Math.round(lv.into/lv.need*100)+'%;background:var(--brand)'})),
+      el('div',{class:'small muted',style:'margin-top:4px'},lv.into+' / '+lv.need+' XP to Lv '+(lv.level+1)+' · earn XP + candy from every practice, spend candy to train your Pokémon')),
+    el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:8px'},el('h2',{style:'margin:0'},'🎴 Collection'),el('span',{class:'small muted'},'Caught '+caught+' / '+total)),
+      el('div',{class:'gbar',style:'margin-bottom:10px'},el('div',{class:'gbar-fill',style:'width:'+Math.round(caught/total*100)+'%;background:var(--ok)'})),
+      grid)));
 }
 
 /* ----- REFERENCE LIBRARY (real past papers → authentic grounding) ----- */
@@ -1237,12 +1261,29 @@ function packsToday(){try{return (JSON.parse(localStorage.getItem('practicelab.p
 function bumpPacks(){const k='practicelab.packs';let u={};try{u=JSON.parse(localStorage.getItem(k)||'{}');}catch(e){}u[todayISO()]=(u[todayISO()]||0)+1;const ks=Object.keys(u).sort();while(ks.length>14)delete u[ks.shift()];localStorage.setItem(k,JSON.stringify(u));}
 async function cardAward(card){
   const id=pid()+':'+card.dexId,all=await dbAll('cards');
-  let rec=all.find(c=>c.id===id);
+  let rec=all.find(c=>c.id===id),dupe=!!rec;
   if(rec){rec.count=(rec.count||1)+1;if(card.shiny)rec.shiny=true;}
-  else rec={id,profileId:pid(),dexId:card.dexId,tier:card.tier,count:1,shiny:!!card.shiny,firstAt:Date.now()};
-  await dbPut('cards',rec);return rec;
+  else rec={id,profileId:pid(),dexId:card.dexId,tier:card.tier,count:1,level:1,shiny:!!card.shiny,firstAt:Date.now()};
+  await dbPut('cards',rec);return {rec,dupe};
 }
 async function cardsForProfile(){return (await dbAll('cards')).filter(c=>c.profileId===pid());}
+
+/* ----- Trainer: XP + level (infinite progression) + candy economy ----- */
+// XP curve: L1→2 needs 100, then +50 each level. Returns level + progress into it.
+function trainerLevel(xp){let lvl=1,need=100,acc=0;xp=Math.max(0,xp||0);while(xp>=acc+need){acc+=need;lvl++;need+=50;}return {level:lvl,into:xp-acc,need};}
+const CARD_MAX_LEVEL=20;
+function trainCost(level){return 6+(level||1)*3;} // candy to raise a card from `level` to level+1
+async function trainerGet(){return (await dbAll('trainer')).find(t=>t.id===pid())||{id:pid(),xp:0,candy:0};}
+async function trainerAdd(xp,candy){const t=await trainerGet();t.xp=(t.xp||0)+(xp||0);t.candy=(t.candy||0)+(candy||0);t.updatedAt=Date.now();await dbPut('trainer',t);return t;}
+async function trainerSpend(candy){const t=await trainerGet();if((t.candy||0)<candy)return false;t.candy=(t.candy||0)-candy;t.updatedAt=Date.now();await dbPut('trainer',t);return true;}
+async function trainCard(dexId){
+  const rec=(await cardsForProfile()).find(c=>c.dexId===dexId);if(!rec)return;
+  if((rec.level||1)>=CARD_MAX_LEVEL)return toast('Already max level!');
+  const cost=trainCost(rec.level||1),t=await trainerGet();
+  if((t.candy||0)<cost)return toast('Need '+cost+' 🍬 to train — you have '+(t.candy||0)+'. Do more practice to earn candy!');
+  await trainerSpend(cost);rec.level=(rec.level||1)+1;await dbPut('cards',rec);scheduleDriveSync();
+  toast('Trained! '+(POKE_BY_ID[dexId]?POKE_BY_ID[dexId].name:'')+' → Lv '+rec.level);viewCards();
+}
 
 /* ----- MISTAKES NOTEBOOK ----- */
 // Start a re-test session from a list of review items (oldest/least-mastered first, capped).
@@ -1627,8 +1668,8 @@ async function sendSummaryEmail(a,isTest=false){
 }
 
 /* ============================================================ Export / import / clear ============================================================ */
-async function exportData(){const data={exportedAt:new Date().toISOString(),profiles:CFG.profiles,attempts:await dbAll('attempts'),review:await dbAll('review'),refs:(await dbAll('refs')).map(r=>({...r})),bank:await dbAll('bank'),cards:await dbAll('cards')};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=el('a',{href:url,download:'practice-lab-backup-'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);toast('Backup downloaded');}
-async function importData(obj){if(Array.isArray(obj.profiles))obj.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();if(obj.attempts)for(const a of obj.attempts)await dbPut('attempts',a);if(obj.review)for(const r of obj.review)await dbPut('review',r);if(obj.refs)for(const r of obj.refs)await dbPut('refs',r);if(obj.bank)for(const b of obj.bank)await dbPut('bank',b);if(obj.cards)for(const c of obj.cards)await dbPut('cards',c);toast('Data imported ✓');}
+async function exportData(){const data={exportedAt:new Date().toISOString(),profiles:CFG.profiles,attempts:await dbAll('attempts'),review:await dbAll('review'),refs:(await dbAll('refs')).map(r=>({...r})),bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer')};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=el('a',{href:url,download:'practice-lab-backup-'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);toast('Backup downloaded');}
+async function importData(obj){if(Array.isArray(obj.profiles))obj.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();if(obj.attempts)for(const a of obj.attempts)await dbPut('attempts',a);if(obj.review)for(const r of obj.review)await dbPut('review',r);if(obj.refs)for(const r of obj.refs)await dbPut('refs',r);if(obj.bank)for(const b of obj.bank)await dbPut('bank',b);if(obj.cards)for(const c of obj.cards)await dbPut('cards',c);if(obj.trainer)for(const t of obj.trainer)await dbPut('trainer',t);toast('Data imported ✓');}
 async function clearAll(){if(!confirm('Delete '+activeProfile().name+'’s practices and review items on this device? This cannot be undone.'))return;for(const a of (await dbAll('attempts')).filter(a=>a.profileId===pid()))await dbDel('attempts',a.id);for(const r of (await dbAll('review')).filter(r=>r.profileId===pid()))await dbDel('review',r.id);toast('History cleared');viewHome();}
 
 /* ============================================================ Google Drive ============================================================ */
@@ -1641,7 +1682,7 @@ async function driveSyncNow(){if(!driveToken)return;try{const fileId=await drive
 // extracted text + tags travel; the PDF/image stays on the device that imported
 // it (where grounding/pre-generation happens). Keeps the sync blob light.
 const refsLite=(await dbAll('refs')).map(({dataB64,...r})=>r);
-const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
   // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
   if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
@@ -1655,8 +1696,10 @@ async function mergeRemote(remote){
   const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[]))if(!lr.has(r.id))await dbPut('review',r);
   const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[]))if(!lf.has(r.id))await dbPut('refs',r);
   const lb=new Map((await dbAll('bank')).map(b=>[b.id,b]));for(const b of(remote.bank||[]))if(!lb.has(b.id))await dbPut('bank',b);
-  // Cards: merge by id keeping the higher count + any shiny (so neither device loses cards).
-  const lc=new Map((await dbAll('cards')).map(c=>[c.id,c]));for(const c of(remote.cards||[])){const cur=lc.get(c.id);if(!cur)await dbPut('cards',c);else if((c.count||1)>(cur.count||1)||(c.shiny&&!cur.shiny)){cur.count=Math.max(cur.count||1,c.count||1);cur.shiny=cur.shiny||c.shiny;await dbPut('cards',cur);}}
+  // Cards: merge by id keeping the higher count/level + any shiny (so neither device loses progress).
+  const lc=new Map((await dbAll('cards')).map(c=>[c.id,c]));for(const c of(remote.cards||[])){const cur=lc.get(c.id);if(!cur)await dbPut('cards',c);else if((c.count||1)>(cur.count||1)||(c.level||1)>(cur.level||1)||(c.shiny&&!cur.shiny)){cur.count=Math.max(cur.count||1,c.count||1);cur.level=Math.max(cur.level||1,c.level||1);cur.shiny=cur.shiny||c.shiny;await dbPut('cards',cur);}}
+  // Trainer XP/candy: keep the higher of each (additive merge can't sum safely across devices).
+  const lt=new Map((await dbAll('trainer')).map(t=>[t.id,t]));for(const t of(remote.trainer||[])){const cur=lt.get(t.id);if(!cur)await dbPut('trainer',t);else if((t.xp||0)>(cur.xp||0)||(t.candy||0)>(cur.candy||0)){cur.xp=Math.max(cur.xp||0,t.xp||0);cur.candy=Math.max(cur.candy||0,t.candy||0);await dbPut('trainer',cur);}}
   await reconcileProfiles();
 }
 
@@ -1748,7 +1791,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v1.4';
+const APP_VERSION='v1.5';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
