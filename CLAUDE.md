@@ -101,8 +101,10 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   target,onProgress)` instead loops `GEN_CHUNK` (12)-sized calls, de-duping and
   tolerating partial chunks, until the target / an empty streak / an attempt cap
   (re-throws 429 only if nothing collected yet). The bank's manual pre-generate
-  uses it for `BANK_DEEP` (40). Interactive misses still use ONE `generateQuestions`
-  call of `BANK_PREFILL` (15, ≤ `GEN_CHUNK` so it won't truncate).
+  uses it for `BANK_DEEP` (40). Interactive misses use ONE `generateQuestions`
+  call of `BANK_PREFILL` (24) — the daily free limit is REQUESTS not tokens, so we
+  maximise yield per call and bank the surplus (the tolerant parser keeps whatever
+  returns if it truncates). So every practice a kid does grows the bank.
 - **Question bank (AI-usage reduction)** — `buildPracticeSet(s,files)` is the
   entry point used by `doGenerate()`/`practiceTopic()` instead of calling
   `generateQuestions()` directly. It serves matching questions from the `bank`

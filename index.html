@@ -425,7 +425,7 @@ function usageGet(){let u={};try{u=JSON.parse(localStorage.getItem(USAGE_KEY)||'
 function usageToday(){return usageGet()[todayISO()]||0;}
 function usageBump(n=1){const u=usageGet(),d=todayISO();u[d]=(u[d]||0)+n;const ks=Object.keys(u).sort();while(ks.length>21)delete u[ks.shift()];localStorage.setItem(USAGE_KEY,JSON.stringify(u));}
 function freeDailyLimit(){return CFG.provider==='gemini'?20:0;} // 0 = unknown / not free-tier-limited
-const BANK_PREFILL=15; // single-call batch when a practice misses the bank — serves now + banks a small surplus (kept ≤ GEN_CHUNK so it won't truncate)
+const BANK_PREFILL=24; // single-call batch when a practice misses the bank — one request serves now + banks a big surplus (the daily limit is requests, not tokens, so we maximise yield per call; the tolerant parser keeps whatever returns if it truncates)
 const BANK_DEEP=40;    // total for a manual "stock the bank" pre-generation — fetched reliably in small chunks via generateMany
 function normQ(s){return String(s||'').toLowerCase().replace(/\$/g,' ').replace(/[^a-z0-9]+/g,' ').trim().slice(0,180);}
 function qhash(s){const t=normQ(s);let h=2166136261>>>0;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return 'h'+(h>>>0).toString(36);}
@@ -1732,7 +1732,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v1.2';
+const APP_VERSION='v1.3';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
