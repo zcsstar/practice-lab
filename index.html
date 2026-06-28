@@ -1073,8 +1073,11 @@ async function submitSession(){
     try{
       const diff=attempt.difficulty||3;
       const before=trainerLevel((await trainerGet()).xp);
-      let xpGain=attempt.correct*(2+diff);
-      let candyGain=Math.max(1,Math.round(attempt.count/3))+(attempt.percent>=70?2:0);
+      const firstToday=(await dbAll('attempts')).filter(a=>a.profileId===pid()&&a.date===todayISO()).length<=1;
+      // XP: participation (effort) + correctness×difficulty (quality) + a daily-return bonus.
+      let xpGain=attempt.count + attempt.correct*(1+diff) + (firstToday?15:0);
+      // Candy: a flat effort floor (even low accuracy earns) + a quality bit + daily bonus.
+      let candyGain=4 + Math.round(attempt.correct/2) + (firstToday?4:0);
       let card=null;
       if(S.questions.length>=PACK_MIN_Q&&packsToday()<PACK_DAILY_CAP){
         const streak=computeStreak((await dbAll('attempts')).filter(a=>a.profileId===pid()).map(a=>a.date));
@@ -1246,7 +1249,8 @@ const PACK_DAILY_CAP=5,PACK_MIN_Q=5;
 // Roll a rarity tier 1-5 from performance: accuracy dominates, difficulty + streak nudge up.
 function rollTier(accuracy,difficulty,streak){
   const L=Math.max(0,Math.min(1,(accuracy/100)*0.7+((Math.max(1,difficulty||1)-1)/4)*0.2+(Math.min(streak||0,10)/10)*0.1));
-  const w=[0,70*(1-L)+10,35,45*L+5,30*L*L,16*L*L*L];
+  // tuned a touch more generous on Rare/Epic for accurate work; Legendary stays special
+  const w=[0,70*(1-L)+8,32,50*L+6,34*L*L,16*L*L*L];
   let tot=w[1]+w[2]+w[3]+w[4]+w[5],r=Math.random()*tot;
   for(let t=1;t<=5;t++){if(r<w[t])return t;r-=w[t];}
   return 1;
@@ -1254,7 +1258,7 @@ function rollTier(accuracy,difficulty,streak){
 function rollCard(accuracy,difficulty,streak){
   const t=rollTier(accuracy,difficulty,streak),pool=POKEDEX.filter(p=>p.t===t);
   const p=pool[Math.floor(Math.random()*pool.length)];
-  const shiny=Math.random()<(0.012+0.03*(accuracy/100));
+  const shiny=Math.random()<(0.02+0.05*(accuracy/100)); // ~2% (low) → ~7% (100%) — exciting but still special
   return {dexId:p.id,name:p.name,tier:t,shiny};
 }
 function packsToday(){try{return (JSON.parse(localStorage.getItem('practicelab.packs')||'{}'))[todayISO()]||0;}catch(e){return 0;}}
@@ -1791,7 +1795,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v1.5';
+const APP_VERSION='v1.6';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
