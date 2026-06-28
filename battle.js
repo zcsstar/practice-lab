@@ -37,11 +37,26 @@
       name: (p ? p.name : 'Pokémon'), hp: st.hp, maxhp: st.hp, atk: st.atk,
       moves: cardMoves(dexId, tier, level || 1) };
   }
-  // Build a wild opponent near the player's level.
-  function wildOpponent(playerLevel) {
-    var p = POKEDEX[Math.floor(Math.random() * POKEDEX.length)];
-    var lvl = clamp(Math.round(playerLevel + rnd(-1, 2)), 1, 25);
-    return mkCombatant(p.id, p.t, lvl, Math.random() < 0.03);
+  // Pick a wild RARITY: usually the player's own tier, sometimes lower, rarely one
+  // above — so fights are mostly fair/winnable and only occasionally a tough stretch.
+  function wildTier(playerTier) {
+    var pt = clamp(playerTier || 1, 1, 5), w = [0, 0, 0, 0, 0, 0], t, tot = 0;
+    for (t = 1; t <= 5; t++) w[t] = (t < pt ? 22 : t === pt ? 50 : t === pt + 1 ? 12 : 0);
+    for (t = 1; t <= 5; t++) tot += w[t];
+    var r = Math.random() * tot;
+    for (t = 1; t <= 5; t++) { if (r < w[t]) return t; r -= w[t]; }
+    return pt;
+  }
+  // Build a wild opponent: same-ish rarity, never higher level than you, and a
+  // touch weaker than an equal Pokémon so the player (the hero) has a fair edge.
+  function wildOpponent(playerLevel, playerTier) {
+    var t = wildTier(playerTier);
+    var pool = POKEDEX.filter(function (p) { return p.t === t; });
+    var p = pool[Math.floor(Math.random() * pool.length)];
+    var lvl = clamp(Math.round(playerLevel + rnd(-2, 0)), 1, 25);
+    var c = mkCombatant(p.id, p.t, lvl, Math.random() < 0.03);
+    c.hp = c.maxhp = Math.round(c.maxhp * 0.9); c.atk = Math.max(1, Math.round(c.atk * 0.9));
+    return c;
   }
   function dmg(attacker, move) {
     var base = move.power + attacker.atk * 0.45;
@@ -125,7 +140,7 @@
 
   function startFight(playerCard) {
     var me = mkCombatant(playerCard.dexId, playerCard.tier || (POKE_BY_ID[playerCard.dexId] || {}).t || 1, playerCard.level || 1, playerCard.shiny);
-    var foe = wildOpponent(me.level);
+    var foe = wildOpponent(me.level, me.tier);
     var busy = false, over = false;
     spendEnergy(1);
     var msg = el('div', { class: 'bt-msg' }, 'A wild ' + foe.name + ' appeared!');
