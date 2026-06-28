@@ -217,7 +217,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   the trainer doc); a battle costs 1. Pick an owned Pokémon → fight a wild one,
   turn-based; flashy 2D arena (GSAP lunges/hits/particles/HP-drain/faint, confetti)
   — no true 3D since we only have 2D sprites. `🍬 Potion` spends candy.
-  - **Real-battle depth (v3.0, tuned for ~13-15 y/o).** Every Pokémon has
+  - **Real-battle depth (v2.3, tuned for ~13-15 y/o).** Every Pokémon has
     HP/Attack/Defense/Speed (`cardStats`) and a 3-move kit (`cardMoves`): a
     same-type **STAB** attack, a risky **Take Down** (75% acc, high crit), and a
     **status move** (buff self / debuff foe / heal, from `UTIL_MOVES`, deterministic
