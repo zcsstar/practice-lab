@@ -158,7 +158,8 @@
   .pcard .shiny{position:absolute;top:8px;right:10px;font-size:12px;font-weight:800;color:#f59e0b}
   .dexgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
   .dexcell{border:2px solid var(--line);border-radius:12px;padding:8px 6px;text-align:center;position:relative;background:#fff}
-  .dexcell.own{background:#fff}
+  .dexcell.own{background:#fff;cursor:pointer}
+  .dexcell.own:active{transform:scale(.97)}
   .dexcell .dn{font-size:11.5px;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dexcell .dn.muted{color:var(--muted);font-weight:500}
   .dexcell .ds{font-size:10px;letter-spacing:1px}
@@ -1172,13 +1173,34 @@ function packRevealCard(reward){
 function dexCell(p,rec){
   const rr=RARITY[p.t];
   if(rec){const lvl=rec.level||1;
-    return el('div',{class:'dexcell own',style:'border-color:'+rr.color},
+    return el('div',{class:'dexcell own',style:'border-color:'+rr.color,title:'Tap for details',onclick:()=>viewCard(p.id)},
       rec.count>1?el('span',{class:'cnt'},'×'+rec.count):'',rec.shiny?el('span',{class:'shy'},'✨'):'',
       pokeImg(p.id,rec.shiny,64),el('div',{class:'dn'},p.name),el('div',{class:'ds',style:'color:'+rr.color},rarityStars(p.t)),
-      el('div',{class:'lv'},'Lv '+lvl),
-      lvl<CARD_MAX_LEVEL?el('button',{class:'trainbtn',title:'Train with candy',onclick:()=>trainCard(p.id)},'🍬 '+trainCost(lvl)):el('span',{class:'maxed'},'MAX'));
+      el('div',{class:'lv'},'Lv '+lvl));
   }
   return el('div',{class:'dexcell'},el('div',{class:'sil'},pokeImg(p.id,false,64)),el('div',{class:'dn muted'},'???'),el('div',{class:'ds',style:'color:'+rr.color},rarityStars(p.t)));
+}
+// Card detail: stats, moves/skills, and flexible candy actions (power up, make shiny).
+async function viewCard(dexId){
+  stopTimer();
+  const p=POKE_BY_ID[dexId],rec=(await cardsForProfile()).find(c=>c.dexId===dexId),t=await trainerGet();
+  if(!p||!rec)return viewCards();
+  const rr=RARITY[p.t],lvl=rec.level||1,st=cardStats(p.t,lvl),moves=cardMoves(dexId,p.t,lvl),candy=t.candy||0;
+  const upCost=trainCost(lvl);
+  show(el('div',{},backBar('Card',()=>viewCards()),
+    el('div',{class:'card',style:'text-align:center;border:3px solid '+rr.color},
+      rec.shiny?el('div',{style:'font-weight:800;color:#f59e0b'},'✨ Shiny'):'',
+      pokeImg(dexId,rec.shiny,150),
+      el('div',{style:'font-weight:800;font-size:20px'},p.name),
+      el('div',{style:'color:'+rr.color+';font-weight:700'},rarityStars(p.t)+' '+rr.name+' · Lv '+lvl+(rec.count>1?' · ×'+rec.count:'')),
+      el('div',{class:'tiles',style:'margin-top:14px'},tile('❤️ '+st.hp,'HP'),tile('⚔️ '+st.atk,'Attack'),tile('Lv '+lvl,'Level'))),
+    el('div',{class:'card'},el('h2',{},'Moves'),
+      ...moves.map(m=>el('div',{class:'toprow'},el('span',{class:'lbl'},m.name),el('div',{class:'bar'},el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+Math.min(100,m.power*2)+'%;background:'+rr.color})) ),el('b',{style:'flex:none;width:48px;text-align:right'},'⚡'+m.power)))),
+    el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:10px'},el('h2',{style:'margin:0'},'Train'),el('span',{style:'font-weight:800'},'🍬 '+candy)),
+      el('div',{class:'row',style:'gap:8px;flex-wrap:wrap'},
+        lvl<CARD_MAX_LEVEL?el('button',{class:'btn primary'+(candy<upCost?' ghost':''),onclick:async()=>{if(await trainCard(dexId))viewCard(dexId);}},'⚡ Power Up (🍬'+upCost+')'):el('button',{class:'btn',disabled:'true'},'⚡ Max level'),
+        !rec.shiny?el('button',{class:'btn'+(candy<SHINY_COST?' ghost':''),onclick:async()=>{if(await makeCardShiny(dexId))viewCard(dexId);}},'✨ Make shiny (🍬'+SHINY_COST+')'):''),
+      el('p',{class:'small muted',style:'margin-top:10px'},'Power Up raises HP, Attack and move power. Earn more 🍬 candy by doing practices.'))));
 }
 async function viewCards(){
   stopTimer();
@@ -1280,13 +1302,29 @@ function trainCost(level){return 6+(level||1)*3;} // candy to raise a card from 
 async function trainerGet(){return (await dbAll('trainer')).find(t=>t.id===pid())||{id:pid(),xp:0,candy:0};}
 async function trainerAdd(xp,candy){const t=await trainerGet();t.xp=(t.xp||0)+(xp||0);t.candy=(t.candy||0)+(candy||0);t.updatedAt=Date.now();await dbPut('trainer',t);return t;}
 async function trainerSpend(candy){const t=await trainerGet();if((t.candy||0)<candy)return false;t.candy=(t.candy||0)-candy;t.updatedAt=Date.now();await dbPut('trainer',t);return true;}
+// Train (power up) a card a level. Returns true on success; caller refreshes its view.
 async function trainCard(dexId){
-  const rec=(await cardsForProfile()).find(c=>c.dexId===dexId);if(!rec)return;
-  if((rec.level||1)>=CARD_MAX_LEVEL)return toast('Already max level!');
+  const rec=(await cardsForProfile()).find(c=>c.dexId===dexId);if(!rec)return false;
+  if((rec.level||1)>=CARD_MAX_LEVEL){toast('Already max level!');return false;}
   const cost=trainCost(rec.level||1),t=await trainerGet();
-  if((t.candy||0)<cost)return toast('Need '+cost+' 🍬 to train — you have '+(t.candy||0)+'. Do more practice to earn candy!');
+  if((t.candy||0)<cost){toast('Need '+cost+' 🍬 to train — you have '+(t.candy||0)+'. Do more practice to earn candy!');return false;}
   await trainerSpend(cost);rec.level=(rec.level||1)+1;await dbPut('cards',rec);scheduleDriveSync();
-  toast('Trained! '+(POKE_BY_ID[dexId]?POKE_BY_ID[dexId].name:'')+' → Lv '+rec.level);viewCards();
+  toast('Trained! '+(POKE_BY_ID[dexId]?POKE_BY_ID[dexId].name:'')+' → Lv '+rec.level);return true;
+}
+// Spend candy to make a card shiny (cosmetic) — a flexible candy sink.
+const SHINY_COST=40;
+async function makeCardShiny(dexId){
+  const rec=(await cardsForProfile()).find(c=>c.dexId===dexId);if(!rec||rec.shiny)return false;
+  const t=await trainerGet();if((t.candy||0)<SHINY_COST){toast('Need '+SHINY_COST+' 🍬 to make this shiny.');return false;}
+  await trainerSpend(SHINY_COST);rec.shiny=true;await dbPut('cards',rec);scheduleDriveSync();toast('✨ '+(POKE_BY_ID[dexId]?POKE_BY_ID[dexId].name:'It')+' is now shiny!');return true;
+}
+// Battle-ready stats + moves, derived from tier + level (no extra storage; reused by battles).
+function cardStats(tier,level){level=level||1;return {hp:20+tier*8+(level-1)*5,atk:6+tier*3+(level-1)*2};}
+const MOVES=['Tackle','Quick Attack','Ember','Water Gun','Vine Whip','Thunder Shock','Gust','Bite','Scratch','Peck','Confusion','Rock Throw','Bubble','Spark','Razor Leaf','Headbutt'];
+function cardMoves(dexId,tier,level){
+  level=level||1;const a=MOVES[dexId%MOVES.length],b=MOVES[(dexId*7+3)%MOVES.length];
+  const names=a===b?[a]:[a,b];
+  return names.map((n,i)=>({name:n,power:6+tier*2+i*3+(level-1)*2}));
 }
 
 /* ----- MISTAKES NOTEBOOK ----- */
@@ -1795,7 +1833,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v1.6';
+const APP_VERSION='v1.7';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

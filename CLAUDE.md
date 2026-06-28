@@ -186,7 +186,13 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `viewCards` to **train** a card up a level (`trainCard`, `trainCost`, cap
   `CARD_MAX_LEVEL` 20). Rewards shown on results (`xpGain`/`candyGain`/`levelUp`).
   `trainer` syncs (merge keeps higher xp/candy) + export/import; card `level`
-  merges by max. Phase B (shop + sibling trading) not yet built.
+  merges by max.
+- **Card detail (`viewCard`)** — tapping an owned dex cell opens a detail screen:
+  derived **stats** (`cardStats` HP/ATK from tier+level) and **moves** (`cardMoves`,
+  deterministic per dexId, power scales with level) — reused by battles later — plus
+  flexible candy actions: **Power Up** (`trainCard`, returns bool; callers refresh)
+  and **Make shiny** (`makeCardShiny`, `SHINY_COST` 40). Sequence in progress:
+  #3 async trading stall + #4 practice-gated battles not yet built.
 - **Streaks / daily goal** — Home shows a 🔥 day-streak tile (`computeStreak`,
   UTC-based) and a daily-goal bar (`CFG.dailyGoal`, default 10, vs questions
   answered today). Generate-similar: `practiceTopic(topic)` builds a bank-first
