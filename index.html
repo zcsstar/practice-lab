@@ -105,23 +105,23 @@
   .chip{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s;user-select:none}
   .chip[aria-pressed="true"]{background:var(--brand);color:#fff;border-color:var(--brand)}
 
-  .runbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:var(--radius);padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+  .runbar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.85);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
   .timer{font-variant-numeric:tabular-nums;font-weight:800;font-size:20px;letter-spacing:.5px}
   .timer.warn{color:var(--bad)}
-  .nav-grid{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:6px;margin:0 0 6px;padding-bottom:3px;-webkit-overflow-scrolling:touch}
-  .qchip{flex:0 0 auto;width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:#fff;font-weight:700;cursor:pointer;font-size:12.5px;position:relative}
+  .nav-grid{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+  .qchip{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:#fff;font-weight:700;cursor:pointer;font-size:13px;position:relative}
   .qchip.cur{outline:3px solid rgba(0,122,255,.30);border-color:var(--brand)}
   .qchip.answered{background:#e7f0ff;border-color:#b9d7ff;color:var(--brand)}
   .qchip.flagged::after{content:"";position:absolute;top:-3px;right:-3px;width:11px;height:11px;border-radius:50%;background:var(--warn);border:2px solid #fff}
 
-  .qtext{font-size:16px;line-height:1.5;margin:4px 0 12px}
-  .opts{display:grid;gap:8px}
-  .opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:10px 13px;cursor:pointer;background:#fff;transition:.12s;font-size:15px;line-height:1.45}
+  .qtext{font-size:16.5px;line-height:1.6;margin:6px 0 18px}
+  .opts{display:grid;gap:10px}
+  .opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:13px 14px;cursor:pointer;background:#fff;transition:.12s;font-size:15px;line-height:1.5}
   .opt:hover{border-color:var(--brand)}
   .opt[aria-pressed="true"]{border-color:var(--brand);background:#e7f0ff}
   .opt .key{flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--card2);display:grid;place-items:center;font-weight:700;font-size:13px}
   .opt[aria-pressed="true"] .key{background:var(--brand);color:#fff}
-  .flagrow{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+  .flagrow{display:flex;align-items:center;gap:10px;margin-top:18px;padding-top:14px;border-top:1px dashed var(--line)}
 
   .scorehero{text-align:center;padding:10px 0 6px}
   .scorehero .pct{font-size:46px;font-weight:800;letter-spacing:-2px;line-height:1;color:var(--brand)}
@@ -1225,13 +1225,13 @@ function viewRun(){
     if(q.type==='multiple_choice'&&q.options){input=el('div',{class:'opts'});q.options.forEach((opt,oi)=>{input.append(el('button',{class:'opt',type:'button','aria-pressed':String(S.answers[i]===oi),onclick:()=>{S.answers[i]=oi;$$('.opt',input).forEach((x,xi)=>x.setAttribute('aria-pressed',String(xi===oi)));renderNav();}},el('span',{class:'key'},String.fromCharCode(65+oi)),el('span',{html:esc(opt)})));});}
     else input=el('input',{type:'text',placeholder:'Type your answer…',value:S.answers[i]||'',oninput:e=>{S.answers[i]=e.target.value;renderNav();}});
     const flagBtn=el('button',{class:'chip',type:'button','aria-pressed':String(S.flags[i]),onclick:()=>{S.flags[i]=!S.flags[i];flagBtn.setAttribute('aria-pressed',String(S.flags[i]));renderNav();}},'🚩 Unsure — flag for later');
-    const nav=el('div',{class:'row between',style:'margin-top:12px'},el('button',{class:'btn ghost',disabled:i===0,onclick:()=>{S.cur=Math.max(0,i-1);renderQ();renderNav();}},'← Prev'),(i===total-1)?el('button',{class:'btn primary',onclick:()=>confirmSubmit()},'Submit ✓'):el('button',{class:'btn primary',onclick:()=>{S.cur=Math.min(total-1,i+1);renderQ();renderNav();}},'Next →'));
+    const nav=el('div',{class:'row between',style:'margin-top:18px'},el('button',{class:'btn ghost',disabled:i===0,onclick:()=>{S.cur=Math.max(0,i-1);renderQ();renderNav();}},'← Prev'),(i===total-1)?el('button',{class:'btn primary',onclick:()=>confirmSubmit()},'Submit ✓'):el('button',{class:'btn primary',onclick:()=>{S.cur=Math.min(total-1,i+1);renderQ();renderNav();}},'Next →'));
     qHost.append(el('div',{class:'card'},head,qtext,fig,input,el('div',{class:'flagrow'},flagBtn),nav));renderMath(qHost);if(window.gsap&&!reduceMotion)gsap.from(qHost.firstElementChild,{autoAlpha:0,y:8,duration:.2,ease:'power2.out'});
   }
   show(el('div',{},
     el('div',{class:'runbar'},el('button',{class:'iconbtn',onclick:()=>{if(confirm('Leave this practice? Progress will be lost.'))viewHome();}},'✕'),el('div',{},el('div',{class:'small muted'},S.settings.examLabel+' · '+S.settings.subject),el('div',{class:'small muted'},S.settings.level)),el('div',{class:'spacer'}),el('div',{style:'text-align:right'},el('div',{class:'small muted'},S.limitSec?'Time left':'Time'),timerEl)),
     navWrap,qHost,
-    el('div',{style:'text-align:center;margin-top:10px'},el('button',{class:'btn primary',onclick:()=>confirmSubmit()},'Submit practice ✓'))
+    el('div',{class:'card',style:'text-align:center'},el('p',{class:'small muted',style:'margin:0 0 10px'},'Answer all you can, flag the tricky ones, then submit.'),el('button',{class:'btn primary block lg',onclick:()=>confirmSubmit()},'Submit practice ✓'))
   ));
   renderNav();renderQ();startTimer();
 }
@@ -2195,7 +2195,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.11';
+const APP_VERSION='v2.12';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
