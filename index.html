@@ -150,6 +150,7 @@
   .explain em{font-style:normal;font-weight:600;color:var(--brand)}
   .figure{max-width:420px;margin:4px auto 16px;display:flex;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:12px}
   .figure svg{max-width:100%;height:auto;display:block}
+  .figure img{max-width:100%;height:auto;display:block;border-radius:6px}
   .qresult .figure{background:#fff}
   .packbox{display:block;width:100%;border:2px dashed var(--brand);background:var(--feature);border-radius:var(--radius);padding:22px;cursor:pointer;text-align:center}
   .pcard{display:inline-block;background:#fff;border:3px solid var(--line);border-radius:16px;padding:14px 18px;position:relative}
@@ -280,6 +281,9 @@
 <script src="battle.js"></script>
 <!-- Structured diagram renderer (turns a {type,...} spec into correct SVG). Classic script; Node-testable. -->
 <script src="diagram.js"></script>
+<!-- PRIVATE transcribed question packs (real past papers), if present. Gitignored, never
+     in the public repo; the app works fine without it (a 404 here is harmless). -->
+<script src="papers.local.js"></script>
 <script>
 /* ============================================================ Practice Lab ============================================================ */
 const $=(s,el=document)=>el.querySelector(s);
@@ -327,6 +331,12 @@ function sanitizeSvg(s){
   s=s.replace(/(?:xlink:href|href)\s*=\s*("[^"]*"|'[^']*')/gi,'');
   return /<svg[\s>]/i.test(s)?s:'';
 }
+// A question figure may also carry a real cropped IMAGE (e.g. a map, photo, or
+// puzzle from a past paper that can't be drawn as a structured diagram). Only
+// allow self-contained data: image URLs — never external/js URLs.
+function safeImage(s){s=String(s||'').trim();return /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/i.test(s)?s:'';}
+// Build a question's figure block: a structured-diagram/SVG and/or a cropped image.
+function figureEl(it){const kids=[];if(it&&it.svg)kids.push(el('div',{html:it.svg}));const img=it&&safeImage(it.image);if(img)kids.push(el('img',{src:img,alt:'figure',loading:'lazy'}));return kids.length?el('div',{class:'figure'},...kids):'';}
 function renderMath(scope){if(window.renderMathInElement){try{renderMathInElement(scope||document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false});}catch(e){}}}
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('load '+src));document.head.append(s);});}
 function colorFor(str){let h=0;for(const c of String(str||'x'))h=(h*31+c.charCodeAt(0))%360;return `hsl(${h} 65% 55%)`;}
@@ -486,7 +496,7 @@ async function bankAdd(s,questions){
     if(!q||!q.question)continue;const hsh=qhash(q.question);if(seen.has(hsh))continue;seen.add(hsh);
     await dbPut('bank',{id:uid(),profileId:pid(),key,createdAt:Date.now(),servedCount:0,lastServedAt:0,qhash:hsh,
       country:s.country,subject:s.subject,exam:s.exam,examLabel:s.examLabel,level:s.level,difficulty:s.difficulty,style:s.style,
-      topic:q.topic,question:q.question,svg:q.svg,type:q.type,options:q.options,answerIndex:q.answerIndex,
+      topic:q.topic,question:q.question,svg:q.svg,image:q.image,type:q.type,options:q.options,answerIndex:q.answerIndex,
       answer:q.answer,acceptedAnswers:q.acceptedAnswers,explanation:q.explanation,marks:q.marks});
     added++;
   }
@@ -522,7 +532,7 @@ async function bankTake(s,count){
     while(chosen.length<count&&progressed){progressed=false;for(const t of names){const arr=byTopic[t];if(arr.length){chosen.push(arr.shift());progressed=true;if(chosen.length>=count)break;}}}
   }
   for(const b of chosen){b.servedCount=(b.servedCount||0)+1;b.lastServedAt=Date.now();await dbPut('bank',b);}
-  return chosen.map(b=>({topic:b.topic,type:b.type,question:b.question,svg:b.svg,options:b.options,answerIndex:b.answerIndex,answer:b.answer,acceptedAnswers:b.acceptedAnswers,explanation:b.explanation,marks:b.marks,fromBank:true}));
+  return chosen.map(b=>({topic:b.topic,type:b.type,question:b.question,svg:b.svg,image:b.image,options:b.options,answerIndex:b.answerIndex,answer:b.answer,acceptedAnswers:b.acceptedAnswers,explanation:b.explanation,marks:b.marks,fromBank:true}));
 }
 function dayISO(d){return d.toISOString().slice(0,10);}
 // Consecutive-day streak ending today or yesterday, from a list of YYYY-MM-DD strings.
@@ -698,7 +708,7 @@ function parseQuestions(raw){
       answer:(q.answer!=null)?String(q.answer):(opts&&typeof ai==='number'?String(opts[ai]):''),
       acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):(Array.isArray(q.accepted)?q.accepted.map(String):[]),
       explanation:q.explanation||q.solution||q.working||q.reason||'',marks:Number(q.marks||q.mark||q.points)||1,
-      svg:sanitizeSvg(svgRaw)};return repointFromExplanation(o);});
+      svg:sanitizeSvg(svgRaw),image:safeImage(q.image)};return repointFromExplanation(o);});
 }
 // Mis-key backstop: trust the worked explanation's CONCLUDED value over a
 // possibly wrong answer key. Models sometimes set BOTH "answer" and
@@ -932,6 +942,7 @@ async function viewHome(){
     menuItem('🎴','My cards',caughtN?caughtN+' of '+POKEDEX.length+' caught — open packs by practising':'Finish a practice to earn your first card!',()=>viewCards()),
     isParent()?menuItem('👨‍👩‍👧','All students','Compare progress across the family',()=>viewDashboard()):null,
     menuItem('📚','Reference library','Real past papers — ground questions in authentic exam style',()=>viewRefs()),
+    (window.PL_QUESTION_PACKS&&window.PL_QUESTION_PACKS.length)?menuItem('📄','Past papers',`Drill ${window.PL_QUESTION_PACKS.length} real exam paper${window.PL_QUESTION_PACKS.length>1?'s':''} — actual questions & diagrams`,()=>viewPapers()):null,
   );
   const setupWarn=!CFG.apiKey?el('div',{class:'card',style:'border-color:#ffd8a8;background:#fff7ed'},el('h2',{},isParent()?'👋 First, add your AI key':'🔑 Waiting for the AI key'),el('p',{class:'sub',style:'margin-bottom:10px'},isParent()?'Practice Lab needs an AI key to write questions. The free Google Gemini key takes ~2 minutes.':'A parent needs to set up the shared AI key, then you’re ready to go.'),isParent()?el('button',{class:'btn primary',onclick:()=>viewSettings()},'Open settings'):null):null;
   const driveBanner=(isParent()&&CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'&&!driveToken)?el('div',{class:'card',style:'border-color:#cfe2ff;background:var(--feature)'},el('h2',{},'☁️ Sync across devices'),el('p',{class:'sub',style:'margin-bottom:10px'},'Connect Google Drive (once per device, same Google account) to share students, defaults, past papers and history everywhere.'),el('button',{class:'btn primary',onclick:()=>{CFG.drive.enabled=true;saveCfg();driveConnect(true);}},'Connect Google Drive')):null;
@@ -942,6 +953,41 @@ async function viewHome(){
     driveBanner,
     el('div',{class:'card'},el('h2',{},'What would you like to do?'),el('p',{class:'sub'},''),menu)
   ));
+}
+
+/* ----- Past papers (PRIVATE, device-local real-question packs) -----
+   Packs come from papers.local.js (window.PL_QUESTION_PACKS), never the repo.
+   Drilled directly (not via the difficulty-keyed bank); real figures/photos ride
+   along as cropped images and structured-diagram specs render via PLDiagram. */
+function startPaper(pk){
+  const setup=Object.assign({country:'',subject:pk.subject||'Maths',exam:pk.exam||'icas',examLabel:pk.title||'Past paper',level:pk.level||'',topics:[],difficulty:3,style:'paper',timeLimitMin:0},pk.setup||{});
+  // Pack answers are curated/verified, so we TRUST answerIndex — do NOT run the
+  // AI mis-key backstop here (it can mis-fire on non-numeric answers like "leave
+  // out the + card" whose explanation contains numbers matching other options).
+  const qs=(pk.questions||[]).map((q,i)=>{
+    let svg=q.svg||'';
+    if(q.diagram&&typeof q.diagram==='object'&&typeof PLDiagram!=='undefined'){try{const d=PLDiagram.render(q.diagram);if(d)svg=d;}catch(e){}}
+    return Object.assign({},q,{id:'q'+i,svg:sanitizeSvg(svg),image:safeImage(q.image)});
+  });
+  if(!qs.length)return toast('This paper has no questions yet.');
+  startSession(setup,qs,'practice');viewRun();
+}
+function viewPapers(){
+  stopTimer();
+  const packs=(typeof window!=='undefined'&&window.PL_QUESTION_PACKS)||[];
+  const body=[];
+  if(!packs.length){
+    body.push(el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'📄'),el('div',{},'No past-paper packs on this device. These hold real exam questions (private) and are added by a parent via a local papers file.'))));
+  }else{
+    packs.forEach((pk,i)=>{const qn=(pk.questions||[]).length;
+      body.push(el('div',{class:'card'},el('div',{class:'row between'},
+        el('div',{},el('b',{},pk.title||('Paper '+(i+1))),el('div',{class:'small muted'},[pk.subject,pk.level,pk.year].filter(Boolean).join(' · ')+' · '+qn+' question'+(qn===1?'':'s'))),
+        el('button',{class:'btn primary',onclick:()=>startPaper(pk)},'Start'))));
+    });
+  }
+  show(el('div',{},backBar('Past papers',()=>viewHome()),
+    el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('p',{class:'sub',style:'margin:0'},'📄 Real past-paper questions — the genuine exam, including its diagrams and pictures. Private to this device.')),
+    ...body));
 }
 
 /* ----- PROFILES ----- */
@@ -1122,7 +1168,7 @@ function viewRun(){
     const i=S.cur,q=S.questions[i];qHost.innerHTML='';
     const head=el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)+' of '+total),el('span',{class:'pill'},q.topic),el('span',{class:'pill'},q.marks+' mark'+(q.marks>1?'s':''))),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak(qSpeakText(q))},'🔊'));
     const qtext=el('div',{class:'qtext',html:esc(q.question)});
-    const fig=q.svg?el('div',{class:'figure',html:q.svg}):'';
+    const fig=figureEl(q);
     let input;
     if(q.type==='multiple_choice'&&q.options){input=el('div',{class:'opts'});q.options.forEach((opt,oi)=>{input.append(el('button',{class:'opt',type:'button','aria-pressed':String(S.answers[i]===oi),onclick:()=>{S.answers[i]=oi;$$('.opt',input).forEach((x,xi)=>x.setAttribute('aria-pressed',String(xi===oi)));renderNav();}},el('span',{class:'key'},String.fromCharCode(65+oi)),el('span',{html:esc(opt)})));});}
     else input=el('input',{type:'text',placeholder:'Type your answer…',value:S.answers[i]||'',oninput:e=>{S.answers[i]=e.target.value;renderNav();}});
@@ -1151,9 +1197,9 @@ async function submitSession(){
     country:S.settings.country,subject:S.settings.subject,exam:S.settings.exam,examLabel:S.settings.examLabel,level:S.settings.level,
     topicsRequested:S.settings.topics,difficulty:S.settings.difficulty,count:S.questions.length,elapsed:S.elapsed,totalMarks,gotMarks,percent,
     correct:results.filter(r=>r.status==='correct').length,wrong:results.filter(r=>r.status==='wrong').length,needsReview:results.filter(r=>r.status==='review').length,flagged:results.filter(r=>r.flagged).length,
-    results:results.map(r=>({topic:r.q.topic,type:r.q.type,question:r.q.question,svg:r.q.svg,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,userAns:r.userAns,flagged:r.flagged,status:r.status,auto:r.auto}))};
+    results:results.map(r=>({topic:r.q.topic,type:r.q.type,question:r.q.question,svg:r.q.svg,image:r.q.image,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,userAns:r.userAns,flagged:r.flagged,status:r.status,auto:r.auto}))};
   await dbPut('attempts',attempt);
-  for(const r of results){if(r.status==='wrong'||r.status==='review'||r.flagged){await dbPut('review',{id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),attemptId:S.id,exam:S.settings.exam,subject:S.settings.subject,level:S.settings.level,topic:r.q.topic,reason:r.flagged?'flagged':(r.status==='review'?'review':'wrong'),timesSeen:1,timesCorrect:0,mastered:false,question:r.q.question,svg:r.q.svg,type:r.q.type,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks});}}
+  for(const r of results){if(r.status==='wrong'||r.status==='review'||r.flagged){await dbPut('review',{id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),attemptId:S.id,exam:S.settings.exam,subject:S.settings.subject,level:S.settings.level,topic:r.q.topic,reason:r.flagged?'flagged':(r.status==='review'?'review':'wrong'),timesSeen:1,timesCorrect:0,mastered:false,question:r.q.question,svg:r.q.svg,image:r.q.image,type:r.q.type,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks});}}
   // Rewards (practice mode): XP from correct answers × difficulty (quality), candy
   // for completing (effort — even low accuracy earns some), and a Poké-Pack card if
   // ≥PACK_MIN_Q and within the daily cap. Rarity is rolled from THIS result;
@@ -1205,7 +1251,7 @@ function viewResults(a){
     list.append(el('div',{class:'qresult '+cls},
       el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)),el('span',{class:'pill'},r.topic),r.flagged?el('span',{class:'pill',style:'color:#d97706'},'🚩 flagged'):''),badge),
       el('div',{class:'qtext',style:'font-size:16px;margin:8px 0 6px',html:esc(r.question)}),
-      r.svg?el('div',{class:'figure',html:r.svg}):'',
+      figureEl(r),
       el('div',{class:'ans-line'},el('b',{},'Your answer: '),el('span',{html:esc(yourAns)})),
       el('div',{class:'ans-line'},el('b',{},'Correct answer: '),el('span',{html:esc(correctAns)})),
       r.status==='review'?el('div',{class:'row',style:'margin-top:10px;gap:8px'},el('button',{class:'btn sm',onclick:()=>regrade(a,i,'correct')},'I got it right'),el('button',{class:'btn sm danger',onclick:()=>regrade(a,i,'wrong')},'I got it wrong')):'',
@@ -1590,7 +1636,7 @@ async function acceptTrade(id){
 function startReview(items){
   const pick=items.slice(0,Math.min(15,items.length));
   if(!pick.length)return toast('Nothing to practise here.');
-  const qs=pick.map((it,i)=>repointFromExplanation({id:'q'+i,reviewId:it.id,topic:it.topic,type:it.type,question:it.question,svg:it.svg,options:it.options,answerIndex:it.answerIndex,answer:it.answer,acceptedAnswers:it.acceptedAnswers,explanation:it.explanation,marks:it.marks}));
+  const qs=pick.map((it,i)=>repointFromExplanation({id:'q'+i,reviewId:it.id,topic:it.topic,type:it.type,question:it.question,svg:it.svg,image:it.image,options:it.options,answerIndex:it.answerIndex,answer:it.answer,acceptedAnswers:it.acceptedAnswers,explanation:it.explanation,marks:it.marks}));
   startSession({country:'',subject:'Review',exam:pick[0].exam||'general',examLabel:'Mistakes notebook re-test',level:'Mixed',topics:[],difficulty:3,style:'mixed',timeLimitMin:0},qs,'review');
   viewRun();
 }
@@ -1611,7 +1657,7 @@ async function viewReview(){
         el('summary',{style:'list-style:none'},el('div',{class:'row between'},
           el('div',{class:'qtext',style:'font-size:15px;margin:0;flex:1',html:esc(it.question)}),
           el('span',{class:'pill',style:'flex:none;margin-left:8px'},(it.timesCorrect||0)+'/2'))),
-        it.svg?el('div',{class:'figure',html:it.svg}):'',
+        figureEl(it),
         el('div',{class:'ans-line'},el('b',{},'Correct answer: '),el('span',{html:esc(corr)})),
         el('div',{class:'small muted',style:'margin-top:4px'},(reasonTag[it.reason]||'to revise')+' · seen '+(it.timesSeen||0)+'× · '+(it.timesCorrect||0)+'/2 correct to master'),
         el('div',{class:'explain'},el('div',{class:'row between'},el('div',{class:'h'},'How to solve it'),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:(e)=>{e.preventDefault();speak((it.question||'')+'. '+it.explanation);}},'🔊')),el('div',{html:fmtExplain(it.explanation)})));
@@ -2094,7 +2140,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.5';
+const APP_VERSION='v2.6';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

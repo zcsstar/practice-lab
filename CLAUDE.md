@@ -175,6 +175,23 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `svg` field (so every downstream path is unchanged); a raw inline-`svg` string
   still works as the fallback, and an unknown/empty spec returns `''` → no diagram,
   no crash. Output is sanitiser-safe. Tested in [diagram.test.js](diagram.test.js).
+- **Question figures** — `figureEl(q)` builds a question's `.figure`: its diagram/`svg`
+  AND/OR a cropped **`image`** (a `data:` URL; `safeImage()` allows only
+  `data:image/*;base64` — never external/js). Used for things the diagram engine
+  can't draw — maps, puzzles, clip-art, photos (esp. real past papers / Science).
+  `image` is threaded through the same spreads as `svg` (parse, bank add/take,
+  attempt results, review). Rendered in runner/results/review, capped to 420px.
+- **Past papers / real-question packs ([past-paper feature], `viewPapers`/`startPaper`)**
+  — PRIVATE transcribed real exam questions live in `window.PL_QUESTION_PACKS`,
+  loaded from a **gitignored `papers.local.js`** (never in the public repo — real
+  ICAS questions are copyright). A "📄 Past papers" home item appears only when packs
+  are present; `startPaper(pack)` drills them directly (NOT via the difficulty-keyed
+  bank), rendering `diagram` specs and sanitising `image`s. **Trusts the curated
+  `answerIndex` — does NOT run `repointFromExplanation`** (which can mis-fire on
+  non-numeric answers like "leave out the + card"). Packs are transcribed from
+  `papers/` (also gitignored) by rendering each scanned page (PyMuPDF, a local dev
+  tool) and reading it; bespoke figures are cropped to `image`, standard charts become
+  `diagram` specs. NZ ICAS levels: Paper B=Y5, C=Y6, D=Y7, E=Y8, F=Y9 (AU is one lower).
   - **`el()` escaping gotcha:** string children are inserted via `createTextNode`
     (already XSS-safe) — do NOT wrap child text in `esc()` (double-encodes, e.g.
     "Data &amp; graphs"). `esc()` is only for `{html:...}` / attribute strings.
