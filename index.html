@@ -467,8 +467,8 @@ function activeProfile(){return CFG.profiles.find(p=>p.id===CFG.activeProfileId)
 function pid(){return activeProfile().id;}
 
 /* ---------- IndexedDB ---------- */
-const DB_NAME='practicelab',DB_VER=6;let _db=null;
-function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;for(const s of ['attempts','review','refs','bank','cards','trainer','trades'])if(!db.objectStoreNames.contains(s))db.createObjectStore(s,{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
+const DB_NAME='practicelab',DB_VER=7;let _db=null;
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;for(const s of ['attempts','review','refs','bank','cards','trainer','trades','packs'])if(!db.objectStoreNames.contains(s))db.createObjectStore(s,{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
 function tx(store,mode='readonly'){return _db.transaction(store,mode).objectStore(store);}
 function dbAll(store){return new Promise((res,rej)=>{const out=[];const c=tx(store).openCursor();c.onsuccess=e=>{const cur=e.target.result;if(cur){out.push(cur.value);cur.continue();}else res(out);};c.onerror=e=>rej(e.target.error);});}
 function dbPut(store,val){return new Promise((res,rej)=>{const r=tx(store,'readwrite').put(val);r.onsuccess=()=>res();r.onerror=e=>rej(e.target.error);});}
@@ -930,6 +930,7 @@ async function viewHome(){
   const attempts=(await dbAll('attempts')).filter(a=>a.profileId===pid()).sort((a,b)=>b.startedAt-a.startedAt);
   const review=(await dbAll('review')).filter(r=>r.profileId===pid()&&!r.mastered);
   const bankN=(await bankStats()).total;
+  const packN=(await dbAll('packs')).length;
   const caughtN=(await cardsForProfile()).length;
   const avg=attempts.length?Math.round(attempts.reduce((s,a)=>s+a.percent,0)/attempts.length):0;
   const streak=computeStreak(attempts.map(a=>a.date));
@@ -946,7 +947,7 @@ async function viewHome(){
     menuItem('🎴','My cards',caughtN?caughtN+' of '+POKEDEX.length+' caught — open packs by practising':'Finish a practice to earn your first card!',()=>viewCards()),
     isParent()?menuItem('👨‍👩‍👧','All students','Compare progress across the family',()=>viewDashboard()):null,
     menuItem('📚','Reference library','Real past papers — ground questions in authentic exam style',()=>viewRefs()),
-    (window.PL_QUESTION_PACKS&&window.PL_QUESTION_PACKS.length)?menuItem('📄','Past papers',`Drill ${window.PL_QUESTION_PACKS.length} real exam paper${window.PL_QUESTION_PACKS.length>1?'s':''} — actual questions & diagrams`,()=>viewPapers()):null,
+    menuItem('📄','Past papers',packN?`Drill ${packN} real exam paper${packN>1?'s':''} — actual questions & diagrams`:'Import real past-paper packs to drill',()=>viewPapers()),
   );
   const setupWarn=!CFG.apiKey?el('div',{class:'card',style:'border-color:#ffd8a8;background:#fff7ed'},el('h2',{},isParent()?'👋 First, add your AI key':'🔑 Waiting for the AI key'),el('p',{class:'sub',style:'margin-bottom:10px'},isParent()?'Practice Lab needs an AI key to write questions. The free Google Gemini key takes ~2 minutes.':'A parent needs to set up the shared AI key, then you’re ready to go.'),isParent()?el('button',{class:'btn primary',onclick:()=>viewSettings()},'Open settings'):null):null;
   const driveBanner=(isParent()&&CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'&&!driveToken)?el('div',{class:'card',style:'border-color:#cfe2ff;background:var(--feature)'},el('h2',{},'☁️ Sync across devices'),el('p',{class:'sub',style:'margin-bottom:10px'},'Connect Google Drive (once per device, same Google account) to share students, defaults, past papers and history everywhere.'),el('button',{class:'btn primary',onclick:()=>{CFG.drive.enabled=true;saveCfg();driveConnect(true);}},'Connect Google Drive')):null;
@@ -959,8 +960,10 @@ async function viewHome(){
   ));
 }
 
-/* ----- Past papers (PRIVATE, device-local real-question packs) -----
-   Packs come from papers.local.js (window.PL_QUESTION_PACKS), never the repo.
+/* ----- Past papers (PRIVATE real-question packs) -----
+   Packs are transcribed real exam questions. They live in the SHARED, Drive-synced
+   `packs` store — imported once from a JSON file (a parent's device) and synced to
+   every device, so they work on the public Pages URL without ever being in the repo.
    Drilled directly (not via the difficulty-keyed bank); real figures/photos ride
    along as cropped images and structured-diagram specs render via PLDiagram. */
 function startPaper(pk){
@@ -976,22 +979,47 @@ function startPaper(pk){
   if(!qs.length)return toast('This paper has no questions yet.');
   startSession(setup,qs,'practice');viewRun();
 }
-function viewPapers(){
+function packSlug(p){return ('pack:'+[p.subject,p.level,p.year,p.title].filter(Boolean).join('-')).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/-+/g,'-').slice(0,80);}
+// Import one or more packs from a JSON file (a pack object, an array, or {packs:[…]}).
+async function importPacks(file){
+  try{
+    const data=JSON.parse(await file.text());
+    let arr=Array.isArray(data)?data:(Array.isArray(data.packs)?data.packs:[data]);
+    arr=arr.filter(p=>p&&Array.isArray(p.questions)&&p.questions.length);
+    if(!arr.length)return toast('No questions found in that file.');
+    let n=0;for(const p of arr){p.id=p.id||packSlug(p);p.updatedAt=Date.now();await dbPut('packs',p);n++;}
+    scheduleDriveSync();toast('Imported '+n+' pack'+(n>1?'s':'')+' — syncing to your devices…');viewPapers();
+  }catch(e){alert('Couldn’t read that pack file:\n\n'+(e.message||e));}
+}
+async function delPack(id){const p=(await dbAll('packs')).find(x=>x.id===id);if(!p)return;if(!confirm('Remove “'+(p.title||'this pack')+'” from all your devices?'))return;await dbDel('packs',id);scheduleDriveSync();viewPapers();}
+async function viewPapers(){
   stopTimer();
-  const packs=(typeof window!=='undefined'&&window.PL_QUESTION_PACKS)||[];
+  const packs=(await dbAll('packs')).sort((a,b)=>String(a.title||'').localeCompare(String(b.title||'')));
+  const fileInput=el('input',{type:'file',accept:'.json,application/json',style:'display:none',onchange:e=>{if(e.target.files[0])importPacks(e.target.files[0]);}});
+  const importCard=el('div',{class:'card'},el('div',{class:'row between',style:'align-items:center'},
+    el('div',{},el('b',{},'➕ Import a paper pack'),el('div',{class:'small muted'},'Load a transcribed past-paper file (.json). It syncs to all your devices.')),
+    el('button',{class:'btn',onclick:()=>fileInput.click()},'Choose file…')),fileInput);
   const body=[];
   if(!packs.length){
-    body.push(el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'📄'),el('div',{},'No past-paper packs on this device. These hold real exam questions (private) and are added by a parent via a local papers file.'))));
+    body.push(el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'📄'),el('div',{},'No past-paper packs yet. Import one above — once added on any device it syncs everywhere.'))));
   }else{
-    packs.forEach((pk,i)=>{const qn=(pk.questions||[]).length;
-      body.push(el('div',{class:'card'},el('div',{class:'row between'},
-        el('div',{},el('b',{},pk.title||('Paper '+(i+1))),el('div',{class:'small muted'},[pk.subject,pk.level,pk.year].filter(Boolean).join(' · ')+' · '+qn+' question'+(qn===1?'':'s'))),
-        el('button',{class:'btn primary',onclick:()=>startPaper(pk)},'Start'))));
+    packs.forEach(pk=>{const qn=(pk.questions||[]).length;
+      body.push(el('div',{class:'card'},el('div',{class:'row between',style:'align-items:center'},
+        el('div',{},el('b',{},pk.title||'Paper'),el('div',{class:'small muted'},[pk.subject,pk.level,pk.year].filter(Boolean).join(' · ')+' · '+qn+' question'+(qn===1?'':'s'))),
+        el('div',{class:'row',style:'gap:6px'},el('button',{class:'btn primary',onclick:()=>startPaper(pk)},'Start'),el('button',{class:'btn ghost',title:'Remove',onclick:()=>delPack(pk.id)},'🗑️')))));
     });
   }
   show(el('div',{},backBar('Past papers',()=>viewHome()),
-    el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('p',{class:'sub',style:'margin:0'},'📄 Real past-paper questions — the genuine exam, including its diagrams and pictures. Private to this device.')),
-    ...body));
+    el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('p',{class:'sub',style:'margin:0'},'📄 Real past-paper questions — the genuine exam, including its diagrams and pictures. Private to your family (synced via your Drive, never in the public app).')),
+    importCard,...body));
+}
+// Seed packs from a bundled papers.local.js (window.PL_QUESTION_PACKS) on boot — for
+// local/dev use; on the public Pages site packs arrive via import + Drive sync instead.
+async function seedLocalPacks(){
+  try{const arr=(typeof window!=='undefined'&&window.PL_QUESTION_PACKS)||[];if(!arr.length)return;
+    const have=new Set((await dbAll('packs')).map(p=>p.id));
+    for(const p of arr){if(!p||!Array.isArray(p.questions))continue;const id=p.id||packSlug(p);if(!have.has(id)){p.id=id;p.updatedAt=p.updatedAt||Date.now();await dbPut('packs',p);}}
+  }catch(e){console.warn('seedLocalPacks',e);}
 }
 
 /* ----- PROFILES ----- */
@@ -2032,7 +2060,7 @@ async function driveSyncNow(){if(!driveToken)return;try{const fileId=await drive
 // extracted text + tags travel; the PDF/image stays on the device that imported
 // it (where grounding/pre-generation happens). Keeps the sync blob light.
 const refsLite=(await dbAll('refs')).map(({dataB64,...r})=>r);
-const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
   // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
   if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
@@ -2053,6 +2081,8 @@ async function mergeRemote(remote){
   // Trades: a resolved (done/cancelled) status always wins over open, so a taken offer can't reopen.
   const rank=s=>s==='open'?0:1;
   const lq=new Map((await dbAll('trades')).map(t=>[t.id,t]));for(const t of(remote.trades||[])){const cur=lq.get(t.id);if(!cur)await dbPut('trades',t);else if(rank(t.status)>rank(cur.status)||(t.resolvedAt||0)>(cur.resolvedAt||0))await dbPut('trades',t);}
+  // Past-paper packs (shared, real questions): merge by id; a newer updatedAt wins.
+  const lpk=new Map((await dbAll('packs')).map(p=>[p.id,p]));for(const p of(remote.packs||[])){const cur=lpk.get(p.id);if(!cur||(p.updatedAt||0)>(cur.updatedAt||0))await dbPut('packs',p);}
   await reconcileProfiles();
 }
 
@@ -2137,6 +2167,7 @@ async function startApp(){
   $('header.app').style.display='';
   applyVaultMeta();
   await reconcileProfiles();
+  await seedLocalPacks();
   initEmailJS();refreshHeaderProfile();
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   // Parents land on the family dashboard; students land on their own home.
@@ -2144,7 +2175,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.7';
+const APP_VERSION='v2.8';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

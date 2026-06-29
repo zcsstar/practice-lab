@@ -185,17 +185,23 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   can't draw — maps, puzzles, clip-art, photos (esp. real past papers / Science).
   `image` is threaded through the same spreads as `svg` (parse, bank add/take,
   attempt results, review). Rendered in runner/results/review, capped to 420px.
-- **Past papers / real-question packs ([past-paper feature], `viewPapers`/`startPaper`)**
-  — PRIVATE transcribed real exam questions live in `window.PL_QUESTION_PACKS`,
-  loaded from a **gitignored `papers.local.js`** (never in the public repo — real
-  ICAS questions are copyright). A "📄 Past papers" home item appears only when packs
-  are present; `startPaper(pack)` drills them directly (NOT via the difficulty-keyed
-  bank), rendering `diagram` specs and sanitising `image`s. **Trusts the curated
-  `answerIndex` — does NOT run `repointFromExplanation`** (which can mis-fire on
-  non-numeric answers like "leave out the + card"). Packs are transcribed from
-  `papers/` (also gitignored) by rendering each scanned page (PyMuPDF, a local dev
-  tool) and reading it; bespoke figures are cropped to `image`, standard charts become
+- **Past papers / real-question packs (`viewPapers`/`startPaper`, `packs` store)**
+  — PRIVATE transcribed real exam questions, real ICAS content is copyright so NEVER
+  in the repo. They live in a **SHARED, Drive-synced `packs` store** (DB **v7**; merged
+  by id, newer `updatedAt` wins) so they reach the **public Pages app on every device**
+  without being committed. Delivery: `importPacks(file)` reads a **`.json` pack file**
+  via the "📄 Past papers" screen's file picker → writes to the store → `scheduleDriveSync`
+  → syncs everywhere. `seedLocalPacks()` also seeds from a bundled gitignored
+  `papers.local.js` (`window.PL_QUESTION_PACKS`) for local/dev. The home item always
+  shows (so import is reachable). `startPaper(pack)` drills directly (NOT via the
+  difficulty-keyed bank), rendering `diagram` specs and sanitising `image`s, and
+  **trusts the curated `answerIndex`** (does NOT run `repointFromExplanation`, which
+  can mis-fire on non-numeric answers like "leave out the + card"). Pack file shape:
+  `{title,subject,level,year,exam,setup,questions:[…]}`. Transcribed from `papers/`
+  (gitignored) by rendering each scanned page (PyMuPDF, a local dev tool) and reading
+  it — bespoke figures cropped to `image` (compressed), standard/schematic figures as
   `diagram` specs. NZ ICAS levels: Paper B=Y5, C=Y6, D=Y7, E=Y8, F=Y9 (AU is one lower).
+  Answer keys are at the END of each paper (with strands + skill descriptions).
   - **`el()` escaping gotcha:** string children are inserted via `createTextNode`
     (already XSS-safe) — do NOT wrap child text in `esc()` (double-encodes, e.g.
     "Data &amp; graphs"). `esc()` is only for `{html:...}` / attribute strings.
