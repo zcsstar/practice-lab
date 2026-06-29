@@ -7,7 +7,7 @@ family (multiple children), starting with NZ maths (ICAS primary + Rangitoto
 College extension), but generalised to any country / subject / exam / level.
 
 The app is [index.html](index.html) plus a small number of sibling static files
-([parse.js](parse.js), [battle.js](battle.js)). No build step, no dependencies installed
+([parse.js](parse.js), [battle.js](battle.js), [diagram.js](diagram.js)). No build step, no dependencies installed
 locally. It runs by double-clicking `index.html` or hosting it statically
 (GitHub Pages). Setup instructions for the user are in [SETUP.md](SETUP.md).
 
@@ -161,8 +161,20 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   (plain text + `$LaTeX$` + `**bold**`/`*italic*` + numbered steps / `*` bullets)
   into readable HTML blocks, protecting `$…$` spans (incl. escaped `\$` for money
   like `$\$5$`) so KaTeX still renders them. Prompt tells the model to write money
-  as `$\$x$`. Questions may carry an optional `svg` diagram (`sanitizeSvg()` strips
-  scripts / external refs / handlers); rendered in runner + results.
+  as `$\$x$`. Questions may carry a diagram, rendered in runner + results (capped
+  to `.figure` max-width 420px, centred).
+- **Diagrams ([diagram.js](diagram.js), `PLDiagram.render(spec)`)** — models are
+  unreliable at hand-drawing SVG (pie arcs especially), so the prompt asks for a
+  STRUCTURED `diagram` spec `{type,...}` and this module draws correct, tested SVG.
+  Covers ~13 types: pie/fraction-circle, bar, numberline, fractionbar (tape/bar
+  model), shape (rectangle/square/triangle/right-triangle/parallelogram/trapezoid/
+  circle/polygon with side+angle labels), clock, pictogram, array/grid, coordinate
+  plane, angle, lineplot/dotplot, venn, tally (aliases tolerated). Pure string output
+  (no DOM) → Node-testable + works on file://. **Integration is near-zero-blast:**
+  `parseQuestions` renders `q.diagram` (object) via `PLDiagram` into the existing
+  `svg` field (so every downstream path is unchanged); a raw inline-`svg` string
+  still works as the fallback, and an unknown/empty spec returns `''` → no diagram,
+  no crash. Output is sanitiser-safe. Tested in [diagram.test.js](diagram.test.js).
   - **`el()` escaping gotcha:** string children are inserted via `createTextNode`
     (already XSS-safe) — do NOT wrap child text in `esc()` (double-encodes, e.g.
     "Data &amp; graphs"). `esc()` is only for `{html:...}` / attribute strings.
@@ -321,6 +333,8 @@ locally. It runs by double-clicking `index.html` or hosting it statically
    from index.html; covers the explanation-vs-key re-point + safety cases).
    **Battle types:** `node battle.test.js` (extracts the type system from
    index.html; covers canonical types, the effectiveness chart, stat/move shapes).
+   **Diagrams:** `node diagram.test.js` (the `diagram.js` renderer: every type makes
+   valid safe SVG; pie/array/clock geometry; aliases; bad specs → '' fallback).
 2. **Run it:** `python -m http.server 8744` in this dir, open
    `http://localhost:8744/index.html`.
 3. **JS syntax check** without a browser:

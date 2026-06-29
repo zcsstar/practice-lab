@@ -148,7 +148,7 @@
   .explain .bullet .t{flex:1;min-width:0}
   .explain strong{font-weight:700;color:var(--ink)}
   .explain em{font-style:normal;font-weight:600;color:var(--brand)}
-  .figure{margin:4px 0 16px;display:flex;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:12px}
+  .figure{max-width:420px;margin:4px auto 16px;display:flex;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:12px}
   .figure svg{max-width:100%;height:auto;display:block}
   .qresult .figure{background:#fff}
   .packbox{display:block;width:100%;border:2px dashed var(--brand);background:var(--feature);border-radius:var(--radius);padding:22px;cursor:pointer;text-align:center}
@@ -278,6 +278,8 @@
 <script src="parse.js"></script>
 <!-- Poké battle module (vs PC). Classic script; uses globals from the main script at call-time. -->
 <script src="battle.js"></script>
+<!-- Structured diagram renderer (turns a {type,...} spec into correct SVG). Classic script; Node-testable. -->
+<script src="diagram.js"></script>
 <script>
 /* ============================================================ Practice Lab ============================================================ */
 const $=(s,el=document)=>el.querySelector(s);
@@ -599,10 +601,24 @@ REQUIREMENTS:
 - CRITICAL — answer accuracy: actually SOLVE each question and double-check the arithmetic. The "answer"/"answerIndex" MUST be the correct result AND must equal the final result your explanation arrives at. For multiple_choice, the option at "answerIndex" must be exactly that correct result (and "answer" must be that option's text). If your worked explanation ends at a value, the key MUST point to the option showing that value — never a different one.
 - numeric/short: give "answer" (exact) plus "acceptedAnswers" (equivalent correct forms, e.g. ["0.5","1/2"]).
 - "marks": whole number; harder questions worth more.
-- DIAGRAMS (optional but encouraged where a picture truly helps — geometry, shapes, fractions, bar models, number lines, clocks, simple data/charts): add an "svg" field containing a clean, self-contained inline SVG diagram. Use a viewBox (e.g. "0 0 300 200"), readable labels, clear strokes and light fills, NO <script>, NO external images/links, NO width/height in px (let it scale). Keep it simple and uncluttered, suitable for a child. Omit "svg" entirely when a diagram adds nothing.
+- DIAGRAMS — when a picture genuinely helps (fractions, shapes/geometry, data, time, number sense), add a "diagram" field: a STRUCTURED object {"type":...,...} that the app renders correctly. Do NOT hand-draw SVG for these. Choose the matching type:
+  • pie: {"type":"pie","parts":[{"label":"Red","value":3},{"label":"Blue","value":1}]} (add "showPercent":true for a % pie; for a shaded fraction-circle use 2 parts with the unshaded one coloured "#fff")
+  • bar: {"type":"bar","title":"Pets","bars":[{"label":"Cat","value":4},{"label":"Dog","value":7}]}
+  • numberline: {"type":"numberline","min":0,"max":10,"step":1,"points":[{"value":7,"label":"A"}],"segment":{"from":2,"to":7}}
+  • fractionbar: {"type":"fractionbar","rows":[{"parts":4,"shaded":3,"label":"3/4"}]} (each bar splits into equal parts with some shaded)
+  • shape: {"type":"shape","kind":"rectangle|square|triangle|right-triangle|parallelogram|trapezoid|circle|polygon","shaded":true,"sides":6,"labels":{"width":"8 cm","height":"5 cm","base":"..","top":"..","side":"..","radius":"..","diameter":"..","hyp":".."}}
+  • clock: {"type":"clock","h":3,"m":15}
+  • pictogram: {"type":"pictogram","icon":"⭐","per":2,"rows":[{"label":"Y5","value":6}]}
+  • array: {"type":"array","rows":3,"cols":4,"shaded":5} (rows×cols grid — multiplication / area / fraction-of-a-set)
+  • coordinate: {"type":"coordinate","min":0,"max":10,"points":[{"x":2,"y":3,"label":"P"}],"path":true}
+  • angle: {"type":"angle","degrees":120}
+  • lineplot: {"type":"lineplot","min":0,"max":6,"data":[2,2,3,3,5]} (dot/line plot)
+  • venn: {"type":"venn","labelA":"Maths","labelB":"Art","onlyA":7,"both":3,"onlyB":5}
+  • tally: {"type":"tally","rows":[{"label":"Red","value":7}]}
+  Any type may take an optional "title". Include "diagram" ONLY when it truly helps; omit it otherwise. If a figure you need isn't covered above, you may instead supply a raw inline "svg" string (clean, viewBox'd, NO <script>/external refs) as a fallback.
 
 Return ONLY valid JSON, no markdown fences, exactly:
-{"questions":[{"topic":"string","type":"multiple_choice|numeric|short","question":"plain question with $LaTeX$ for maths","svg":"optional <svg viewBox=...>...</svg>","options":["a","b","c","d"],"answerIndex":0,"answer":"string","acceptedAnswers":["string"],"explanation":"short, simple, numbered steps","marks":1}]}`;
+{"questions":[{"topic":"string","type":"multiple_choice|numeric|short","question":"plain question with $LaTeX$ for maths","diagram":{optional structured spec — see DIAGRAMS above},"options":["a","b","c","d"],"answerIndex":0,"answer":"string","acceptedAnswers":["string"],"explanation":"short, simple, numbered steps","marks":1}]}`;
   return p;
 }
 
@@ -671,13 +687,18 @@ function parseQuestions(raw){
       const norm=x=>String(x).toLowerCase().replace(/\$/g,'').replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g,'$1/$2').replace(/\\[a-z]+/g,'').replace(/[^a-z0-9/.]/g,'');
       const t=norm(q.answer);if(t){const j=opts.findIndex(o=>norm(o)===t);if(j>=0&&j!==ai)ai=j;}
     }
+    // Diagram: prefer a STRUCTURED spec (q.diagram/chart/figure as an object) rendered
+    // by PLDiagram into correct SVG; else fall back to a raw inline-SVG string.
+    let svgRaw=q.svg||q.image||'';const dgm=q.diagram||q.chart||q.figure;
+    if(dgm&&typeof dgm==='object'&&typeof PLDiagram!=='undefined'){try{const dd=PLDiagram.render(dgm);if(dd)svgRaw=dd;}catch(e){}}
+    else if(typeof dgm==='string'&&!svgRaw){svgRaw=dgm;}
     const o={id:'q'+i,topic:q.topic||q.category||q.strand||'General',
       type,
       question:P.qText(q),options:opts,answerIndex:ai,
       answer:(q.answer!=null)?String(q.answer):(opts&&typeof ai==='number'?String(opts[ai]):''),
       acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):(Array.isArray(q.accepted)?q.accepted.map(String):[]),
       explanation:q.explanation||q.solution||q.working||q.reason||'',marks:Number(q.marks||q.mark||q.points)||1,
-      svg:sanitizeSvg(q.svg||q.figure||q.diagram||q.image||'')};return repointFromExplanation(o);});
+      svg:sanitizeSvg(svgRaw)};return repointFromExplanation(o);});
 }
 // Mis-key backstop: trust the worked explanation's CONCLUDED value over a
 // possibly wrong answer key. Models sometimes set BOTH "answer" and
@@ -2073,7 +2094,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.4';
+const APP_VERSION='v2.5';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
