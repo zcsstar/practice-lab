@@ -114,14 +114,14 @@
   .qchip.answered{background:#e7f0ff;border-color:#b9d7ff;color:var(--brand)}
   .qchip.flagged::after{content:"";position:absolute;top:-3px;right:-3px;width:11px;height:11px;border-radius:50%;background:var(--warn);border:2px solid #fff}
 
-  .qtext{font-size:16.5px;line-height:1.6;margin:6px 0 18px}
-  .opts{display:grid;gap:10px}
-  .opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:13px 14px;cursor:pointer;background:#fff;transition:.12s;font-size:15px;line-height:1.5}
+  .qtext{font-size:16.5px;line-height:1.6;margin:6px 0 12px}
+  .opts{display:grid;gap:8px}
+  .opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:10px 13px;cursor:pointer;background:#fff;transition:.12s;font-size:15px;line-height:1.5}
   .opt:hover{border-color:var(--brand)}
   .opt[aria-pressed="true"]{border-color:var(--brand);background:#e7f0ff}
   .opt .key{flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--card2);display:grid;place-items:center;font-weight:700;font-size:13px}
   .opt[aria-pressed="true"] .key{background:var(--brand);color:#fff}
-  .flagrow{display:flex;align-items:center;gap:10px;margin-top:18px;padding-top:14px;border-top:1px dashed var(--line)}
+  .flagrow{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
 
   .scorehero{text-align:center;padding:10px 0 6px}
   .scorehero .pct{font-size:46px;font-weight:800;letter-spacing:-2px;line-height:1;color:var(--brand)}
@@ -2195,7 +2195,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.12';
+const APP_VERSION='v2.13';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
