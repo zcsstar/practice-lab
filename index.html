@@ -437,6 +437,7 @@ const DEFAULT_CFG={
   emailEnabled:false,emailjs:{publicKey:'',serviceId:'',templateId:''},emailTo:'zcsstar.nz@gmail.com',
   drive:{enabled:true,clientId:''},
   webSearch:true,
+  verify:true,     // double-check generated answers with one extra AI call (drops/keeps)
   dailyGoal:10,    // questions per day target (for the streak / goal widget)
   voiceURI:'', voiceRate:0.95, voicePitch:1,  // read-aloud voice (Web Speech) — device-specific, NOT synced
   settingsAt:0,    // last-edited timestamp for the synced-settings whitelist below
@@ -445,7 +446,7 @@ const DEFAULT_CFG={
 // Non-secret, device-independent settings that sync across devices via Drive
 // (newest edit wins). Excludes the API key (use KEYVAULT) and device-specific
 // things like the chosen voice, active student and Drive config.
-const SYNC_SETTINGS=['emailEnabled','emailTo','emailjs','dailyGoal','webSearch','examContext'];
+const SYNC_SETTINGS=['emailEnabled','emailTo','emailjs','dailyGoal','webSearch','verify','examContext'];
 function pickSyncSettings(){const o={};for(const k of SYNC_SETTINGS)o[k]=CFG[k];return o;}
 function applySyncSettings(s){if(!s)return;for(const k of SYNC_SETTINGS)if(s[k]!==undefined)CFG[k]=s[k];}
 function markSettingsChanged(){CFG.settingsAt=Date.now();}
@@ -769,6 +770,49 @@ async function packGroundingText(s){
     return lines.slice(0,50).join('\n');
   }catch(e){return '';}
 }
+// Tolerant parse of the verifier's {"checks":[...]} reply (no PLParse — different shape).
+function parseChecks(raw){
+  let t=String(raw||'').trim().replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();
+  try{const o=JSON.parse(t);if(o&&Array.isArray(o.checks))return o.checks;}catch(e){}
+  const m=t.match(/\{[\s\S]*\}/);if(m){try{const o=JSON.parse(m[0]);if(o&&Array.isArray(o.checks))return o.checks;}catch(e){}}
+  return null;
+}
+// Second-opinion answer check (one extra AI call): the model independently solves
+// each generated question, then we KEEP the confirmed ones, REPOINT a clearly
+// mis-keyed multiple-choice item, and DROP anything broken/ambiguous. Best-effort:
+// any failure (or an empty verdict) returns the originals so practice never breaks.
+async function verifyQuestions(s,qs){
+  if(!CFG.verify||!qs||qs.length<1)return qs;
+  const items=qs.map((q,i)=>({i,type:q.type,question:q.question,options:(q.type==='multiple_choice'?q.options:undefined),markedIndex:(q.type==='multiple_choice'?q.answerIndex:undefined),markedAnswer:q.answer}));
+  const vp=`You are a meticulous ${s.level||''} ${s.subject||''} exam answer-checker. For EACH question below, work out the answer YOURSELF, then judge the marked answer.
+Return ONLY JSON (no prose, no code fences): {"checks":[{"i":<index>,"verdict":"ok"|"fix"|"drop","correctIndex":<0-based option index, ONLY if multiple_choice and verdict is "fix">}]}
+- "ok": the marked answer is correct and the question has a single, unambiguous answer.
+- "fix": the question is sound but the marked answer is wrong — for multiple_choice, give the correct "correctIndex".
+- "drop": the question is broken, ambiguous, or has no single correct option.
+Be strict, but only flag "fix"/"drop" when you are confident.
+QUESTIONS:
+`+JSON.stringify(items);
+  let raw;
+  try{
+    const mt=outTokens(qs.length,8192);
+    if(CFG.provider==='gemini')raw=await callGemini(vp,[],mt);
+    else if(CFG.provider==='claude')raw=await callClaude(vp,[],Math.min(8192,mt));
+    else raw=await callOpenAICompatible(vp,[],mt);
+    usageBump(1);
+  }catch(e){return qs;} // checker call failed → don't block the practice
+  const checks=parseChecks(raw);if(!checks)return qs;
+  const verdict={};checks.forEach(c=>{if(c&&typeof c.i==='number')verdict[c.i]=c;});
+  const out=[];
+  qs.forEach((q,i)=>{
+    const c=verdict[i];
+    if(!c||c.verdict==='ok'){out.push(q);return;}
+    if(c.verdict==='fix'&&q.type==='multiple_choice'&&Array.isArray(q.options)&&Number.isInteger(c.correctIndex)&&c.correctIndex>=0&&c.correctIndex<q.options.length){
+      q.answerIndex=c.correctIndex;q.answer=String(q.options[c.correctIndex]);out.push(q);return;
+    }
+    // "drop" or an un-actionable "fix" → leave it out (don't serve a disputed item)
+  });
+  return out.length?reindex(out):qs; // never return empty
+}
 async function generateQuestions(s,files){
   let refsText=(files||[]).map(f=>f.text?`[${f.name}]\n${f.text}`:'').filter(Boolean).join('\n\n');
   if(!refsText){const pt=await packGroundingText(s);if(pt)refsText=pt;} // ground on matching real-paper packs
@@ -781,7 +825,7 @@ async function generateQuestions(s,files){
   usageBump(1); // count every real API call (incl. each chunk of a big batch)
   const qs=parseQuestions(raw);
   if(!qs.length)throw new Error('The AI response had no usable questions. It sent: '+JSON.stringify(String(raw||'').slice(0,220)));
-  return qs;
+  return await verifyQuestions(s,qs); // optional second-opinion answer check (CFG.verify)
 }
 // How many questions to request per API call. Kept modest so a single response
 // reliably fits the output budget — large batches (e.g. 40) truncate, and the
@@ -1925,6 +1969,7 @@ function buildAICard(parent){
   function renderAI(){providerSel.value=CFG.provider;aiHost.innerHTML='';const keyHelp={gemini:'Free key at aistudio.google.com → “Get API key”.',openai:'platform.openai.com → API keys (paid).',claude:'console.anthropic.com → API keys (paid).',custom:'Any OpenAI-compatible endpoint (OpenRouter, local, …)'}[CFG.provider];aiHost.append(field('API key',keyHelp,el('input',{type:'password',placeholder:'Paste your key',value:CFG.apiKey,oninput:e=>CFG.apiKey=e.target.value.trim()})),field('Model','',el('input',{type:'text',value:CFG.model,placeholder:defaultModel(CFG.provider),oninput:e=>CFG.model=e.target.value.trim()})),(CFG.provider==='custom'||CFG.provider==='openai')?field('Base URL','e.g. https://openrouter.ai/api/v1',el('input',{type:'text',value:CFG.baseUrl,placeholder:'https://api.openai.com/v1',oninput:e=>CFG.baseUrl=e.target.value.trim()})):'',el('div',{class:'row'},el('button',{class:'btn',onclick:()=>testAI()},'🧪 Test connection')));}
   renderAI();
   return el('div',{class:'card'},el('h2',{},'🤖 AI'),el('p',{class:'sub'},'Which AI writes the questions.'),field('Provider','',providerSel),aiHost,
+    el('div',{style:'margin-top:8px'},toggle('Double-check answers',CFG.verify,v=>CFG.verify=v),el('div',{class:'small muted',style:'margin-top:4px'},'A second AI pass solves each new question and drops or fixes any with a wrong/ambiguous answer. More accurate, but uses 1 extra AI call per freshly generated batch (banked questions are still free).')),
     el('details',{class:'adv'},el('summary',{},'🔑 Share this key with all devices (no re-typing)'),buildVaultInner()));
 }
 function buildLoginInner(){
@@ -2204,7 +2249,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.15';
+const APP_VERSION='v2.16';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
