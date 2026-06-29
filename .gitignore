@@ -5,6 +5,12 @@
 backup-*.json
 practice-lab-backup-*.json
 
+# Copyrighted source papers + any PRIVATE transcribed question sets — NEVER commit
+# to the public repo (real ICAS questions/figures are copyright UNSW Global/Janison).
+papers/
+*.local.js
+*.private.json
+
 # OS / editor
 .DS_Store
 Thumbs.db
