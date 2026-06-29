@@ -173,7 +173,11 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   GENERATE figure-heavy questions (not just reuse real ones): **routemap** (places +
   routes with distances + scale — the "how much further" map category), **table**,
   **scale** (vertical measuring scale / thermometer — "read the scale", growth),
-  **balance** (equality / simple algebra). Aliases tolerated (e.g. `map`→routemap). Pure string output
+  **balance** (equality / simple algebra), **timeline** (a time arrow with dated
+  events alternating above/below — "history of …" / order-of-events) and **flow**
+  (process boxes joined by arrows with optional `branches` for by-products/inputs —
+  sugar refining, ethanol production, food chains, life cycles). Aliases tolerated
+  (e.g. `map`→routemap, `process`/`foodchain`→flow). Pure string output
   (no DOM) → Node-testable + works on file://. **Integration is near-zero-blast:**
   `parseQuestions` renders `q.diagram` (object) via `PLDiagram` into the existing
   `svg` field (so every downstream path is unchanged); a raw inline-`svg` string

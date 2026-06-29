@@ -6,7 +6,8 @@
  * draws correct, consistent, kid-friendly SVG from it. Covers the diagram types
  * that make up almost all primary→intermediate (Y3–Y8) maths exams:
  *   pie · bar · numberline · fractionbar · shape · clock · pictogram · array ·
- *   coordinate · angle · lineplot · venn · tally
+ *   coordinate · angle · lineplot · venn · tally · routemap · table · scale ·
+ *   balance · timeline · flow (process / food-chain)
  *
  * PLDiagram.render(spec) -> a clean <svg>…</svg> string, or '' if the spec is
  * unknown/invalid (caller then falls back to a raw `svg` field). Pure: no DOM,
@@ -25,6 +26,18 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function fmt(v) { v = +v; if (!isFinite(v)) return ''; return Math.abs(v - Math.round(v)) < 1e-9 ? ('' + Math.round(v)) : ('' + (Math.round(v * 100) / 100)); }
   function f1(v) { return (Math.round(v * 10) / 10); }
+  // greedy word-wrap into <= maxc-char lines (for box/timeline labels)
+  function wrapWords(str, maxc) {
+    var words = String(str == null ? '' : str).split(/\s+/), lines = [], cur = '';
+    maxc = Math.max(4, maxc || 12);
+    words.forEach(function (wd) {
+      if (!cur) cur = wd;
+      else if ((cur + ' ' + wd).length <= maxc) cur += ' ' + wd;
+      else { lines.push(cur); cur = wd; }
+    });
+    if (cur) lines.push(cur);
+    return lines.length ? lines : [''];
+  }
   // text helper
   function T(x, y, s, o) {
     o = o || {};
@@ -305,8 +318,72 @@
     return wrap(w, h, inner, s.title);
   }
 
+  // TIMELINE — a horizontal time arrow with events in order (left = earliest).
+  // Events alternate above/below the line so labels don't collide; optional dates.
+  function timeline(s) {
+    var ev = (s.events || s.items || s.steps || s.points || []).map(function (e) {
+      return (e && typeof e === 'object') ? { label: e.label != null ? e.label : '', date: (e.date != null ? e.date : e.year) } : { label: '' + e };
+    }).filter(function (e) { return e.label !== ''; });
+    if (!ev.length) return '';
+    var cnt = ev.length, slot = clamp(Math.round(680 / cnt), 66, 124), padL = 22, padR = 30;
+    var w = padL + padR + cnt * slot, lineY = 88, h = 168;
+    function X(i) { return padL + slot * i + slot / 2; }
+    var inner = line(padL - 6, lineY, w - padR + 4, lineY, { stroke: INK, w: 2 });
+    inner += '<path d="M' + (w - padR + 8) + ',' + lineY + ' l-9,-5 v10 z" fill="' + INK + '"/>';
+    ev.forEach(function (e, i) {
+      var x = X(i), up = (i % 2 === 0), c = col(i);
+      inner += line(x, lineY, x, up ? lineY - 9 : lineY + 9, { stroke: MUTE });
+      inner += '<circle cx="' + f1(x) + '" cy="' + lineY + '" r="5" fill="' + c + '"/>';
+      var lns = wrapWords(e.label, Math.max(8, Math.floor(slot / 6)));
+      lns.slice(0, 3).forEach(function (ln, li) {
+        var yy = up ? (lineY - 14 - (Math.min(3, lns.length) - 1 - li) * 11) : (lineY + 24 + li * 11);
+        inner += T(x, yy, ln, { size: 10, weight: '600' });
+      });
+      if (e.date != null && e.date !== '') {
+        var dy = up ? (lineY - 14 - Math.min(3, lns.length) * 11) : (lineY + 24 + Math.min(3, lns.length) * 11);
+        inner += T(x, dy, '' + e.date, { size: 9, fill: MUTE });
+      }
+    });
+    return wrap(w, h, inner, s.title);
+  }
+
+  // FLOW / process — boxes left-to-right joined by arrows (e.g. sugar cane →
+  // raw juice → … → crystals). Optional `branches` draw a small arrow off a step
+  // to a side label (a by-product separated, or an input added).
+  function flow(s) {
+    var steps = (s.steps || s.stages || s.boxes || s.items || []).map(function (x) {
+      return (x && typeof x === 'object') ? (x.label != null ? '' + x.label : '') : '' + x;
+    }).filter(function (x) { return x !== ''; });
+    if (!steps.length) return '';
+    var branches = (s.branches || s.byproducts || s.outputs || []).map(function (b, i) {
+      return (b && typeof b === 'object')
+        ? { after: n(b.after != null ? b.after : (b.at != null ? b.at : b.step), i), label: b.label != null ? '' + b.label : '', dir: (b.dir === 'up' || b.dir === 'in') ? 'up' : 'down' }
+        : { after: i, label: '' + b, dir: 'down' };
+    }).filter(function (b) { return b.label !== ''; });
+    var hasDown = branches.some(function (b) { return b.dir === 'down'; }), hasUp = branches.some(function (b) { return b.dir === 'up'; });
+    var boxH = 40, gap = 30, padX = 12, topM = hasUp ? 42 : 12, botM = hasDown ? 42 : 12, cy = topM + boxH / 2;
+    var ws = steps.map(function (t) { return clamp(t.length * 6.2 + 18, 52, 150); });
+    var xs = [], x = padX; ws.forEach(function (bw) { xs.push(x); x += bw + gap; });
+    var w = x - gap + padX, h = topM + boxH + botM, inner = '', i;
+    for (i = 0; i < steps.length - 1; i++) { var x1 = xs[i] + ws[i], x2 = xs[i + 1]; inner += line(x1, cy, x2 - 6, cy, { stroke: INK, w: 1.5 }) + '<path d="M' + f1(x2) + ',' + cy + ' l-7,-4 v8 z" fill="' + INK + '"/>'; }
+    steps.forEach(function (t, i2) {
+      var bw = ws[i2], bx = xs[i2];
+      inner += '<rect x="' + f1(bx) + '" y="' + (cy - boxH / 2) + '" width="' + f1(bw) + '" height="' + boxH + '" rx="7" fill="#eef2f7" stroke="' + INK + '"/>';
+      var lns = wrapWords(t, Math.max(7, Math.floor(bw / 5.8))).slice(0, 2);
+      lns.forEach(function (ln, li) { inner += T(bx + bw / 2, cy + 4 - (lns.length - 1) * 6 + li * 12, ln, { size: 10, weight: '600' }); });
+    });
+    branches.forEach(function (b) {
+      var idx = clamp(Math.round(b.after), 0, steps.length - 1), bx = xs[idx] + ws[idx] / 2;
+      if (b.dir === 'up') { inner += line(bx, cy - boxH / 2, bx, 18, { stroke: MUTE }) + '<path d="M' + f1(bx) + ',14 l-4,8 h8 z" fill="' + MUTE + '"/>' + T(bx, 11, b.label, { size: 9, fill: MUTE }); }
+      else { var by = cy + boxH / 2; inner += line(bx, by, bx, h - 24, { stroke: MUTE }) + '<path d="M' + f1(bx) + ',' + (h - 20) + ' l-4,-8 h8 z" fill="' + MUTE + '"/>' + T(bx, h - 7, b.label, { size: 9, fill: MUTE }); }
+    });
+    return wrap(w, h, inner, s.title);
+  }
+
   var R = {
     pie: pie, piechart: pie, fractioncircle: pie, circlegraph: pie,
+    timeline: timeline, time: timeline, history: timeline,
+    flow: flow, flowchart: flow, process: flow, sequence: flow, foodchain: flow, chain: flow, pathway: flow,
     routemap: routemap, route: routemap, journeymap: routemap, map: routemap,
     table: table, datatable: table,
     scale: vscale, thermometer: vscale, verticalscale: vscale, gauge: vscale, measuringscale: vscale,

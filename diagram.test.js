@@ -27,7 +27,9 @@ const specs = {
   routemap: { type: 'routemap', title: 'Journey', scaleLabel: '100 km', places: [{ name: 'A', x: 10, y: 20 }, { name: 'B', x: 80, y: 30 }, { name: 'C', x: 60, y: 85 }], legs: [{ from: 'A', to: 'B', dist: '300 km' }, { from: 'B', to: 'C', dist: '250 km' }] },
   table: { type: 'table', headers: ['Day', 'Sales'], rows: [['Mon', 12], ['Tue', 9], ['Wed', 15]] },
   scale: { type: 'scale', min: 0, max: 150, step: 25, unit: ' cm', markers: [{ value: 95, label: 'school' }, { value: 140, label: 'birthday' }] },
-  balance: { type: 'balance', left: '2 ▲', right: '10' }
+  balance: { type: 'balance', left: '2 ▲', right: '10' },
+  timeline: { type: 'timeline', title: 'History of science', events: [{ label: 'writing', date: '3000 BC' }, { label: 'printing press', date: '1440' }, { label: 'steam engine', date: '1770' }, { label: 'telephone', date: '1876' }] },
+  flow: { type: 'flow', title: 'Refining sugar', steps: ['sugar cane', 'raw sugar juice', 'clarified juice', 'sugar crystals'], branches: [{ after: 0, label: 'bagasse' }, { after: 1, label: 'mill mud' }, { after: 2, label: 'molasses' }] }
 };
 
 Object.keys(specs).forEach(name => {
@@ -55,6 +57,16 @@ ok((D.render(specs.routemap).match(/<circle/g) || []).length === 3, 'routemap dr
 ok((D.render(specs.table).match(/<rect/g) || []).length === 8, 'table draws header+body cells (2×4)');
 ok((D.render(specs.scale).match(/<circle/g) || []).length === 2, 'scale draws a marker per reading');
 ok(svgOk(D.render({ type: 'map', places: [{ name: 'X', x: 5, y: 5 }], legs: [] })), 'alias "map" → routemap');
+
+// timeline: a dot per event + the time-axis arrow; flow: a box per step + branch labels
+ok((D.render(specs.timeline).match(/<circle/g) || []).length === 4, 'timeline draws a dot per event');
+ok(D.render(specs.timeline).includes('1876'), 'timeline shows event dates');
+ok((D.render(specs.flow).match(/<rect/g) || []).length === 4, 'flow draws a box per step');
+ok(D.render(specs.flow).includes('molasses'), 'flow shows branch (by-product) labels');
+ok(svgOk(D.render({ type: 'process', steps: ['a', 'b'] })), 'alias "process" → flow');
+ok(svgOk(D.render({ type: 'food_chain', steps: ['grass', 'rabbit', 'fox'] })), 'alias "food_chain" → flow');
+ok(D.render({ type: 'timeline', events: [] }) === '', 'timeline with no events → empty');
+ok(D.render({ type: 'flow', steps: [] }) === '', 'flow with no steps → empty');
 
 // alias resolution + whitespace/underscore tolerance
 ok(svgOk(D.render({ type: 'number_line', min: 0, max: 5 })), 'alias "number_line" works');
