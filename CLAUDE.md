@@ -202,6 +202,15 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   it — bespoke figures cropped to `image` (compressed), standard/schematic figures as
   `diagram` specs. NZ ICAS levels: Paper B=Y5, C=Y6, D=Y7, E=Y8, F=Y9 (AU is one lower).
   Answer keys are at the END of each paper (with strands + skill descriptions).
+  - **Packs GROUND generation (v2.9).** `packGroundingText(s)` finds packs matching the
+    practice's subject + year level (`packSubj`/`packLvl`) and returns their question
+    lines; `generateQuestions` injects them as the reference text when no paper is
+    attached, so the AI mirrors the real exam's style/topics/difficulty. Packs beat
+    generic web-knowledge (used when a match exists); levels/subjects without a pack
+    fall back to the web-knowledge prompt. So the parent uploads packs for all
+    years/subjects once and each child's generated questions are auto-grounded at
+    their level. The "📄 Exam packs" home item + import/manage are **parent-only**
+    (`isParent()`); packs are shared (not per-student).
   - **`el()` escaping gotcha:** string children are inserted via `createTextNode`
     (already XSS-safe) — do NOT wrap child text in `esc()` (double-encodes, e.g.
     "Data &amp; graphs"). `esc()` is only for `{html:...}` / attribute strings.

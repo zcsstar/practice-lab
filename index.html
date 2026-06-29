@@ -744,8 +744,28 @@ function repointFromExplanation(q){
 // explanation, options and maybe a small SVG) is ~900 tokens; give headroom so
 // big bank batches don't truncate. Clamped per provider's real ceiling.
 function outTokens(count,cap){return Math.min(cap,Math.max(16384,4096+(count||10)*1000));}
+// Parent-managed past-paper PACKS ground GENERATION: when a kid makes a practice,
+// inject the matching subject+level pack questions so the AI mirrors the real exam's
+// style / topics / difficulty. Packs beat generic web-knowledge, so they're used
+// whenever a matching one exists and no paper is attached (point: "if web data is
+// thin, use the packs"). Shared across the family; matched by subject + year level.
+function packSubj(s){s=String(s||'').toLowerCase();return /math/.test(s)?'math':/sci/.test(s)?'science':/eng|writ|spell|read/.test(s)?'english':s.trim();}
+function packLvl(s){const m=String(s||'').match(/\d+/);return m?+m[0]:null;}
+async function packGroundingText(s){
+  try{
+    const packs=await dbAll('packs');if(!packs.length)return '';
+    const subj=packSubj(s.subject),lvl=packLvl(s.level);
+    const match=packs.filter(p=>packSubj(p.subject)===subj&&(lvl==null||packLvl(p.level)==null||packLvl(p.level)===lvl));
+    const lines=[];
+    match.forEach(p=>(p.questions||[]).forEach(q=>{if(!q.question)return;let l='• '+plainMath(String(q.question)).slice(0,240);if(q.type==='multiple_choice'&&Array.isArray(q.options))l+=' (options: '+q.options.map(o=>plainMath(String(o))).join(' / ')+')';lines.push(l);}));
+    if(!lines.length)return '';
+    for(let i=lines.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=lines[i];lines[i]=lines[j];lines[j]=t;} // vary which examples ground each batch
+    return lines.slice(0,50).join('\n');
+  }catch(e){return '';}
+}
 async function generateQuestions(s,files){
-  const refsText=(files||[]).map(f=>f.text?`[${f.name}]\n${f.text}`:'').filter(Boolean).join('\n\n');
+  let refsText=(files||[]).map(f=>f.text?`[${f.name}]\n${f.text}`:'').filter(Boolean).join('\n\n');
+  if(!refsText){const pt=await packGroundingText(s);if(pt)refsText=pt;} // ground on matching real-paper packs
   const prompt=buildPrompt(s,refsText);
   const count=s.count||10;
   let raw;
@@ -947,7 +967,7 @@ async function viewHome(){
     menuItem('🎴','My cards',caughtN?caughtN+' of '+POKEDEX.length+' caught — open packs by practising':'Finish a practice to earn your first card!',()=>viewCards()),
     isParent()?menuItem('👨‍👩‍👧','All students','Compare progress across the family',()=>viewDashboard()):null,
     menuItem('📚','Reference library','Real past papers — ground questions in authentic exam style',()=>viewRefs()),
-    menuItem('📄','Past papers',packN?`Drill ${packN} real exam paper${packN>1?'s':''} — actual questions & diagrams`:'Import real past-paper packs to drill',()=>viewPapers()),
+    isParent()?menuItem('📄','Exam packs',packN?`${packN} real paper${packN>1?'s':''} — ground each child's generated questions (by level)`:'Import real past papers to ground the AI per level',()=>viewPapers()):null,
   );
   const setupWarn=!CFG.apiKey?el('div',{class:'card',style:'border-color:#ffd8a8;background:#fff7ed'},el('h2',{},isParent()?'👋 First, add your AI key':'🔑 Waiting for the AI key'),el('p',{class:'sub',style:'margin-bottom:10px'},isParent()?'Practice Lab needs an AI key to write questions. The free Google Gemini key takes ~2 minutes.':'A parent needs to set up the shared AI key, then you’re ready to go.'),isParent()?el('button',{class:'btn primary',onclick:()=>viewSettings()},'Open settings'):null):null;
   const driveBanner=(isParent()&&CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'&&!driveToken)?el('div',{class:'card',style:'border-color:#cfe2ff;background:var(--feature)'},el('h2',{},'☁️ Sync across devices'),el('p',{class:'sub',style:'margin-bottom:10px'},'Connect Google Drive (once per device, same Google account) to share students, defaults, past papers and history everywhere.'),el('button',{class:'btn primary',onclick:()=>{CFG.drive.enabled=true;saveCfg();driveConnect(true);}},'Connect Google Drive')):null;
@@ -1009,8 +1029,8 @@ async function viewPapers(){
         el('div',{class:'row',style:'gap:6px'},el('button',{class:'btn primary',onclick:()=>startPaper(pk)},'Start'),el('button',{class:'btn ghost',title:'Remove',onclick:()=>delPack(pk.id)},'🗑️')))));
     });
   }
-  show(el('div',{},backBar('Past papers',()=>viewHome()),
-    el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('p',{class:'sub',style:'margin:0'},'📄 Real past-paper questions — the genuine exam, including its diagrams and pictures. Private to your family (synced via your Drive, never in the public app).')),
+  show(el('div',{},backBar('Exam packs',()=>viewHome()),
+    el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('p',{class:'sub',style:'margin:0'},'📄 Parent-managed library of real past papers. The app uses them to GROUND the questions it generates for each child — automatically matched to their subject + year level — and you can drill any paper directly too. Shared across the family, synced via your Drive, never in the public app.')),
     importCard,...body));
 }
 // Seed packs from a bundled papers.local.js (window.PL_QUESTION_PACKS) on boot — for
@@ -2175,7 +2195,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.8';
+const APP_VERSION='v2.9';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
