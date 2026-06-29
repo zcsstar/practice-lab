@@ -23,7 +23,11 @@ const specs = {
   angle: { type: 'angle', degrees: 120 },
   lineplot: { type: 'lineplot', min: 0, max: 6, data: [2, 2, 3, 3, 3, 5] },
   venn: { type: 'venn', onlyA: 5, both: 3, onlyB: 4, labelA: 'Maths', labelB: 'Art' },
-  tally: { type: 'tally', rows: [{ label: 'Red', value: 7 }, { label: 'Blue', value: 12 }] }
+  tally: { type: 'tally', rows: [{ label: 'Red', value: 7 }, { label: 'Blue', value: 12 }] },
+  routemap: { type: 'routemap', title: 'Journey', scaleLabel: '100 km', places: [{ name: 'A', x: 10, y: 20 }, { name: 'B', x: 80, y: 30 }, { name: 'C', x: 60, y: 85 }], legs: [{ from: 'A', to: 'B', dist: '300 km' }, { from: 'B', to: 'C', dist: '250 km' }] },
+  table: { type: 'table', headers: ['Day', 'Sales'], rows: [['Mon', 12], ['Tue', 9], ['Wed', 15]] },
+  scale: { type: 'scale', min: 0, max: 150, step: 25, unit: ' cm', markers: [{ value: 95, label: 'school' }, { value: 140, label: 'birthday' }] },
+  balance: { type: 'balance', left: '2 ▲', right: '10' }
 };
 
 Object.keys(specs).forEach(name => {
@@ -45,6 +49,13 @@ ok(/font-weight="700"/.test(D.render({ type: 'pie', parts: [{ value: 1 }], title
 ok((D.render(specs.array).match(/<rect/g) || []).length === 12, 'array draws rows×cols cells');
 // clock has two hands (hour + minute lines) + face circle
 ok((D.render(specs.clock).match(/<circle/g) || []).length >= 1 && (D.render(specs.clock).match(/<line/g) || []).length >= 2, 'clock has a face + hands');
+// new schematic types: routemap draws legs (lines) + place dots; table draws cells
+ok((D.render(specs.routemap).match(/<line/g) || []).length >= 2, 'routemap draws a line per leg');
+ok((D.render(specs.routemap).match(/<circle/g) || []).length === 3, 'routemap draws a dot per place');
+ok((D.render(specs.table).match(/<rect/g) || []).length === 8, 'table draws header+body cells (2×4)');
+ok((D.render(specs.scale).match(/<circle/g) || []).length === 2, 'scale draws a marker per reading');
+ok(svgOk(D.render({ type: 'map', places: [{ name: 'X', x: 5, y: 5 }], legs: [] })), 'alias "map" → routemap');
+
 // alias resolution + whitespace/underscore tolerance
 ok(svgOk(D.render({ type: 'number_line', min: 0, max: 5 })), 'alias "number_line" works');
 ok(svgOk(D.render({ type: 'Bar Chart', bars: [3, 5] })), 'alias "Bar Chart" (spaces) works');

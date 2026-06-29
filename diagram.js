@@ -21,6 +21,7 @@
   var INK = '#1d1d1f', MUTE = '#86868b', LINE = '#e4e4ea';
   function col(i, g) { return g || PAL[i % PAL.length]; }
   function n(v, d) { v = +v; return isFinite(v) ? v : (d || 0); }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function fmt(v) { v = +v; if (!isFinite(v)) return ''; return Math.abs(v - Math.round(v)) < 1e-9 ? ('' + Math.round(v)) : ('' + (Math.round(v * 100) / 100)); }
   function f1(v) { return (Math.round(v * 10) / 10); }
@@ -249,8 +250,65 @@
     return wrap(w, h, inner, s.title);
   }
 
+  // A text label with a faint white backing — so labels stay readable over lines/maps.
+  function tbg(x, y, s, o) { var t = String(s), bw = t.length * 6.2 + 6; return '<rect x="' + f1(x - bw / 2) + '" y="' + f1(y - 9) + '" width="' + f1(bw) + '" height="14" rx="3" fill="#fff" opacity="0.82"/>' + T(x, y + 2, t, o); }
+
+  // Schematic ROUTE MAP — places as dots + routes as lines with distances + a scale.
+  // Recognisable (not real geography) so the AI can GENERATE "how much further / which
+  // route" questions, not just reuse the few real ones.
+  function routemap(s) {
+    var places = s.places || [], legs = s.legs || []; if (!places.length) return '';
+    var w = 330, h = 250, pad = 36, by = {}, inner = '';
+    function X(v) { return pad + (clamp(n(v), 0, 100) / 100) * (w - 2 * pad); }
+    function Y(v) { return pad + (clamp(n(v), 0, 100) / 100) * (h - 2 * pad); }
+    places.forEach(function (p) { by[p.name] = p; });
+    legs.forEach(function (l) { var a = by[l.from], b = by[l.to]; if (!a || !b) return;
+      inner += line(X(a.x), Y(a.y), X(b.x), Y(b.y), { stroke: '#e8590c', w: 3 });
+      if (l.dist != null) inner += tbg((X(a.x) + X(b.x)) / 2, (Y(a.y) + Y(b.y)) / 2, '' + l.dist, { size: 11, weight: '700', fill: '#c2410c' });
+    });
+    places.forEach(function (p) { var x = X(p.x), y = Y(p.y); inner += '<circle cx="' + f1(x) + '" cy="' + f1(y) + '" r="5" fill="' + INK + '"/>' + tbg(x, y - 12, p.name, { size: 11, weight: '700' }); });
+    if (s.scaleLabel) inner += line(pad, h - 12, pad + 60, h - 12, { stroke: INK, w: 2 }) + line(pad, h - 16, pad, h - 8, { stroke: INK }) + line(pad + 60, h - 16, pad + 60, h - 8, { stroke: INK }) + T(pad + 30, h - 1, s.scaleLabel, { size: 10, fill: MUTE });
+    return wrap(w, h, inner, s.title);
+  }
+
+  // DATA TABLE (timetables, tally totals, double-bar-graph data, etc.).
+  function table(s) {
+    var headers = s.headers || [], rows = s.rows || [];
+    var ncol = Math.max(headers.length, rows.reduce(function (m, r) { return Math.max(m, (r || []).length); }, 0)); if (!ncol) return '';
+    var cw = Math.max(54, Math.floor(300 / ncol)), ch = 30, w = ncol * cw + 2, r0 = headers.length ? 1 : 0, hh = (rows.length + r0) * ch + 2, inner = '', c;
+    if (headers.length) for (c = 0; c < ncol; c++) inner += '<rect x="' + (1 + c * cw) + '" y="1" width="' + cw + '" height="' + ch + '" fill="#eef2f7" stroke="' + INK + '"/>' + T(1 + c * cw + cw / 2, 1 + ch / 2 + 4, headers[c] != null ? headers[c] : '', { size: 11, weight: '700' });
+    rows.forEach(function (row, ri) { var yy = 1 + (ri + r0) * ch; for (c = 0; c < ncol; c++) inner += '<rect x="' + (1 + c * cw) + '" y="' + yy + '" width="' + cw + '" height="' + ch + '" fill="#fff" stroke="' + INK + '"/>' + T(1 + c * cw + cw / 2, yy + ch / 2 + 4, (row && row[c] != null) ? row[c] : '', { size: 11 }); });
+    return wrap(w, hh, inner, s.title);
+  }
+
+  // VERTICAL SCALE / thermometer / measuring stick — "read the scale", growth, temperature.
+  function vscale(s) {
+    var min = n(s.min, 0), max = n(s.max, 100), step = n(s.step, 10); if (max <= min) max = min + 1; if (step <= 0) step = (max - min) / 5;
+    var w = 290, h = 250, axX = 64, top = 18, bot = h - 18, gh = bot - top, v;
+    function Y(v) { return bot - (v - min) / (max - min) * gh; }
+    var inner = line(axX, top, axX, bot, { stroke: INK, w: 2 });
+    for (v = min; v <= max + 1e-9; v += step) { var y = Y(v); inner += line(axX - 5, y, axX + 5, y, { stroke: INK }) + T(axX - 9, y + 4, fmt(v) + (s.unit ? '' : ''), { anchor: 'end', size: 10 }); }
+    (s.markers || []).forEach(function (m, i) { var y = Y(n(m.value)), c = col(i, m.color); inner += line(axX, y, axX + 96, y, { stroke: c, dash: '4 3' }) + '<circle cx="' + axX + '" cy="' + f1(y) + '" r="4" fill="' + c + '"/>' + T(axX + 100, y + 4, m.label != null ? m.label : (fmt(m.value) + (s.unit || '')), { anchor: 'start', size: 11, fill: c }); });
+    return wrap(w, h, inner, s.title);
+  }
+
+  // BALANCE scales — equality / simple algebra ("what makes it balance?").
+  function balance(s) {
+    var w = 264, h = 168, inner = '';
+    inner += poly([[120, 122], [144, 122], [132, 92]], { fill: '#c7c7cc' });
+    inner += line(44, 82, 220, 82, { stroke: INK, w: 3 });
+    inner += line(64, 82, 64, 104, { stroke: INK }) + '<path d="M44,104 a20,9 0 0 0 40,0" fill="#eef2f7" stroke="' + INK + '"/>' + T(64, 100, String(s.left != null ? s.left : ''), { size: 14, weight: '700' });
+    inner += line(200, 82, 200, 104, { stroke: INK }) + '<path d="M180,104 a20,9 0 0 0 40,0" fill="#eef2f7" stroke="' + INK + '"/>' + T(200, 100, String(s.right != null ? s.right : ''), { size: 14, weight: '700' });
+    inner += T(132, 150, String(s.relation || '='), { size: 18, weight: '700' });
+    return wrap(w, h, inner, s.title);
+  }
+
   var R = {
     pie: pie, piechart: pie, fractioncircle: pie, circlegraph: pie,
+    routemap: routemap, route: routemap, journeymap: routemap, map: routemap,
+    table: table, datatable: table,
+    scale: vscale, thermometer: vscale, verticalscale: vscale, gauge: vscale, measuringscale: vscale,
+    balance: balance, balancescale: balance, seesaw: balance,
     bar: bar, barchart: bar, column: bar, columngraph: bar, bargraph: bar,
     numberline: numberline,
     fractionbar: fractionbar, tape: fractionbar, barmodel: fractionbar, fractionstrip: fractionbar,

@@ -625,6 +625,10 @@ REQUIREMENTS:
   • lineplot: {"type":"lineplot","min":0,"max":6,"data":[2,2,3,3,5]} (dot/line plot)
   • venn: {"type":"venn","labelA":"Maths","labelB":"Art","onlyA":7,"both":3,"onlyB":5}
   • tally: {"type":"tally","rows":[{"label":"Red","value":7}]}
+  • routemap (schematic map — places + routes with distances, for "how far / which route" questions): {"type":"routemap","scaleLabel":"100 km","places":[{"name":"Town A","x":15,"y":20},{"name":"Town B","x":80,"y":60}],"legs":[{"from":"Town A","to":"Town B","dist":"300 km"}]} (x,y are 0–100 positions)
+  • table: {"type":"table","headers":["Day","Sales"],"rows":[["Mon",12],["Tue",9]]}
+  • scale (a vertical measuring scale / thermometer — "read the scale", growth, temperature): {"type":"scale","min":0,"max":150,"step":25,"unit":" cm","markers":[{"value":95,"label":"start"},{"value":140,"label":"end"}]}
+  • balance (balance scales for equality / simple algebra): {"type":"balance","left":"▲ + ▲ + 3","right":"11"}
   Any type may take an optional "title". Include "diagram" ONLY when it truly helps; omit it otherwise. If a figure you need isn't covered above, you may instead supply a raw inline "svg" string (clean, viewBox'd, NO <script>/external refs) as a fallback.
 
 Return ONLY valid JSON, no markdown fences, exactly:
@@ -2140,7 +2144,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.6';
+const APP_VERSION='v2.7';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

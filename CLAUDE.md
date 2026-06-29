@@ -166,10 +166,14 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - **Diagrams ([diagram.js](diagram.js), `PLDiagram.render(spec)`)** — models are
   unreliable at hand-drawing SVG (pie arcs especially), so the prompt asks for a
   STRUCTURED `diagram` spec `{type,...}` and this module draws correct, tested SVG.
-  Covers ~13 types: pie/fraction-circle, bar, numberline, fractionbar (tape/bar
+  Covers ~17 types: pie/fraction-circle, bar, numberline, fractionbar (tape/bar
   model), shape (rectangle/square/triangle/right-triangle/parallelogram/trapezoid/
   circle/polygon with side+angle labels), clock, pictogram, array/grid, coordinate
-  plane, angle, lineplot/dotplot, venn, tally (aliases tolerated). Pure string output
+  plane, angle, lineplot/dotplot, venn, tally, plus SCHEMATIC types that let the AI
+  GENERATE figure-heavy questions (not just reuse real ones): **routemap** (places +
+  routes with distances + scale — the "how much further" map category), **table**,
+  **scale** (vertical measuring scale / thermometer — "read the scale", growth),
+  **balance** (equality / simple algebra). Aliases tolerated (e.g. `map`→routemap). Pure string output
   (no DOM) → Node-testable + works on file://. **Integration is near-zero-blast:**
   `parseQuestions` renders `q.diagram` (object) via `PLDiagram` into the existing
   `svg` field (so every downstream path is unchanged); a raw inline-`svg` string
