@@ -39,7 +39,9 @@
     var body = title
       ? '<text x="' + (w / 2) + '" y="16" font-size="13" font-weight="700" text-anchor="middle" fill="' + INK + '">' + esc(title) + '</text><g transform="translate(0,' + th + ')">' + inner + '</g>'
       : inner;
-    return '<svg viewBox="0 0 ' + w + ' ' + (h + th) + '" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;font-family:-apple-system,system-ui,sans-serif">' + body + '</svg>';
+    // Explicit width/height give the SVG an intrinsic size so it never collapses to
+    // 0×0 inside a flex container (e.g. the results screen); CSS max-width:100% scales it down.
+    return '<svg width="' + w + '" height="' + (h + th) + '" viewBox="0 0 ' + w + ' ' + (h + th) + '" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;font-family:-apple-system,system-ui,sans-serif">' + body + '</svg>';
   }
 
   function pie(s) {
