@@ -438,6 +438,7 @@ const DEFAULT_CFG={
   drive:{enabled:true,clientId:''},
   webSearch:true,
   verify:true,     // double-check generated answers with one extra AI call (drops/keeps)
+  autoDifficulty:false, // false = SUGGEST a level change on results; true = auto-apply (announced)
   dailyGoal:10,    // questions per day target (for the streak / goal widget)
   voiceURI:'', voiceRate:0.95, voicePitch:1,  // read-aloud voice (Web Speech) — device-specific, NOT synced
   settingsAt:0,    // last-edited timestamp for the synced-settings whitelist below
@@ -446,7 +447,7 @@ const DEFAULT_CFG={
 // Non-secret, device-independent settings that sync across devices via Drive
 // (newest edit wins). Excludes the API key (use KEYVAULT) and device-specific
 // things like the chosen voice, active student and Drive config.
-const SYNC_SETTINGS=['emailEnabled','emailTo','emailjs','dailyGoal','webSearch','verify','examContext'];
+const SYNC_SETTINGS=['emailEnabled','emailTo','emailjs','dailyGoal','webSearch','verify','autoDifficulty','examContext'];
 function pickSyncSettings(){const o={};for(const k of SYNC_SETTINGS)o[k]=CFG[k];return o;}
 function applySyncSettings(s){if(!s)return;for(const k of SYNC_SETTINGS)if(s[k]!==undefined)CFG[k]=s[k];}
 function markSettingsChanged(){CFG.settingsAt=Date.now();}
@@ -999,6 +1000,7 @@ async function viewHome(){
   stopTimer();refreshHeaderProfile();
   const attempts=(await dbAll('attempts')).filter(a=>a.profileId===pid()).sort((a,b)=>b.startedAt-a.startedAt);
   const review=(await dbAll('review')).filter(r=>r.profileId===pid()&&!r.mastered);
+  const dueN=review.filter(reviewDue).length;
   const bankN=(await bankStats()).total;
   const packN=(await dbAll('packs')).length;
   const caughtN=(await cardsForProfile()).length;
@@ -1007,11 +1009,11 @@ async function viewHome(){
   const goal=CFG.dailyGoal||10;
   const doneToday=attempts.filter(a=>a.date===todayISO()).reduce((s,a)=>s+(a.count||0),0);
   const goalPct=Math.min(100,Math.round(doneToday/goal*100));
-  const tiles=el('div',{class:'tiles'},tile(attempts.length,'Practices'),tile(avg+'%','Avg score'),tile(review.length,'To review'),tile(el('span',{class:'streak'},'🔥 '+streak),'Day streak'));
+  const tiles=el('div',{class:'tiles'},tile(attempts.length,'Practices'),tile(avg+'%','Avg score'),tile(dueN||review.length,dueN?'Due now':'To review'),tile(el('span',{class:'streak'},'🔥 '+streak),'Day streak'));
   const goalCard=el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:8px'},el('b',{},'🎯 Today’s goal'),el('span',{class:'small muted'},doneToday+' / '+goal+' questions'+(doneToday>=goal?' · done! 🎉':''))),el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+goalPct+'%;background:'+(doneToday>=goal?'var(--ok)':'var(--brand)')})));
   const menu=el('div',{class:'menu'},
     menuItem('🚀','Start a practice','Generate fresh exam-style questions',()=>viewSetup()),
-    menuItem('📓','Mistakes notebook',review.length?`${review.length} question${review.length>1?'s':''} to revise`:'Nothing to revise — nice!',()=>review.length?viewReview():toast('No mistakes saved yet.')),
+    menuItem('📓','Mistakes notebook',dueN?`🔁 ${dueN} due for review now`:(review.length?`${review.length} saved · spaced out, check back soon`:'Nothing to revise — nice!'),()=>review.length?viewReview():toast('No mistakes saved yet.')),
     menuItem('🗄️','Question bank',bankN?`${bankN} saved — practise with no AI`:'Pre-generate questions to save AI calls',()=>viewBank()),
     menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
     menuItem('🎴','My cards',caughtN?caughtN+' of '+POKEDEX.length+' caught — open packs by practising':'Finish a practice to earn your first card!',()=>viewCards()),
@@ -1291,19 +1293,42 @@ function startTimer(){stopTimer();timerInt=setInterval(()=>{S.elapsed=Math.round
 function stopTimer(){if(timerInt){clearInterval(timerInt);timerInt=null;}}
 function confirmSubmit(){const un=S.answers.filter(a=>a==null||a===''||a===-1).length;let msg='Submit and see your results?';if(un)msg=`You still have ${un} unanswered question${un>1?'s':''}.\n\nSubmit anyway?`;if(confirm(msg))submitSession();}
 
+// Spaced-repetition spacing (days) after a correct review answer, indexed by
+// timesCorrect; a wrong answer resets to the first interval. Mastered at 2 correct.
+const SR_DAYS=[1,3,7,14];
+function srNext(timesCorrect){return Date.now()+SR_DAYS[Math.min(Math.max(0,timesCorrect),SR_DAYS.length-1)]*86400000;}
+function reviewDue(r){return !r.mastered&&(r.dueAt==null||r.dueAt<=Date.now());}
+// Apply a new working difficulty (1–5) to the active student's saved defaults.
+function applyDifficulty(to){const p=activeProfile();if(!p)return;p.defaults=p.defaults||{};p.defaults.difficulty=Math.max(1,Math.min(5,to));saveCfg();scheduleDriveSync();}
+// Between-session adaptive difficulty: suggest a level change when the last two
+// practices at the SAME subject+difficulty are both strong (≥85%) or both weak (<50%).
+async function difficultySuggestion(a){
+  const d=+a.difficulty;if(!(d>=1&&d<=5))return null;
+  const recent=(await dbAll('attempts')).filter(x=>x.profileId===pid()&&x.mode==='practice'&&x.subject===a.subject&&(+x.difficulty)===d).sort((x,y)=>y.startedAt-x.startedAt).slice(0,2);
+  if(recent.length<2)return null;
+  if(recent.every(x=>x.percent>=85)&&d<5)return {from:d,to:d+1,dir:'up'};
+  if(recent.every(x=>x.percent<50)&&d>1)return {from:d,to:d-1,dir:'down'};
+  return null;
+}
 async function submitSession(){
+  if(S.committed)return;S.committed=true; // re-entry guard: never double-count mastery/XP (timer + manual submit, double-tap…)
   stopTimer();S.submitted=true;S.elapsed=Math.round((Date.now()-S.startedAt)/1000);
   const results=S.questions.map((q,i)=>{const g=gradeAnswer(q,S.answers[i]);return {q,i,userAns:S.answers[i],flagged:S.flags[i],...g};});
   const totalMarks=S.questions.reduce((s,q)=>s+q.marks,0);
   const gotMarks=results.reduce((s,r)=>s+(r.status==='correct'?r.q.marks:0),0);
   const percent=totalMarks?Math.round(gotMarks/totalMarks*100):0;
-  const attempt={id:S.id,profileId:pid(),date:todayISO(),startedAt:S.startedAt,student:activeProfile().name,
+  const attempt={id:S.id,profileId:pid(),date:todayISO(),startedAt:S.startedAt,student:activeProfile().name,mode:S.mode,
     country:S.settings.country,subject:S.settings.subject,exam:S.settings.exam,examLabel:S.settings.examLabel,level:S.settings.level,
     topicsRequested:S.settings.topics,difficulty:S.settings.difficulty,count:S.questions.length,elapsed:S.elapsed,totalMarks,gotMarks,percent,
     correct:results.filter(r=>r.status==='correct').length,wrong:results.filter(r=>r.status==='wrong').length,needsReview:results.filter(r=>r.status==='review').length,flagged:results.filter(r=>r.flagged).length,
     results:results.map(r=>({topic:r.q.topic,type:r.q.type,question:r.q.question,svg:r.q.svg,image:r.q.image,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,hint:r.q.hint,whyWrong:r.q.whyWrong,userAns:r.userAns,flagged:r.flagged,status:r.status,auto:r.auto}))};
   await dbPut('attempts',attempt);
-  for(const r of results){if(r.status==='wrong'||r.status==='review'||r.flagged){await dbPut('review',{id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),attemptId:S.id,exam:S.settings.exam,subject:S.settings.subject,level:S.settings.level,topic:r.q.topic,reason:r.flagged?'flagged':(r.status==='review'?'review':'wrong'),timesSeen:1,timesCorrect:0,mastered:false,question:r.q.question,svg:r.q.svg,image:r.q.image,type:r.q.type,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,hint:r.q.hint,whyWrong:r.q.whyWrong});}}
+  // Practice mode: file each wrong / self-check / flagged question into the mistakes
+  // notebook (due now). REVIEW re-tests don't file new items — the submitSession
+  // wrapper (below) updates the existing item's mastery + spaced-repetition due date.
+  if(S.mode!=='review'){
+    for(const r of results){if(r.status==='wrong'||r.status==='review'||r.flagged){await dbPut('review',{id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),dueAt:Date.now(),attemptId:S.id,exam:S.settings.exam,subject:S.settings.subject,level:S.settings.level,topic:r.q.topic,reason:r.flagged?'flagged':(r.status==='review'?'review':'wrong'),timesSeen:1,timesCorrect:0,mastered:false,question:r.q.question,svg:r.q.svg,image:r.q.image,type:r.q.type,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,hint:r.q.hint,whyWrong:r.q.whyWrong});}}
+  }
   // Rewards (practice mode): XP from correct answers × difficulty (quality), candy
   // for completing (effort — even low accuracy earns some), and a Poké-Pack card if
   // ≥PACK_MIN_Q and within the daily cap. Rarity is rolled from THIS result;
@@ -1336,12 +1361,41 @@ async function submitSession(){
       await dbPut('attempts',attempt);
     }catch(e){console.warn('rewards',e);}
   }
+  // Adaptive difficulty (practice only): suggest a level change, or auto-apply it
+  // when the parent has turned that on. Recorded on the attempt so results can show it.
+  if(S.mode==='practice'){
+    try{
+      const sug=await difficultySuggestion(attempt);
+      if(sug){
+        if(CFG.autoDifficulty){applyDifficulty(sug.to);attempt.diffApplied=sug;}
+        else attempt.diffSuggest=sug;
+        await dbPut('attempts',attempt);
+      }
+    }catch(e){console.warn('adaptive',e);}
+  }
   scheduleDriveSync();
   sendSummaryEmail(attempt).catch(e=>console.warn('email',e));
   viewResults(attempt);
 }
 
 /* ----- RESULTS ----- */
+// Adaptive-difficulty card: a clear, tappable level-change prompt (suggest mode)
+// or an announcement of an auto-applied change. Always visible, never silent.
+function diffSuggestCard(a){
+  const applied=a.diffApplied,sug=a.diffSuggest;
+  if(applied)return el('div',{class:'card',style:'border-color:#cfe2ff;background:var(--feature)'},
+    el('div',{style:'font-weight:700'},(applied.dir==='up'?'⬆️ Leveled up to ':'⬇️ Eased to ')+diffLabel(applied.to)+' for your next practice.'),
+    el('div',{class:'row',style:'margin-top:8px'},el('button',{class:'btn sm',onclick:async()=>{applyDifficulty(applied.from);delete a.diffApplied;await dbPut('attempts',a);toast('Kept at '+diffLabel(applied.from));viewResults(a);}},'Keep me at '+diffLabel(applied.from)+' instead')));
+  if(sug){const up=sug.dir==='up';
+    return el('div',{class:'card',style:'border-color:'+(up?'#bbf7d0':'#fde68a')+';background:'+(up?'#f0fdf4':'#fffbeb')},
+      el('div',{style:'font-weight:700'},up?('🔥 You’re flying at '+diffLabel(sug.from)+'! Ready for a bigger challenge?'):('💪 Let’s build confidence — try an easier level?')),
+      el('div',{class:'small muted',style:'margin:4px 0 10px'},up?'Your last two practices at this level were 85% or better.':'A slightly easier level can help things click, then build back up.'),
+      el('div',{class:'row',style:'gap:8px'},
+        el('button',{class:'btn sm primary',onclick:async()=>{applyDifficulty(sug.to);a.diffApplied=sug;delete a.diffSuggest;await dbPut('attempts',a);toast((up?'Leveled up to ':'Eased to ')+diffLabel(sug.to));viewResults(a);}},(up?'Level up to ':'Ease to ')+diffLabel(sug.to)+(up?' →':'')),
+        el('button',{class:'btn sm',onclick:async()=>{delete a.diffSuggest;await dbPut('attempts',a);viewResults(a);}},'Stay at '+diffLabel(sug.from))));
+  }
+  return '';
+}
 function viewResults(a){
   stopTimer();
   const emoji=a.percent>=85?'🏆':a.percent>=70?'🎉':a.percent>=50?'💪':'📚';
@@ -1372,6 +1426,7 @@ function viewResults(a){
       el('div',{style:'font-weight:800;font-size:16px'},'⭐ +'+a.xpGain+' XP    🍬 +'+a.candyGain+' candy'+(a.energyGain?'    ⚡ +'+a.energyGain+' energy':'')),
       a.levelUp?el('div',{style:'color:var(--brand);font-weight:700;margin-top:4px'},'🎉 Level up! Trainer Level '+a.levelUp):'',
       a.reward2?el('div',{style:'color:var(--brand);font-weight:700;margin-top:4px'},'✨ Double pack! You got TWO cards 🎉'):''):'',
+    diffSuggestCard(a),
     a.reward?packRevealCard(a.reward):'',
     a.reward2?packRevealCard(a.reward2):'',
     el('div',{class:'card'},el('h2',{},'Question by question'),el('p',{class:'sub'},'Read the explanations — that’s where the learning happens.'),list),
@@ -1749,7 +1804,8 @@ const reasonTag={wrong:'✗ got wrong',review:'self-check',flagged:'🚩 flagged
 async function viewReview(){
   stopTimer();
   const all=(await dbAll('review')).filter(r=>r.profileId===pid());
-  const active=all.filter(r=>!r.mastered).sort((a,b)=>(a.timesCorrect-b.timesCorrect)||(a.createdAt-b.createdAt));
+  const active=all.filter(r=>!r.mastered).sort((a,b)=>((reviewDue(b)?1:0)-(reviewDue(a)?1:0))||((a.dueAt||0)-(b.dueAt||0))||(a.timesCorrect-b.timesCorrect)||(a.createdAt-b.createdAt));
+  const dueItems=active.filter(reviewDue);
   const masteredN=all.length-active.length;
   if(!all.length)return show(el('div',{},backBar('Mistakes notebook',()=>viewHome()),el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'📓'),el('div',{},'Your notebook is empty. Mistakes and flagged questions from practices land here for revision.')))));
   if(!active.length)return show(el('div',{},backBar('Mistakes notebook',()=>viewHome()),el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'🎉'),el('div',{},`All ${masteredN} mistake${masteredN===1?'':'s'} mastered. Nothing left to revise — great work!`)))));
@@ -1775,7 +1831,7 @@ async function viewReview(){
   show(el('div',{},backBar('Mistakes notebook',()=>viewHome()),
     el('div',{class:'card'},el('h2',{},'📓 Mistakes notebook'),
       el('p',{class:'sub',style:'margin-bottom:10px'},`${active.length} to revise across ${Object.keys(groups).length} topic${Object.keys(groups).length===1?'':'s'}`+(masteredN?` · ${masteredN} mastered 🎉`:'')+'. A question is mastered after you get it right twice.'),
-      el('button',{class:'btn primary block lg',onclick:()=>startReview(active)},'🔁 Re-test '+(active.length>15?'15 most important':'all'))),
+      el('button',{class:'btn primary block lg',onclick:()=>startReview(dueItems.length?dueItems:active)},dueItems.length?('🔁 Re-test '+Math.min(15,dueItems.length)+' due now'):'🔁 Re-test all')),
     ...groupEls));
 }
 
@@ -1970,6 +2026,7 @@ function buildAICard(parent){
   renderAI();
   return el('div',{class:'card'},el('h2',{},'🤖 AI'),el('p',{class:'sub'},'Which AI writes the questions.'),field('Provider','',providerSel),aiHost,
     el('div',{style:'margin-top:8px'},toggle('Double-check answers',CFG.verify,v=>CFG.verify=v),el('div',{class:'small muted',style:'margin-top:4px'},'A second AI pass solves each new question and drops or fixes any with a wrong/ambiguous answer. More accurate, but uses 1 extra AI call per freshly generated batch (banked questions are still free).')),
+    el('div',{style:'margin-top:8px'},toggle('Auto-adjust difficulty',CFG.autoDifficulty,v=>CFG.autoDifficulty=v),el('div',{class:'small muted',style:'margin-top:4px'},'Off (default): after consistently strong or weak practices, the results screen SUGGESTS a level change you can tap. On: the level changes automatically for the next practice (always announced on the results screen, never silent).')),
     el('details',{class:'adv'},el('summary',{},'🔑 Share this key with all devices (no re-typing)'),buildVaultInner()));
 }
 function buildLoginInner(){
@@ -2166,7 +2223,7 @@ $('#navSettings').addEventListener('click',()=>viewSettings());
 $('#profileChip').addEventListener('click',()=>viewProfiles());
 
 const _origSubmit=submitSession;
-submitSession=async function(){const wasReview=S&&S.mode==='review';const qs=wasReview?S.questions.slice():null;const ans=wasReview?S.answers.slice():null;await _origSubmit.apply(this,arguments);if(wasReview){for(let i=0;i<qs.length;i++){const q=qs[i];if(!q.reviewId)continue;const g=gradeAnswer(q,ans[i]);try{const item=(await dbAll('review')).find(r=>r.id===q.reviewId);if(!item)continue;item.timesSeen=(item.timesSeen||0)+1;if(g.status==='correct'){item.timesCorrect=(item.timesCorrect||0)+1;if(item.timesCorrect>=2)item.mastered=true;}else item.timesCorrect=0;await dbPut('review',item);}catch(e){}}scheduleDriveSync();}};
+submitSession=async function(){const wasReview=S&&S.mode==='review';const qs=wasReview?S.questions.slice():null;const ans=wasReview?S.answers.slice():null;await _origSubmit.apply(this,arguments);if(wasReview){for(let i=0;i<qs.length;i++){const q=qs[i];if(!q.reviewId)continue;const g=gradeAnswer(q,ans[i]);try{const item=(await dbAll('review')).find(r=>r.id===q.reviewId);if(!item)continue;item.timesSeen=(item.timesSeen||0)+1;if(g.status==='correct'){item.timesCorrect=(item.timesCorrect||0)+1;if(item.timesCorrect>=2)item.mastered=true;else item.dueAt=srNext(item.timesCorrect);}else{item.timesCorrect=0;item.dueAt=srNext(0);}await dbPut('review',item);}catch(e){}}scheduleDriveSync();}};
 
 /* ----- LOGIN ----- */
 function isParentName(name){return AUTH.users.some(u=>u.parent&&u.name.toLowerCase()===String(name).toLowerCase());}
@@ -2249,7 +2306,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.16';
+const APP_VERSION='v2.17';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
