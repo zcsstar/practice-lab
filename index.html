@@ -1038,8 +1038,13 @@ async function viewHome(){
    every device, so they work on the public Pages URL without ever being in the repo.
    Drilled directly (not via the difficulty-keyed bank); real figures/photos ride
    along as cropped images and structured-diagram specs render via PLDiagram. */
-function startPaper(pk){
+// Minutes for a timed exam run of a pack: pack-specified, else ~1 min/question
+// (the ICAS norm), clamped to a sensible 10–75 min.
+function paperMins(pk){return Math.max(10,Math.min(75,(pk.timeLimitMin||(pk.setup&&pk.setup.timeLimitMin)||((pk.questions||[]).length||10))));}
+function startPaper(pk,timed){
   const setup=Object.assign({country:'',subject:pk.subject||'Maths',exam:pk.exam||'icas',examLabel:pk.title||'Past paper',level:pk.level||'',topics:[],difficulty:3,style:'paper',timeLimitMin:0},pk.setup||{});
+  setup.timeLimitMin=timed?paperMins(pk):0; // timed exam = countdown + auto-submit; else untimed practice
+  if(timed)setup.examLabel='⏱ '+setup.examLabel;
   // Pack answers are curated/verified, so we TRUST answerIndex — do NOT run the
   // AI mis-key backstop here (it can mis-fire on non-numeric answers like "leave
   // out the + card" whose explanation contains numbers matching other options).
@@ -1078,7 +1083,7 @@ async function viewPapers(){
     packs.forEach(pk=>{const qn=(pk.questions||[]).length;
       body.push(el('div',{class:'card'},el('div',{class:'row between',style:'align-items:center'},
         el('div',{},el('b',{},pk.title||'Paper'),el('div',{class:'small muted'},[pk.subject,pk.level,pk.year].filter(Boolean).join(' · ')+' · '+qn+' question'+(qn===1?'':'s'))),
-        el('div',{class:'row',style:'gap:6px'},el('button',{class:'btn primary',onclick:()=>startPaper(pk)},'Start'),el('button',{class:'btn ghost',title:'Remove',onclick:()=>delPack(pk.id)},'🗑️')))));
+        el('div',{class:'row',style:'gap:6px'},el('button',{class:'btn primary',onclick:()=>startPaper(pk)},'Practice'),el('button',{class:'btn',onclick:()=>{if(confirm('Timed exam: '+qn+' question'+(qn===1?'':'s')+' in '+paperMins(pk)+' minutes, no pausing — it auto-submits when time’s up. Start?'))startPaper(pk,true);}},'⏱ Timed exam'),el('button',{class:'btn ghost',title:'Remove',onclick:()=>delPack(pk.id)},'🗑️')))));
     });
   }
   show(el('div',{},backBar('Exam packs',()=>viewHome()),
@@ -1270,7 +1275,7 @@ function viewRun(){
   function renderNav(){navWrap.innerHTML='';S.questions.forEach((q,i)=>{const answered=S.answers[i]!=null&&S.answers[i]!==''&&S.answers[i]!==-1;navWrap.append(el('button',{class:'qchip'+(i===S.cur?' cur':'')+(answered?' answered':'')+(S.flags[i]?' flagged':''),onclick:()=>{S.cur=i;renderQ();renderNav();}},String(i+1)));});}
   function renderQ(){
     const i=S.cur,q=S.questions[i];qHost.innerHTML='';
-    const head=el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)+' of '+total),el('span',{class:'pill'},q.topic),el('span',{class:'pill'},q.marks+' mark'+(q.marks>1?'s':'')),(S.settings&&S.settings.difficulty)?el('span',{class:'pill'},diffLabel(S.settings.difficulty)):''),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak(qSpeakText(q))},'🔊'));
+    const head=el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)+' of '+total),el('span',{class:'pill'},q.topic),el('span',{class:'pill'},q.marks+' mark'+(q.marks>1?'s':'')),(S.settings&&S.settings.difficulty)?el('span',{class:'pill'},diffLabel(S.settings.difficulty)):'',(S.limitSec?el('span',{class:'pill',style:'color:var(--warn)'},'⏱ Timed exam'):'')),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak(qSpeakText(q))},'🔊'));
     const qtext=el('div',{class:'qtext',html:esc(q.question)});
     const fig=figureEl(q);
     let input;
@@ -1396,6 +1401,21 @@ function diffSuggestCard(a){
   }
   return '';
 }
+// Per-topic breakdown for the results screen (exam report): weakest strand first,
+// with a ready / almost / revise label. Shown when a session spans ≥2 topics.
+function topicReport(a){
+  const ts={};(a.results||[]).forEach(r=>{const t=r.topic||'General';ts[t]=ts[t]||{n:0,c:0};ts[t].n++;if(r.status==='correct')ts[t].c++;});
+  const rows=Object.entries(ts);if(rows.length<2)return '';
+  rows.sort((x,y)=>(x[1].c/x[1].n)-(y[1].c/y[1].n));
+  return el('div',{class:'card'},el('h2',{},'By topic'),el('p',{class:'sub'},'Where you’re strong and what to revise next.'),
+    ...rows.map(([t,o])=>{const pct=Math.round(o.c/o.n*100);const col=accColor(pct);const lbl=pct>=80?'ready ✓':pct>=50?'almost':'revise';
+      return el('div',{class:'row between',style:'padding:7px 0;border-bottom:1px solid var(--line);gap:10px;align-items:center'},
+        el('span',{style:'flex:1'},t),
+        el('span',{class:'small muted',style:'flex:none'},o.c+'/'+o.n),
+        el('span',{style:'flex:none;width:46px;text-align:right;font-weight:700;color:'+col},pct+'%'),
+        el('span',{class:'pill',style:'flex:none;color:'+col},lbl));
+    }));
+}
 function viewResults(a){
   stopTimer();
   const emoji=a.percent>=85?'🏆':a.percent>=70?'🎉':a.percent>=50?'💪':'📚';
@@ -1429,6 +1449,7 @@ function viewResults(a){
     diffSuggestCard(a),
     a.reward?packRevealCard(a.reward):'',
     a.reward2?packRevealCard(a.reward2):'',
+    topicReport(a),
     el('div',{class:'card'},el('h2',{},'Question by question'),el('p',{class:'sub'},'Read the explanations — that’s where the learning happens.'),list),
     el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>viewSetup()},'New practice'),el('button',{class:'btn',onclick:()=>viewHome()},'Home'))));
   if(window.gsap&&!reduceMotion){const pctEl=$('.scorehero .pct');if(pctEl){const o={v:0};gsap.to(o,{v:a.percent,duration:.9,ease:'power2.out',onUpdate:()=>pctEl.textContent=Math.round(o.v)+'%'});}gsap.from('.qresult',{autoAlpha:0,y:16,duration:.3,stagger:.04,ease:'power2.out',delay:.12,clearProps:'all'});}
@@ -2306,7 +2327,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.17';
+const APP_VERSION='v2.18';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
