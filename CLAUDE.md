@@ -27,11 +27,16 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 ## Architecture (all inside the one `<script>`)
 - **CFG** — config object in `localStorage` key `practicelab.config.v2`
   (migrates from `.v1`). Holds provider/key/model, profiles, email + drive
-  settings, `webSearch`, and `examContext` (per-exam saved context text).
+  settings, `webSearch`, `examContext` (per-exam saved context text), and the
+  learning toggles `verify` (double-check answers, default on), `autoDifficulty`
+  (auto-apply adaptive level vs suggest, default off) and `aiGrade` (AI-mark
+  written answers, default off). Also holds the sync deletion bookkeeping
+  `packsDeleted`/`refsDeleted` (tombstones) and `cleared` (`"store:profileId"→ts`
+  for Clear-bank/Clear-history) — see Drive sync.
 - **IndexedDB** (`practicelab`, v3), four stores:
   - `attempts` — every completed practice (full question + result snapshot)
   - `review` — wrong/unsure questions for spaced revision (`mastered` after 2
-    correct re-answers)
+    correct re-answers; carry a `dueAt` for spaced repetition — see Mistakes notebook)
   - `refs` — uploaded reference papers (base64 + extracted text + tags)
   - `bank` — pre-generated question surplus, keyed by setup (see AI layer); cuts
     API calls by reusing one generation across many practices
@@ -143,20 +148,58 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   correct) → `regrade()` recomputes the score and removes the matching mistakes-
   notebook entry. So a bad key is always correctable by the parent/student.
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
-  Bank/Dashboard`. `show(node)` swaps `#app` and re-runs KaTeX. No router;
+  Bank/Dashboard/Skills/Guide`. `show(node)` swaps `#app` and re-runs KaTeX. No router;
   functions call each other. `viewBank` = question-bank hub; `viewDashboard` =
-  parent-only all-students progress overview.
-- **Mistakes notebook** (`viewReview`, home "📓 Mistakes notebook") — browses the
-  `review` items grouped by topic, each expandable to its worked answer + mastery
-  progress (`timesCorrect`/2). `startReview(items)` re-tests all or a single topic
-  (review-mode session; the `submitSession` wrapper updates mastery). Mastered
-  items drop out; an empty/all-mastered state is shown.
+  parent-only all-students progress overview; `viewSkills` = exam-topic coverage map;
+  `viewGuide` = "How it works" guide (header ❓ + auto-shows on first run via the
+  `practicelab.guideSeen` flag). **`viewHome` groups the menu into labelled section
+  cards** via a `sectionCard()` helper: **Practise** (Start a practice · 🎯 weak spots ·
+  Mistakes notebook · Question bank), **Track progress** (Progress · Skills map · My
+  cards · All students) and **Exam content** (Reference library · Exam packs); empty /
+  parent-only sections are dropped.
+- **Mistakes notebook + spaced repetition** (`viewReview`, home "📓 Mistakes notebook") —
+  browses the `review` items grouped by topic, each expandable to its worked answer +
+  mastery progress (`timesCorrect`/2). `startReview(items)` re-tests all/one topic
+  (review-mode session; the global `submitSession` **wrapper** at the bottom of the
+  script updates mastery AND reschedules the spaced-repetition `dueAt` — correct →
+  `srNext(timesCorrect)` on the `SR_DAYS=[1,3,7,14]` ladder, wrong → due again soon,
+  mastered at 2). Practice-mode `submitSession` files NEW notebook items (due now) but
+  NOT during review re-tests (no duplicates). `reviewDue(r)` = not mastered & due;
+  home shows a "Due now" tile and the notebook re-tests due items first. **NOTE:** core
+  `submitSession` only FILES items; the wrapper does the mastery/SR update — don't
+  duplicate that increment (it caused a double-count bug, fixed with a `S.committed`
+  re-entry guard).
 - **Progress & stats** (`viewHistory`, home "📈 Progress & stats") — analytics
   dashboard: at-a-glance tiles (questions/accuracy/time/streak), a score-trend
   line and per-day activity bars (`chartLine`/`chartBars` — tiny inline-SVG
   helpers; colours are literal since CSS vars don't resolve in SVG attributes),
   accuracy-by-topic bars (weakest first, each with a `practiceTopic` drill), then
   the past-practices list and export/import/clear.
+- **Learning & exam-prep features (added v2.15–v2.25)** —
+  - **Hints + distractor rationales**: `buildPrompt` asks for `hint` (one-line nudge, no
+    spoiler) and `whyWrong` (per-option reason); `parseQuestions` threads both through the
+    bank/attempt/review spreads; runner shows a 💡 Hint button, results show a "Why the
+    other answers are wrong" block. Optional → packs/old data without them render fine.
+  - **Answer verification** (`CFG.verify`, default on): `verifyQuestions(s,qs)` inside
+    `generateQuestions` makes ONE extra AI call that re-solves each generated question and
+    keeps / repoints (MC) / drops it (`parseChecks` = tolerant `{checks:[…]}` parse).
+    Best-effort — any failure returns the originals. Settings → AI toggle.
+  - **AI-marked written answers** (`CFG.aiGrade`, default off): `aiGradeFreeText(s,results)`
+    in `submitSession` batch-grades short/numeric self-check answers (accepts equivalent
+    wording/units/rounding) BEFORE the score is computed; practice-mode only.
+  - **Adaptive difficulty** (`CFG.autoDifficulty`, default off = SUGGEST): after two same-
+    subject/level practices ≥85% (or <50%), `difficultySuggestion()` proposes a level change
+    on results (`diffSuggestCard`); off = tap to apply, on = auto-apply (announced, never
+    silent). `applyDifficulty()` writes the active profile's `defaults.difficulty`. Friendly
+    names via `diffLabel()` (`DIFF_NAMES`: L1 Starter…L5 Challenge); shown on runner/bank.
+  - **Weak-spot practice** (`practiceWeakSpots()`): a bank-first drill weighted to the
+    student's lowest-scoring practised topics + untried `examTopics()`; on the home Practise
+    section and atop the Skills map.
+  - **Timed mock-exam mode**: `startPaper(pk, timed)` sets a countdown (`paperMins()`,
+    ~1 min/Q clamped 10–75) reusing the existing `S.limitSec` timer + auto-submit; runner
+    shows a "⏱ Timed exam" pill, results show a per-topic exam report (`topicReport()`).
+  - **Printable worksheet** (`printWorksheet(questions,title)`): a print window with the
+    questions (LaTeX flattened via `plainMath`) + a separate answer key; button on results.
 - **Explanation rendering** — `fmtExplain()` turns the stored explanation
   (plain text + `$LaTeX$` + `**bold**`/`*italic*` + numbered steps / `*` bullets)
   into readable HTML blocks, protecting `$…$` spans (incl. escaped `\$` for money
@@ -353,6 +396,15 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   metadata-only ref shows "synced — file on another device" and can't ground there.
   REST. Merge-on-id (no conflict resolution beyond "keep both / first wins").
   Only works on an https origin. `scheduleDriveSync()` debounces writes.
+  - **Deletions propagate (don't resurrect).** The merge is additive, so a delete used to
+    come back from the synced blob. Fixed two ways, both carried in the blob + applied in
+    `mergeRemote`: (1) **tombstones** `CFG.packsDeleted`/`refsDeleted` `{id:deletedAt}` for
+    per-item deletes (`delPack` / the ref 🗑) — merge drops & skips tombstoned ids; a
+    re-import wins (packs by newer `updatedAt`; refs get a fresh `uid` so the id never
+    recurs). (2) **clear stamps** `CFG.cleared` `{"store:profileId":clearedAt}` for wholesale
+    Clear-bank / Clear-history — merge drops any bank/attempts/review item created at/before
+    the stamp and skips re-adding it, while items generated AFTER the clear survive.
+    The stamp is written BEFORE the sync so a clear is immediate locally and propagates.
 
 ## Conventions
 - Tiny DOM helper `el(tag, attrs, ...children)`; `$`/`$$` for queries. Keep using
@@ -362,9 +414,13 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `renderMath` themselves.
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
-  so the string is just a visible deploy marker): scheme is **v1.x** — bump the
-  minor (v1.1, v1.2, …) on each release; reserve a major bump (**v2.0**) for a big
-  feature release. Claude suggests the next number on each deploy; Chi decides.
+  so the string is just a visible deploy marker): scheme is **v2.x** — bump the
+  minor on each release (currently at **v2.25**). Claude suggests the next number on
+  each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
+  work account) — headless method: `git push "https://x-access-token:$(gh auth token
+  --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach
+  the desktop from this environment). Packs/refs are gitignored (copyright); committed
+  files are `index.html` + sibling scripts + docs.
 
 ## Verifying changes
 1. **Parser tests:** `node parse.test.js` (covers the `parse.js` module: clean,
