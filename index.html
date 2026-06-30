@@ -1033,17 +1033,24 @@ async function viewHome(){
   const goalPct=Math.min(100,Math.round(doneToday/goal*100));
   const tiles=el('div',{class:'tiles'},tile(attempts.length,'Practices'),tile(avg+'%','Avg score'),tile(dueN||review.length,dueN?'Due now':'To review'),tile(el('span',{class:'streak'},'🔥 '+streak),'Day streak'));
   const goalCard=el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:8px'},el('b',{},'🎯 Today’s goal'),el('span',{class:'small muted'},doneToday+' / '+goal+' questions'+(doneToday>=goal?' · done! 🎉':''))),el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+goalPct+'%;background:'+(doneToday>=goal?'var(--ok)':'var(--brand)')})));
-  const menu=el('div',{class:'menu'},
+  // Grouped into meaningful sections (each its own card) so the home screen scans easily:
+  // what you DO, how you're TRACKING, and the exam CONTENT that grounds it.
+  const sectionCard=(title,sub,items)=>{items=items.filter(Boolean);if(!items.length)return null;return el('div',{class:'card'},el('h2',{},title),sub?el('p',{class:'sub',style:'margin-bottom:6px'},sub):'',el('div',{class:'menu'},...items));};
+  const secPractise=sectionCard('Practise','Do questions and revise mistakes.',[
     menuItem('🚀','Start a practice','Generate fresh exam-style questions',()=>viewSetup()),
     menuItem('📓','Mistakes notebook',dueN?`🔁 ${dueN} due for review now`:(review.length?`${review.length} saved · spaced out, check back soon`:'Nothing to revise — nice!'),()=>review.length?viewReview():toast('No mistakes saved yet.')),
     menuItem('🗄️','Question bank',bankN?`${bankN} saved — practise with no AI`:'Pre-generate questions to save AI calls',()=>viewBank()),
+  ]);
+  const secProgress=sectionCard('Track progress','See how you’re going and earn rewards.',[
     menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
     menuItem('🧭','Skills map','Which exam topics you’ve covered — and what to try next',()=>viewSkills()),
     menuItem('🎴','My cards',caughtN?caughtN+' of '+POKEDEX.length+' caught — open packs by practising':'Finish a practice to earn your first card!',()=>viewCards()),
     isParent()?menuItem('👨‍👩‍👧','All students','Compare progress across the family',()=>viewDashboard()):null,
-    menuItem('📚','Reference library','Real past papers — ground questions in authentic exam style',()=>viewRefs()),
-    isParent()?menuItem('📄','Exam packs',packN?`${packN} real paper${packN>1?'s':''} — ground each child's generated questions (by level)`:'Import real past papers to ground the AI per level',()=>viewPapers()):null,
-  );
+  ]);
+  const secContent=sectionCard('Exam content','Real past papers that ground the AI in authentic style.',[
+    menuItem('📚','Reference library','Attach real past papers when generating',()=>viewRefs()),
+    isParent()?menuItem('📄','Exam packs',packN?`${packN} real paper${packN>1?'s':''} — ground each child's questions (by level)`:'Import real past papers to ground the AI per level',()=>viewPapers()):null,
+  ]);
   const setupWarn=!CFG.apiKey?el('div',{class:'card',style:'border-color:#ffd8a8;background:#fff7ed'},el('h2',{},isParent()?'👋 First, add your AI key':'🔑 Waiting for the AI key'),el('p',{class:'sub',style:'margin-bottom:10px'},isParent()?'Practice Lab needs an AI key to write questions. The free Google Gemini key takes ~2 minutes.':'A parent needs to set up the shared AI key, then you’re ready to go.'),isParent()?el('button',{class:'btn primary',onclick:()=>viewSettings()},'Open settings'):null):null;
   const driveBanner=(isParent()&&CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'&&!driveToken)?el('div',{class:'card',style:'border-color:#cfe2ff;background:var(--feature)'},el('h2',{},'☁️ Sync across devices'),el('p',{class:'sub',style:'margin-bottom:10px'},'Connect Google Drive (once per device, same Google account) to share students, defaults, past papers and history everywhere.'),el('button',{class:'btn primary',onclick:()=>{CFG.drive.enabled=true;saveCfg();driveConnect(true);}},'Connect Google Drive')):null;
   show(el('div',{},
@@ -1051,7 +1058,9 @@ async function viewHome(){
     attempts.length?goalCard:null,
     setupWarn,
     driveBanner,
-    el('div',{class:'card'},el('h2',{},'What would you like to do?'),el('p',{class:'sub'},''),menu)
+    secPractise,
+    secProgress,
+    secContent
   ));
 }
 
@@ -2412,7 +2421,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.22';
+const APP_VERSION='v2.23';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
