@@ -439,6 +439,7 @@ const DEFAULT_CFG={
   webSearch:true,
   verify:true,     // double-check generated answers with one extra AI call (drops/keeps)
   autoDifficulty:false, // false = SUGGEST a level change on results; true = auto-apply (announced)
+  aiGrade:false,   // AI-mark short/free-text answers that don't auto-match (1 extra call per such submit)
   dailyGoal:10,    // questions per day target (for the streak / goal widget)
   voiceURI:'', voiceRate:0.95, voicePitch:1,  // read-aloud voice (Web Speech) — device-specific, NOT synced
   settingsAt:0,    // last-edited timestamp for the synced-settings whitelist below
@@ -447,7 +448,7 @@ const DEFAULT_CFG={
 // Non-secret, device-independent settings that sync across devices via Drive
 // (newest edit wins). Excludes the API key (use KEYVAULT) and device-specific
 // things like the chosen voice, active student and Drive config.
-const SYNC_SETTINGS=['emailEnabled','emailTo','emailjs','dailyGoal','webSearch','verify','autoDifficulty','examContext'];
+const SYNC_SETTINGS=['emailEnabled','emailTo','emailjs','dailyGoal','webSearch','verify','autoDifficulty','aiGrade','examContext'];
 function pickSyncSettings(){const o={};for(const k of SYNC_SETTINGS)o[k]=CFG[k];return o;}
 function applySyncSettings(s){if(!s)return;for(const k of SYNC_SETTINGS)if(s[k]!==undefined)CFG[k]=s[k];}
 function markSettingsChanged(){CFG.settingsAt=Date.now();}
@@ -814,6 +815,21 @@ QUESTIONS:
   });
   return out.length?reindex(out):qs; // never return empty
 }
+// AI-mark short/numeric answers that didn't auto-match (status 'review'): one
+// batched call decides correct/incorrect, allowing equivalent wording/format/units.
+// Mutates `results` in place; best-effort (any failure leaves them as self-check).
+async function aiGradeFreeText(s,results){
+  if(!CFG.aiGrade||!CFG.apiKey)return;
+  const items=[];
+  results.forEach((r,i)=>{if(r.status==='review'&&(r.q.type==='short'||r.q.type==='numeric')&&r.userAns!=null&&String(r.userAns).trim()!==''){items.push({i,question:plainMath(r.q.question),acceptedAnswer:r.q.answer,alsoAccept:r.q.acceptedAnswers||[],studentAnswer:String(r.userAns)});}});
+  if(!items.length)return;
+  const prompt=`You are a fair ${s.level||''} ${s.subject||''} exam marker. For EACH item decide if the student's answer is correct — i.e. equivalent in meaning/value to the accepted answer, allowing different wording, format, units or rounding. Return ONLY JSON (no prose/fences): {"marks":[{"i":<index>,"correct":true|false}]}.\nITEMS:\n`+JSON.stringify(items);
+  let raw;
+  try{const mt=outTokens(items.length,4096);if(CFG.provider==='gemini')raw=await callGemini(prompt,[],mt);else if(CFG.provider==='claude')raw=await callClaude(prompt,[],Math.min(8192,mt));else raw=await callOpenAICompatible(prompt,[],mt);usageBump(1);}catch(e){return;}
+  let obj;try{let t=String(raw||'').trim().replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();const m=t.match(/\{[\s\S]*\}/);obj=JSON.parse(m?m[0]:t);}catch(e){return;}
+  if(!obj||!Array.isArray(obj.marks))return;
+  obj.marks.forEach(m=>{if(m&&typeof m.i==='number'&&results[m.i]&&results[m.i].status==='review'){results[m.i].status=m.correct?'correct':'wrong';results[m.i].auto=true;results[m.i].aiGraded=true;}});
+}
 async function generateQuestions(s,files){
   let refsText=(files||[]).map(f=>f.text?`[${f.name}]\n${f.text}`:'').filter(Boolean).join('\n\n');
   if(!refsText){const pt=await packGroundingText(s);if(pt)refsText=pt;} // ground on matching real-paper packs
@@ -1016,6 +1032,7 @@ async function viewHome(){
     menuItem('📓','Mistakes notebook',dueN?`🔁 ${dueN} due for review now`:(review.length?`${review.length} saved · spaced out, check back soon`:'Nothing to revise — nice!'),()=>review.length?viewReview():toast('No mistakes saved yet.')),
     menuItem('🗄️','Question bank',bankN?`${bankN} saved — practise with no AI`:'Pre-generate questions to save AI calls',()=>viewBank()),
     menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
+    menuItem('🧭','Skills map','Which exam topics you’ve covered — and what to try next',()=>viewSkills()),
     menuItem('🎴','My cards',caughtN?caughtN+' of '+POKEDEX.length+' caught — open packs by practising':'Finish a practice to earn your first card!',()=>viewCards()),
     isParent()?menuItem('👨‍👩‍👧','All students','Compare progress across the family',()=>viewDashboard()):null,
     menuItem('📚','Reference library','Real past papers — ground questions in authentic exam style',()=>viewRefs()),
@@ -1319,6 +1336,7 @@ async function submitSession(){
   if(S.committed)return;S.committed=true; // re-entry guard: never double-count mastery/XP (timer + manual submit, double-tap…)
   stopTimer();S.submitted=true;S.elapsed=Math.round((Date.now()-S.startedAt)/1000);
   const results=S.questions.map((q,i)=>{const g=gradeAnswer(q,S.answers[i]);return {q,i,userAns:S.answers[i],flagged:S.flags[i],...g};});
+  if(S.mode!=='review'){try{await aiGradeFreeText(S.settings,results);}catch(e){console.warn('aiGrade',e);}}
   const totalMarks=S.questions.reduce((s,q)=>s+q.marks,0);
   const gotMarks=results.reduce((s,r)=>s+(r.status==='correct'?r.q.marks:0),0);
   const percent=totalMarks?Math.round(gotMarks/totalMarks*100):0;
@@ -1416,6 +1434,46 @@ function topicReport(a){
         el('span',{class:'pill',style:'flex:none;color:'+col},lbl));
     }));
 }
+// Printable worksheet: opens a clean print window with the questions (LaTeX
+// flattened via plainMath so it reads without KaTeX) + a separate answer key.
+function printWorksheet(questions,title){
+  const w=window.open('','_blank');if(!w){toast('Allow pop-ups to print the worksheet.');return;}
+  const e2=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const L=['A','B','C','D','E','F'];let qh='',ak='';
+  (questions||[]).forEach((it,i)=>{
+    const fig=it.svg?('<div class="fig">'+it.svg+'</div>'):(it.image?('<div class="fig"><img src="'+e2(it.image)+'"></div>'):'');
+    const opts=(it.type==='multiple_choice'&&Array.isArray(it.options))?('<ol class="opts">'+it.options.map(o=>'<li>'+e2(plainMath(o))+'</li>').join('')+'</ol>'):'<div class="blank">Answer: ___________________________</div>';
+    qh+='<div class="q"><div class="qt"><b>'+(i+1)+'.</b> '+e2(plainMath(it.question))+'</div>'+fig+opts+'</div>';
+    const corr=it.type==='multiple_choice'?(L[it.answerIndex]+'. '+e2(plainMath((it.options&&it.options[it.answerIndex])||it.answer))):e2(plainMath(it.answer));
+    ak+='<div class="ak"><b>'+(i+1)+'.</b> '+corr+(it.explanation?(' — '+e2(plainMath(it.explanation))):'')+'</div>';
+  });
+  const css='body{font:15px/1.55 -apple-system,system-ui,sans-serif;color:#111;max-width:720px;margin:24px auto;padding:0 18px}h1{font-size:20px}h2{margin-top:26px;border-top:1px solid #ccc;padding-top:12px;page-break-before:always}.q{margin:0 0 15px;page-break-inside:avoid}.opts{margin:5px 0 0}.opts li{margin:2px 0}.fig{margin:6px 0}.fig svg,.fig img{max-width:360px;height:auto}.blank{margin-top:8px;color:#555}.ak{margin:3px 0;font-size:13px}';
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+e2(title||'Worksheet')+'</title><style>'+css+'</style></head><body><h1>'+e2(title||'Practice worksheet')+'</h1>'+qh+'<h2>Answer key</h2>'+ak+'<scr'+'ipt>setTimeout(function(){window.print();},350);</scr'+'ipt></body></html>');
+  w.document.close();
+}
+// Skills-coverage map: every topic the exam tests, with this student's accuracy
+// and which ones are still "new" (not tried) — turns practice into blueprint coverage.
+async function viewSkills(){
+  stopTimer();
+  const ds=defaultSettingsFor(activeProfile());const subject=ds.subject||'Mathematics',examId=ds.exam||'icas';
+  const attempts=(await dbAll('attempts')).filter(a=>a.profileId===pid()&&a.subject===subject);
+  const stat={};attempts.forEach(a=>(a.results||[]).forEach(r=>{const t=r.topic||'General';(stat[t]=stat[t]||{n:0,c:0}).n++;if(r.status==='correct')stat[t].c++;}));
+  const known=examTopics(examId,subject);const topics=known.length?known.slice():Object.keys(stat);
+  Object.keys(stat).forEach(t=>{if(!topics.includes(t))topics.push(t);}); // include practised topics outside the known list
+  const practised=topics.filter(t=>stat[t]&&stat[t].n>0).length;
+  const row=t=>{const o=stat[t]||{n:0,c:0};const pct=o.n?Math.round(o.c/o.n*100):0;
+    return el('div',{class:'row between',style:'gap:10px;padding:8px 0;border-bottom:1px solid var(--line);align-items:center'},
+      el('div',{style:'flex:1;min-width:0'},el('div',{},t),o.n?el('div',{class:'gbar',style:'margin-top:5px'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:'+accColor(pct)})):el('div',{class:'small muted',style:'margin-top:3px'},'not tried yet · '+o.n)),
+      o.n?el('b',{style:'flex:none;width:44px;text-align:right;color:'+accColor(pct)},pct+'%'):el('span',{class:'pill',style:'flex:none'},'new'),
+      el('button',{class:'btn sm',style:'flex:none',onclick:()=>practiceTopic(t)},o.n?'Practise':'Try'));
+  };
+  show(el('div',{},backBar('Skills map',()=>viewHome()),
+    el('div',{class:'card'},el('h2',{},'🧭 '+esc(subject)+' skills map'),
+      el('p',{class:'sub'},'Every topic this exam tests. Practise the ones you haven’t covered to be exam-ready.'),
+      el('div',{class:'gbar',style:'margin:8px 0'},el('div',{class:'gbar-fill',style:'width:'+Math.round(practised/Math.max(1,topics.length)*100)+'%;background:var(--brand)'})),
+      el('p',{class:'small muted',style:'margin-bottom:8px'},practised+' of '+topics.length+' topics practised'),
+      ...topics.map(row))));
+}
 function viewResults(a){
   stopTimer();
   const emoji=a.percent>=85?'🏆':a.percent>=70?'🎉':a.percent>=50?'💪':'📚';
@@ -1451,7 +1509,7 @@ function viewResults(a){
     a.reward2?packRevealCard(a.reward2):'',
     topicReport(a),
     el('div',{class:'card'},el('h2',{},'Question by question'),el('p',{class:'sub'},'Read the explanations — that’s where the learning happens.'),list),
-    el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>viewSetup()},'New practice'),el('button',{class:'btn',onclick:()=>viewHome()},'Home'))));
+    el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>viewSetup()},'New practice'),el('button',{class:'btn',onclick:()=>printWorksheet(a.results,(a.examLabel||'Practice')+' — '+(a.level||''))},'🖨️ Print'),el('button',{class:'btn',onclick:()=>viewHome()},'Home'))));
   if(window.gsap&&!reduceMotion){const pctEl=$('.scorehero .pct');if(pctEl){const o={v:0};gsap.to(o,{v:a.percent,duration:.9,ease:'power2.out',onUpdate:()=>pctEl.textContent=Math.round(o.v)+'%'});}gsap.from('.qresult',{autoAlpha:0,y:16,duration:.3,stagger:.04,ease:'power2.out',delay:.12,clearProps:'all'});}
 }
 async function regrade(a,i,status){const r=a.results[i];if(r.status===status)return;r.status=status;a.correct=a.results.filter(x=>x.status==='correct').length;a.wrong=a.results.filter(x=>x.status==='wrong').length;a.needsReview=a.results.filter(x=>x.status==='review').length;a.gotMarks=a.results.reduce((s,x)=>s+(x.status==='correct'?x.marks:0),0);a.percent=a.totalMarks?Math.round(a.gotMarks/a.totalMarks*100):0;await dbPut('attempts',a);
@@ -2048,6 +2106,7 @@ function buildAICard(parent){
   return el('div',{class:'card'},el('h2',{},'🤖 AI'),el('p',{class:'sub'},'Which AI writes the questions.'),field('Provider','',providerSel),aiHost,
     el('div',{style:'margin-top:8px'},toggle('Double-check answers',CFG.verify,v=>CFG.verify=v),el('div',{class:'small muted',style:'margin-top:4px'},'A second AI pass solves each new question and drops or fixes any with a wrong/ambiguous answer. More accurate, but uses 1 extra AI call per freshly generated batch (banked questions are still free).')),
     el('div',{style:'margin-top:8px'},toggle('Auto-adjust difficulty',CFG.autoDifficulty,v=>CFG.autoDifficulty=v),el('div',{class:'small muted',style:'margin-top:4px'},'Off (default): after consistently strong or weak practices, the results screen SUGGESTS a level change you can tap. On: the level changes automatically for the next practice (always announced on the results screen, never silent).')),
+    el('div',{style:'margin-top:8px'},toggle('AI-mark written answers',CFG.aiGrade,v=>CFG.aiGrade=v),el('div',{class:'small muted',style:'margin-top:4px'},'For short-answer / numeric questions, let the AI judge written answers that don’t exactly match (accepting equivalent wording, units or rounding) instead of leaving them as self-check. Uses 1 extra AI call only when a practice has such answers; multiple-choice is unaffected.')),
     el('details',{class:'adv'},el('summary',{},'🔑 Share this key with all devices (no re-typing)'),buildVaultInner()));
 }
 function buildLoginInner(){
@@ -2327,7 +2386,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.18';
+const APP_VERSION='v2.19';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
