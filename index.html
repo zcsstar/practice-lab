@@ -911,6 +911,23 @@ async function practiceTopic(topic){
     viewRun();
   }catch(e){alert('Couldn’t build that drill:\n\n'+(e.message||e));viewHistory();}
 }
+// Targeted "weak spots" drill: bias the question set toward the active student's
+// lowest-scoring practised topics + topics in the exam they haven't tried yet.
+async function practiceWeakSpots(){
+  const p=activeProfile(),ds=defaultSettingsFor(p);
+  const subject=ds.subject||'Mathematics',examId=EXAMS[ds.exam]?ds.exam:'icas';
+  const attempts=(await dbAll('attempts')).filter(a=>a.profileId===pid()&&a.subject===subject);
+  const stat={};attempts.forEach(a=>(a.results||[]).forEach(r=>{const t=r.topic||'General';(stat[t]=stat[t]||{n:0,c:0}).n++;if(r.status==='correct')stat[t].c++;}));
+  const weak=Object.keys(stat).filter(t=>stat[t].n>=2&&stat[t].c/stat[t].n<0.8).sort((a,b)=>(stat[a].c/stat[a].n)-(stat[b].c/stat[b].n));
+  const uncovered=examTopics(examId,subject).filter(t=>!stat[t]||stat[t].n===0);
+  let topics=[...weak.slice(0,4),...uncovered.slice(0,2)];
+  if(!topics.length){toast('Do a few practices first so I can spot your weak topics.');return;}
+  const exam=EXAMS[examId]||EXAMS.icas;
+  const s={country:ds.country||exam.country,subject,exam:examId,level:ds.level,topics,count:10,difficulty:ds.difficulty||3,style:ds.style||exam.style||'mixed',context:CFG.examContext[examId]||'',webSearch:CFG.webSearch,notes:'',examLabel:exam.label};
+  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building your weak-spot drill…'),el('div',{class:'muted small',style:'margin-top:6px'},'Focusing on: '+topics.slice(0,5).join(', '))))));
+  try{const set=await buildPracticeSet(s,[]);startSession(s,set.questions,'practice');if(set.source==='bank')toast('⚡ From your saved bank — no AI used');viewRun();}
+  catch(e){alert('Couldn’t build that drill:\n\n'+(e.message||e));viewHome();}
+}
 
 /* ============================================================ Marking ============================================================ */
 function normNum(s){if(s==null)return null;const m=String(s).replace(/[, $%]/g,'').match(/-?\d+(\.\d+)?/);return m?parseFloat(m[0]):null;}
@@ -1038,6 +1055,7 @@ async function viewHome(){
   const sectionCard=(title,sub,items)=>{items=items.filter(Boolean);if(!items.length)return null;return el('div',{class:'card'},el('h2',{},title),sub?el('p',{class:'sub',style:'margin-bottom:6px'},sub):'',el('div',{class:'menu'},...items));};
   const secPractise=sectionCard('Practise','Do questions and revise mistakes.',[
     menuItem('🚀','Start a practice','Generate fresh exam-style questions',()=>viewSetup()),
+    attempts.length?menuItem('🎯','Practise weak spots','A drill focused on your lowest-scoring & untried topics',()=>practiceWeakSpots()):null,
     menuItem('📓','Mistakes notebook',dueN?`🔁 ${dueN} due for review now`:(review.length?`${review.length} saved · spaced out, check back soon`:'Nothing to revise — nice!'),()=>review.length?viewReview():toast('No mistakes saved yet.')),
     menuItem('🗄️','Question bank',bankN?`${bankN} saved — practise with no AI`:'Pre-generate questions to save AI calls',()=>viewBank()),
   ]);
@@ -1112,10 +1130,23 @@ async function viewPapers(){
   if(!packs.length){
     body.push(el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'📄'),el('div',{},'No past-paper packs yet. Import one above — once added on any device it syncs everywhere.'))));
   }else{
-    packs.forEach(pk=>{const qn=(pk.questions||[]).length;
-      body.push(el('div',{class:'card'},el('div',{class:'row between',style:'align-items:center'},
-        el('div',{},el('b',{},pk.title||'Paper'),el('div',{class:'small muted'},[pk.subject,pk.level,pk.year].filter(Boolean).join(' · ')+' · '+qn+' question'+(qn===1?'':'s'))),
-        el('div',{class:'row',style:'gap:6px'},el('button',{class:'btn primary',onclick:()=>startPaper(pk)},'Practice'),el('button',{class:'btn',onclick:()=>{if(confirm('Timed exam: '+qn+' question'+(qn===1?'':'s')+' in '+paperMins(pk)+' minutes, no pausing — it auto-submits when time’s up. Start?'))startPaper(pk,true);}},'⏱ Timed exam'),el('button',{class:'btn ghost',title:'Remove',onclick:()=>delPack(pk.id)},'🗑️')))));
+    // Group by subject → year level (sorted by level number), papers by year — far easier to scan than a flat list.
+    const lvlNum=s=>{const m=String(s||'').match(/\d+/);return m?+m[0]:99;};
+    const bySubj={};packs.forEach(pk=>{(bySubj[pk.subject||'Other']=bySubj[pk.subject||'Other']||[]).push(pk);});
+    Object.keys(bySubj).sort().forEach(subj=>{
+      const byLvl={};bySubj[subj].forEach(pk=>{(byLvl[pk.level||'—']=byLvl[pk.level||'—']||[]).push(pk);});
+      Object.keys(byLvl).sort((a,b)=>lvlNum(a)-lvlNum(b)).forEach(lv=>{
+        const list=byLvl[lv].sort((a,b)=>String(a.year||'').localeCompare(String(b.year||'')));
+        const rows=list.map(pk=>{const qn=(pk.questions||[]).length;
+          return el('div',{class:'row between',style:'align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)'},
+            el('div',{style:'min-width:0'},el('b',{},pk.year||pk.title||'Paper'),el('div',{class:'small muted'},(pk.exam?String(pk.exam).toUpperCase()+' · ':'')+qn+' question'+(qn===1?'':'s'))),
+            el('div',{class:'row',style:'gap:6px;flex:none'},
+              el('button',{class:'btn sm primary',onclick:()=>startPaper(pk)},'Practice'),
+              el('button',{class:'btn sm',onclick:()=>{if(confirm('Timed exam: '+qn+' question'+(qn===1?'':'s')+' in '+paperMins(pk)+' minutes, no pausing — it auto-submits when time’s up. Start?'))startPaper(pk,true);}},'⏱ Timed'),
+              el('button',{class:'btn sm ghost',title:'Remove',onclick:()=>delPack(pk.id)},'🗑️')));
+        });
+        body.push(el('div',{class:'card'},el('h2',{style:'margin:0'},subj+' · '+lv),el('p',{class:'sub',style:'margin:4px 0 2px'},list.length+' paper'+(list.length===1?'':'s')),...rows));
+      });
     });
   }
   show(el('div',{},backBar('Exam packs',()=>viewHome()),
@@ -1487,6 +1518,7 @@ async function viewSkills(){
       el('p',{class:'sub'},'Every topic this exam tests. Practise the ones you haven’t covered to be exam-ready.'),
       el('div',{class:'gbar',style:'margin:8px 0'},el('div',{class:'gbar-fill',style:'width:'+Math.round(practised/Math.max(1,topics.length)*100)+'%;background:var(--brand)'})),
       el('p',{class:'small muted',style:'margin-bottom:8px'},practised+' of '+topics.length+' topics practised'),
+      practised?el('button',{class:'btn primary block',style:'margin-bottom:10px',onclick:()=>practiceWeakSpots()},'🎯 Practise my weak spots'):'',
       ...topics.map(row))));
 }
 function viewResults(a){
@@ -2421,7 +2453,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.23';
+const APP_VERSION='v2.24';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
