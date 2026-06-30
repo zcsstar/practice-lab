@@ -444,7 +444,8 @@ const DEFAULT_CFG={
   voiceURI:'', voiceRate:0.95, voicePitch:1,  // read-aloud voice (Web Speech) — device-specific, NOT synced
   settingsAt:0,    // last-edited timestamp for the synced-settings whitelist below
   examContext:{},  // saved per-exam extra context text, keyed by exam id
-  packsDeleted:{}  // tombstones {packId: deletedAt} so a deleted pack stays deleted across Drive syncs
+  packsDeleted:{}, // tombstones {packId: deletedAt} so a deleted pack stays deleted across Drive syncs
+  cleared:{}       // {"store:profileId": clearedAt} so Clear-bank / Clear-history stick across Drive syncs (drops items older than the stamp)
 };
 // Non-secret, device-independent settings that sync across devices via Drive
 // (newest edit wins). Excludes the API key (use KEYVAULT) and device-specific
@@ -462,6 +463,7 @@ function loadCfg(){
   c.profiles=Array.isArray(raw.profiles)?raw.profiles:[];
   c.examContext=raw.examContext||{};
   c.packsDeleted=raw.packsDeleted||{};
+  c.cleared=raw.cleared||{};
   // migrate old single studentName
   if(!c.profiles.length){const nm=raw.studentName||'';c.profiles=[{id:uid(),name:nm||'Student'}];c.activeProfileId=c.profiles[0].id;}
   if(!c.activeProfileId||!c.profiles.find(p=>p.id===c.activeProfileId))c.activeProfileId=c.profiles[0].id;
@@ -2019,6 +2021,7 @@ async function topUpBank(s){
 async function clearBank(){
   if(!confirm('Clear '+activeProfile().name+'’s saved question bank on this device?'))return;
   for(const b of (await dbAll('bank')).filter(b=>b.profileId===pid()))await dbDel('bank',b.id);
+  CFG.cleared=CFG.cleared||{};CFG.cleared['bank:'+pid()]=Date.now();saveCfg(); // stamp so the clear survives Drive sync
   scheduleDriveSync();toast('Bank cleared');viewBank();
 }
 
@@ -2261,7 +2264,7 @@ async function sendSummaryEmail(a,isTest=false){
 /* ============================================================ Export / import / clear ============================================================ */
 async function exportData(){const data={exportedAt:new Date().toISOString(),profiles:CFG.profiles,attempts:await dbAll('attempts'),review:await dbAll('review'),refs:(await dbAll('refs')).map(r=>({...r})),bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades')};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=el('a',{href:url,download:'practice-lab-backup-'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);toast('Backup downloaded');}
 async function importData(obj){if(Array.isArray(obj.profiles))obj.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();if(obj.attempts)for(const a of obj.attempts)await dbPut('attempts',a);if(obj.review)for(const r of obj.review)await dbPut('review',r);if(obj.refs)for(const r of obj.refs)await dbPut('refs',r);if(obj.bank)for(const b of obj.bank)await dbPut('bank',b);if(obj.cards)for(const c of obj.cards)await dbPut('cards',c);if(obj.trainer)for(const t of obj.trainer)await dbPut('trainer',t);if(obj.trades)for(const t of obj.trades)await dbPut('trades',t);toast('Data imported ✓');}
-async function clearAll(){if(!confirm('Delete '+activeProfile().name+'’s practices and review items on this device? This cannot be undone.'))return;for(const a of (await dbAll('attempts')).filter(a=>a.profileId===pid()))await dbDel('attempts',a.id);for(const r of (await dbAll('review')).filter(r=>r.profileId===pid()))await dbDel('review',r.id);toast('History cleared');viewHome();}
+async function clearAll(){if(!confirm('Delete '+activeProfile().name+'’s practices and review items on this device? This cannot be undone.'))return;for(const a of (await dbAll('attempts')).filter(a=>a.profileId===pid()))await dbDel('attempts',a.id);for(const r of (await dbAll('review')).filter(r=>r.profileId===pid()))await dbDel('review',r.id);CFG.cleared=CFG.cleared||{};const now=Date.now();CFG.cleared['attempts:'+pid()]=now;CFG.cleared['review:'+pid()]=now;saveCfg();scheduleDriveSync();toast('History cleared');viewHome();}
 
 /* ============================================================ Google Drive ============================================================ */
 let driveToken=null,tokenClient=null,syncTimer=null;
@@ -2273,7 +2276,7 @@ async function driveSyncNow(){if(!driveToken)return;try{const fileId=await drive
 // extracted text + tags travel; the PDF/image stays on the device that imported
 // it (where grounding/pre-generation happens). Keeps the sync blob light.
 const refsLite=(await dbAll('refs')).map(({dataB64,...r})=>r);
-const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),packsDeleted:CFG.packsDeleted||{},profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),packsDeleted:CFG.packsDeleted||{},cleared:CFG.cleared||{},profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
   // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
   if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
@@ -2283,10 +2286,19 @@ async function mergeRemote(remote){
     else if(rp.defaults&&(rp.defaultsAt||0)>(lp.defaultsAt||0)){lp.defaults=rp.defaults;lp.defaultsAt=rp.defaultsAt;} // newer defaults win
   }
   saveCfg();
-  const la=new Map((await dbAll('attempts')).map(a=>[a.id,a]));for(const a of(remote.attempts||[]))if(!la.has(a.id))await dbPut('attempts',a);
-  const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[]))if(!lr.has(r.id))await dbPut('review',r);
+  // Clear-bank / Clear-history stamps {"store:profileId":clearedAt}: union remote (max wins),
+  // then drop any local item created at/before its stamp — so a wholesale Clear sticks and
+  // propagates across devices, while items generated AFTER the clear survive.
+  if(remote.cleared){CFG.cleared=CFG.cleared||{};for(const k in remote.cleared){const t=remote.cleared[k];if(t>(CFG.cleared[k]||0))CFG.cleared[k]=t;}saveCfg();}
+  const clr=CFG.cleared||{};
+  const isCleared=(store,it,tsField)=>{const t=clr[store+':'+it.profileId]||0;return t>0&&((it[tsField]||0)<=t);};
+  for(const a of(await dbAll('attempts')))if(isCleared('attempts',a,'startedAt'))await dbDel('attempts',a.id);
+  for(const r of(await dbAll('review')))if(isCleared('review',r,'createdAt'))await dbDel('review',r.id);
+  for(const b of(await dbAll('bank')))if(isCleared('bank',b,'createdAt'))await dbDel('bank',b.id);
+  const la=new Map((await dbAll('attempts')).map(a=>[a.id,a]));for(const a of(remote.attempts||[])){if(isCleared('attempts',a,'startedAt'))continue;if(!la.has(a.id))await dbPut('attempts',a);}
+  const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[])){if(isCleared('review',r,'createdAt'))continue;if(!lr.has(r.id))await dbPut('review',r);}
   const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[]))if(!lf.has(r.id))await dbPut('refs',r);
-  const lb=new Map((await dbAll('bank')).map(b=>[b.id,b]));for(const b of(remote.bank||[]))if(!lb.has(b.id))await dbPut('bank',b);
+  const lb=new Map((await dbAll('bank')).map(b=>[b.id,b]));for(const b of(remote.bank||[])){if(isCleared('bank',b,'createdAt'))continue;if(!lb.has(b.id))await dbPut('bank',b);}
   // Cards: merge by id keeping the higher count/level + any shiny (so neither device loses progress).
   const lc=new Map((await dbAll('cards')).map(c=>[c.id,c]));for(const c of(remote.cards||[])){const cur=lc.get(c.id);if(!cur)await dbPut('cards',c);else if((c.count||1)>(cur.count||1)||(c.level||1)>(cur.level||1)||(c.shiny&&!cur.shiny)){cur.count=Math.max(cur.count||1,c.count||1);cur.level=Math.max(cur.level||1,c.level||1);cur.shiny=cur.shiny||c.shiny;await dbPut('cards',cur);}}
   // Trainer XP/candy: keep the higher of each (additive merge can't sum safely across devices).
@@ -2394,7 +2406,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.20';
+const APP_VERSION='v2.21';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
