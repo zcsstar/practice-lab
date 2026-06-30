@@ -262,6 +262,7 @@
     <div class="title"><h1>Practice Lab</h1><p id="subtitle">Real exam-style practice that learns with you</p></div>
     <div class="spacer"></div>
     <button class="profilechip" id="profileChip" title="Switch student"><span class="avatar" id="profileAvatar">?</span><span id="profileName">Student</span><span id="profileCaret" style="color:#94a3b8">▾</span></button>
+    <button class="iconbtn" id="navGuide" title="How it works">❓</button>
     <button class="iconbtn" id="navHome" title="Home">🏠</button>
     <button class="iconbtn" id="navSettings" title="Settings">⚙️</button>
   </header>
@@ -1034,6 +1035,29 @@ function recentDays(days){const out=[];let cur=new Date(todayISO()+'T00:00:00Z')
 
 function refreshHeaderProfile(){const p=activeProfile();$('#profileName').textContent=p.name;const av=$('#profileAvatar');av.textContent=initials(p.name);av.style.background=colorFor(p.name);const caret=$('#profileCaret');if(caret)caret.style.display=isParent()?'':'none';const chip=$('#profileChip');if(chip)chip.title=isParent()?'Switch student':'Signed in';}
 
+/* ----- HOW IT WORKS (guide) ----- */
+function viewGuide(){
+  stopTimer();
+  try{localStorage.setItem('practicelab.guideSeen','1');}catch(e){} // shown once → never auto-pops again
+  const home=()=>{stopTimer();if(gateActive()&&isParent())viewDashboard();else viewHome();};
+  const step=(n,emoji,title,body)=>el('div',{class:'row',style:'gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line)'},
+    el('div',{style:'flex:none;width:36px;height:36px;border-radius:50%;background:var(--feature,#eef2ff);display:grid;place-items:center;font-size:18px'},emoji),
+    el('div',{style:'flex:1;min-width:0'},el('div',{style:'font-weight:700'},'Step '+n+' · '+title),el('div',{class:'small muted',style:'margin-top:2px'},body)));
+  const tip=(emoji,txt)=>el('div',{class:'row',style:'gap:8px;align-items:flex-start;padding:5px 0'},el('span',{style:'flex:none'},emoji),el('span',{class:'small'},txt));
+  show(el('div',{},backBar('How it works',home),
+    el('div',{class:'card'},el('h2',{},'🎓 Get the most from Practice Lab'),el('p',{class:'sub'},'A quick guide for parents and kids — about a minute to read.'),
+      step(1,'⚙️','Set up (parent)','Add your AI key in Settings, pick each child’s exam and year level, and import past-paper packs under Exam content. The app then auto-grounds each child’s questions on the right level.'),
+      step(2,'🚀','Practise','Tap Start a practice for fresh exam-style questions, or 🎯 Practise weak spots to target what’s hard. Saved questions in the bank make most practices free (no AI used).'),
+      step(3,'📓','Learn from mistakes','On the results screen, read “How to solve it” and “why the other answers are wrong”. Wrong or flagged questions go to your Mistakes notebook and come back for review on a spaced schedule.'),
+      step(4,'⏱️','Track & rehearse','The Skills map shows which topics you’ve covered; difficulty adjusts as you improve; and a Timed exam on a real paper rehearses the actual sitting.')),
+    el('div',{class:'card'},el('h2',{},'💡 Tips'),
+      tip('🔥','Build a daily streak and hit the daily goal.'),
+      tip('🎴','Finishing practices earns collectible cards — then battle with them.'),
+      tip('🖨️','Print a worksheet from any results screen for off-screen practice.'),
+      tip('✅','In Settings, “Double-check answers” and “AI-mark written answers” improve accuracy.'),
+      tip('☁️','Connect Google Drive (Settings) to sync students, history and packs across devices.')),
+    el('div',{class:'row'},el('button',{class:'btn primary',onclick:home},'Got it — let’s go'))));
+}
 /* ----- HOME ----- */
 async function viewHome(){
   stopTimer();refreshHeaderProfile();
@@ -2367,6 +2391,7 @@ async function mergeRemote(remote){
 /* ============================================================ Nav + boot ============================================================ */
 $('#navHome').addEventListener('click',()=>{if(S&&!S.submitted&&!confirm('Leave the current practice?'))return;stopTimer();if(gateActive()&&isParent())viewDashboard();else viewHome();});
 $('#navSettings').addEventListener('click',()=>viewSettings());
+$('#navGuide').addEventListener('click',()=>viewGuide());
 $('#profileChip').addEventListener('click',()=>viewProfiles());
 
 const _origSubmit=submitSession;
@@ -2448,12 +2473,15 @@ async function startApp(){
   await seedLocalPacks();
   initEmailJS();refreshHeaderProfile();
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
+  // First run (never seen the guide + no practices yet): show the "How it works" guide once.
+  let firstRun=false;try{firstRun=!localStorage.getItem('practicelab.guideSeen');}catch(e){}
+  if(firstRun){try{if(!(await dbAll('attempts')).length){viewGuide();return;}}catch(e){}}
   // Parents land on the family dashboard; students land on their own home.
   if(gateActive()&&isParent())viewDashboard();else viewHome();
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.24';
+const APP_VERSION='v2.25';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
