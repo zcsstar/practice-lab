@@ -445,6 +445,7 @@ const DEFAULT_CFG={
   settingsAt:0,    // last-edited timestamp for the synced-settings whitelist below
   examContext:{},  // saved per-exam extra context text, keyed by exam id
   packsDeleted:{}, // tombstones {packId: deletedAt} so a deleted pack stays deleted across Drive syncs
+  refsDeleted:{},  // tombstones {refId: deletedAt} so a deleted reference paper stays deleted across Drive syncs
   cleared:{}       // {"store:profileId": clearedAt} so Clear-bank / Clear-history stick across Drive syncs (drops items older than the stamp)
 };
 // Non-secret, device-independent settings that sync across devices via Drive
@@ -463,6 +464,7 @@ function loadCfg(){
   c.profiles=Array.isArray(raw.profiles)?raw.profiles:[];
   c.examContext=raw.examContext||{};
   c.packsDeleted=raw.packsDeleted||{};
+  c.refsDeleted=raw.refsDeleted||{};
   c.cleared=raw.cleared||{};
   // migrate old single studentName
   if(!c.profiles.length){const nm=raw.studentName||'';c.profiles=[{id:uid(),name:nm||'Student'}];c.activeProfileId=c.profiles[0].id;}
@@ -1171,7 +1173,7 @@ async function viewRefs(){
     list.append(el('div',{class:'refitem',style:'display:block'},
       el('div',{class:'row between'},
         el('div',{class:'row',style:'gap:10px;align-items:center;min-width:0'},el('span',{style:'font-size:22px;flex:none'},r.mime==='application/pdf'?'📕':r.mime.startsWith('image/')?'🖼️':'📃'),el('div',{style:'min-width:0'},el('div',{class:'nm'},r.name),el('div',{class:'dt'},tagline+' — '+kind))),
-        el('div',{class:'row',style:'gap:6px;flex:none;align-items:center'},r.profileId==='all'?el('span',{class:'pill'},'all kids'):'',el('button',{class:'btn sm danger',onclick:async()=>{if(confirm('Remove '+r.name+'?')){await dbDel('refs',r.id);scheduleDriveSync();viewRefs();}}},'🗑'))),
+        el('div',{class:'row',style:'gap:6px;flex:none;align-items:center'},r.profileId==='all'?el('span',{class:'pill'},'all kids'):'',el('button',{class:'btn sm danger',onclick:async()=>{if(confirm('Remove '+r.name+'?')){await dbDel('refs',r.id);CFG.refsDeleted=CFG.refsDeleted||{};CFG.refsDeleted[r.id]=Date.now();saveCfg();scheduleDriveSync();viewRefs();}}},'🗑'))),
       el('details',{class:'adv',style:'margin-top:8px'},el('summary',{},'Edit tags'),
         el('div',{class:'grid cols2'},field('Subject','',subSel),field('Exam','',examSel)),
         el('div',{class:'grid cols2'},field('Level / paper','',lvlIn),field('Year','',yrIn)),
@@ -2276,7 +2278,7 @@ async function driveSyncNow(){if(!driveToken)return;try{const fileId=await drive
 // extracted text + tags travel; the PDF/image stays on the device that imported
 // it (where grounding/pre-generation happens). Keeps the sync blob light.
 const refsLite=(await dbAll('refs')).map(({dataB64,...r})=>r);
-const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),packsDeleted:CFG.packsDeleted||{},cleared:CFG.cleared||{},profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),packsDeleted:CFG.packsDeleted||{},refsDeleted:CFG.refsDeleted||{},cleared:CFG.cleared||{},profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
   // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
   if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
@@ -2297,7 +2299,11 @@ async function mergeRemote(remote){
   for(const b of(await dbAll('bank')))if(isCleared('bank',b,'createdAt'))await dbDel('bank',b.id);
   const la=new Map((await dbAll('attempts')).map(a=>[a.id,a]));for(const a of(remote.attempts||[])){if(isCleared('attempts',a,'startedAt'))continue;if(!la.has(a.id))await dbPut('attempts',a);}
   const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[])){if(isCleared('review',r,'createdAt'))continue;if(!lr.has(r.id))await dbPut('review',r);}
-  const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[]))if(!lf.has(r.id))await dbPut('refs',r);
+  // Reference papers: tombstone deletions (ref ids are unique per import, so a deleted id never recurs).
+  if(remote.refsDeleted){CFG.refsDeleted=CFG.refsDeleted||{};for(const id in remote.refsDeleted){const t=remote.refsDeleted[id];if(t>(CFG.refsDeleted[id]||0))CFG.refsDeleted[id]=t;}saveCfg();}
+  const rdel=CFG.refsDeleted||{};
+  for(const r of(await dbAll('refs')))if(rdel[r.id])await dbDel('refs',r.id);
+  const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[])){if(rdel[r.id])continue;if(!lf.has(r.id))await dbPut('refs',r);}
   const lb=new Map((await dbAll('bank')).map(b=>[b.id,b]));for(const b of(remote.bank||[])){if(isCleared('bank',b,'createdAt'))continue;if(!lb.has(b.id))await dbPut('bank',b);}
   // Cards: merge by id keeping the higher count/level + any shiny (so neither device loses progress).
   const lc=new Map((await dbAll('cards')).map(c=>[c.id,c]));for(const c of(remote.cards||[])){const cur=lc.get(c.id);if(!cur)await dbPut('cards',c);else if((c.count||1)>(cur.count||1)||(c.level||1)>(cur.level||1)||(c.shiny&&!cur.shiny)){cur.count=Math.max(cur.count||1,c.count||1);cur.level=Math.max(cur.level||1,c.level||1);cur.shiny=cur.shiny||c.shiny;await dbPut('cards',cur);}}
@@ -2406,7 +2412,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.21';
+const APP_VERSION='v2.22';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
