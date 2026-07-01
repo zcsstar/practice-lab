@@ -615,12 +615,12 @@ FORMAT: ${styleLine}`;
 
 REQUIREMENTS:
 - Real exam quality. Order from easier to harder.${chosenTopics?'':` VARIETY IS IMPORTANT: spread the questions across as many DIFFERENT topic areas as the count allows — do NOT put more than about 2 questions on the same topic, so the student practises a broad range.`}
-- Use LaTeX for ALL maths, wrapped in single dollar signs, e.g. $\\frac{3}{4}$ or $x^2+5$.
+- Use LaTeX for ALL maths, wrapped in single dollar signs, e.g. $\\frac{3}{4}$ or $x^2+5$. Fractions MUST use CURLY BRACES: write $\\frac{1}{2}$ — never $\\frac(1)(2)$ with parentheses. Always escape the backslash (\\frac, not \frac).
 - MONEY: put the whole amount inside ONE math span with an escaped dollar sign, e.g. write $\\$27.50$ (renders as a dollar amount). NEVER leave a bare "$" in plain text — two bare $ signs get misread as a maths delimiter and garble the text.
 - EXPLANATIONS — keep them SIMPLE, SHORT and easy for a ${s.level} student to read. Match the vocabulary and sentence length to that age: for primary / elementary years use very simple words and very short sentences. Aim for 2–4 short steps; for primary levels keep the whole explanation under ~60 words. Friendly and encouraging.
 - Write the FINAL, already-correct explanation only. Do NOT think out loud, second-guess, recheck, or show false starts (never "wait", "let me recheck", "I made a mistake", "actually", "this is not correct", "let's re-think"). Work out the answer privately, then write only the clean, confident solution.
 - Structure each explanation as numbered steps: put each step on its OWN line beginning with "1. ", "2. ", etc., separated by a real newline (\n). Bold the key idea of a step with **double asterisks**. One short sentence per step where possible. Do NOT use asterisk bullets or markdown emphasis in the "question" text itself.
-- multiple_choice: give "options" (array of 4 strings) and "answerIndex" (0-3); distractors should reflect common mistakes.
+- multiple_choice: give "options" (array of 4 strings) and "answerIndex" (0-3); distractors should reflect common mistakes. All 4 options MUST be DISTINCT — never repeat the same value/text in two options (e.g. two "3/8" choices is a bug); make each distractor a genuinely different value.
 - HINT: include a short "hint" (one sentence) pointing to the FIRST step or key idea WITHOUT giving away the answer — a nudge for a stuck student.
 - WHY-WRONG (multiple_choice only): include "whyWrong" — an array of 4 short strings aligned to "options". For each WRONG option give the likely mistake/misconception that leads a student to pick it (≤ ~12 words, kid-friendly); for the CORRECT option use "". Learning from distractors matters.
 - CRITICAL — answer accuracy: actually SOLVE each question and double-check the arithmetic. The "answer"/"answerIndex" MUST be the correct result AND must equal the final result your explanation arrives at. For multiple_choice, the option at "answerIndex" must be exactly that correct result (and "answer" must be that option's text). If your worked explanation ends at a value, the key MUST point to the option showing that value — never a different one.
@@ -651,7 +651,7 @@ Return ONLY valid JSON, no markdown fences, exactly:
   return p;
 }
 
-async function callGemini(prompt,files,maxTokens){
+async function callGemini(prompt,files,maxTokens,temp){
   const model=CFG.model||'gemini-2.0-flash';
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(CFG.apiKey)}`;
   const parts=[{text:prompt}];
@@ -660,7 +660,7 @@ async function callGemini(prompt,files,maxTokens){
   // models, disable thinking AND give a large output budget — otherwise hidden
   // thinking eats the budget and the JSON answer gets truncated. Budget scales
   // with batch size so large bank pre-generations complete in one call.
-  const gc={temperature:0.8,responseMimeType:'application/json',maxOutputTokens:maxTokens||16384};
+  const gc={temperature:(temp==null?0.8:temp),responseMimeType:'application/json',maxOutputTokens:maxTokens||16384};
   if(/2\.5|thinking|gemini-flash|gemini-pro/i.test(model))gc.thinkingConfig={thinkingBudget:0,includeThoughts:false};
   const body=JSON.stringify({contents:[{parts}],generationConfig:gc});
   let r,attempt=0;
@@ -682,20 +682,20 @@ async function callGemini(prompt,files,maxTokens){
   if(!text){const reason=cand?.finishReason||j?.promptFeedback?.blockReason||'empty response';throw new Error('Gemini returned no text (finishReason: '+reason+'). Try fewer questions or model gemini-2.0-flash.');}
   return text;
 }
-async function callOpenAICompatible(prompt,files,maxTokens){
+async function callOpenAICompatible(prompt,files,maxTokens,temp){
   const base=(CFG.baseUrl||'https://api.openai.com/v1').replace(/\/$/,'');
   const content=[{type:'text',text:prompt}];
   for(const f of (files||[]))if(f.mime.startsWith('image/'))content.push({type:'image_url',image_url:{url:'data:'+f.mime+';base64,'+f.dataB64}});
-  const body={model:CFG.model||'gpt-4o-mini',temperature:0.8,max_tokens:maxTokens||16384,response_format:{type:'json_object'},messages:[{role:'system',content:'You output only valid JSON.'},{role:'user',content}]};
+  const body={model:CFG.model||'gpt-4o-mini',temperature:(temp==null?0.8:temp),max_tokens:maxTokens||16384,response_format:{type:'json_object'},messages:[{role:'system',content:'You output only valid JSON.'},{role:'user',content}]};
   const r=await fetch(base+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+CFG.apiKey},body:JSON.stringify(body)});
   if(!r.ok)throw new Error('API '+r.status+': '+(await r.text()).slice(0,400));
   const j=await r.json();return j?.choices?.[0]?.message?.content||'';
 }
-async function callClaude(prompt,files,maxTokens){
+async function callClaude(prompt,files,maxTokens,temp){
   const content=[];
   for(const f of (files||[]))if(f.mime.startsWith('image/'))content.push({type:'image',source:{type:'base64',media_type:f.mime,data:f.dataB64}});
   content.push({type:'text',text:prompt+'\n\nRespond with only the JSON object.'});
-  const body={model:CFG.model||'claude-3-5-haiku-latest',max_tokens:Math.min(8192,maxTokens||4096),temperature:0.8,messages:[{role:'user',content}]};
+  const body={model:CFG.model||'claude-3-5-haiku-latest',max_tokens:Math.min(8192,maxTokens||4096),temperature:(temp==null?0.8:temp),messages:[{role:'user',content}]};
   const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CFG.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)});
   if(!r.ok)throw new Error('Claude '+r.status+': '+(await r.text()).slice(0,400));
   const j=await r.json();return j?.content?.map(c=>c.text).filter(Boolean).join('')||'';
@@ -728,7 +728,7 @@ function parseQuestions(raw){
       acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):(Array.isArray(q.accepted)?q.accepted.map(String):[]),
       explanation:q.explanation||q.solution||q.working||q.reason||'',marks:Number(q.marks||q.mark||q.points)||1,
       hint:(q.hint!=null?String(q.hint):''),whyWrong:Array.isArray(q.whyWrong)?q.whyWrong.map(x=>x==null?'':String(x)):[],
-      svg:sanitizeSvg(svgRaw),image:safeImage(q.image)};return repointFromExplanation(o);});
+      svg:sanitizeSvg(svgRaw),image:safeImage(q.image)};return fixQuestion(o);});
 }
 // Mis-key backstop: trust the worked explanation's CONCLUDED value over a
 // possibly wrong answer key. Models sometimes set BOTH "answer" and
@@ -738,16 +738,42 @@ function parseQuestions(raw){
 // final numeric value UNIQUELY matches a different option, re-point the key to
 // it. No-op when the key already agrees, so correctly-keyed questions are never
 // touched. Distractor mentions ("a common mistake is 180", "not 6") are skipped.
+// Robust numeric-value tokeniser shared by the mis-key backstop. Returns
+// {clean, tokens:[{val,index,text}]} where each token's VALUE correctly
+// interprets, in priority order: a TIME ("8:15 am" → 495 minutes-of-day, so
+// 8:00/8:10/8:15 stay distinct instead of all collapsing to the hour "8"),
+// a MIXED number ("1 7/8" → 1.875), a FRACTION ("7/8" → 0.875) and a plain
+// integer/decimal. This is what lets the backstop tell time / mixed-number
+// options apart — the old digit-by-digit scan couldn't.
+function plValTokens(str){
+  const clean=plainMath(String(str==null?'':str))
+    // \frac renders as "(a)/(b)"; collapse to "a/b" but keep a space before it so
+    // a preceding whole number ("1(7)/(8)") reads as a MIXED number "1 7/8", not "17/8".
+    .replace(/\(\s*(-?\d+(?:\.\d+)?)\s*\)\s*\/\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)/g,' $1/$2')
+    .replace(/,/g,'');
+  const RE=/(\d{1,2})\s*:\s*([0-5]\d)(?:\s*([ap])\.?\s?m\.?)?|(-?\d+)\s+(\d+)\s*\/\s*(\d+)|(-?\d+(?:\.\d+)?)\s*\/\s*(-?\d+(?:\.\d+)?)|(-?\d+(?:\.\d+)?)/gi;
+  const tokens=[];let m;
+  while((m=RE.exec(clean))){
+    let val=null;
+    if(m[1]!=null){ // time H:MM (am/pm)
+      let h=+m[1],mi=+m[2];const ap=(m[3]||'').toLowerCase();
+      if(ap==='p'&&h<12)h+=12; if(ap==='a'&&h===12)h=0;
+      val=h*60+mi;
+    }else if(m[4]!=null){const d=+m[6];val=d?(+m[4]+(+m[5]/d)):null;} // mixed a b/c
+    else if(m[7]!=null){const d=+m[8];val=d?(+m[7]/d):null;}          // fraction a/b
+    else if(m[9]!=null){val=+m[9];}                                    // plain / decimal
+    if(val!=null&&isFinite(val))tokens.push({val,index:m.index,text:m[0]});
+  }
+  return {clean,tokens};
+}
 function repointFromExplanation(q){
   if(!q||q.type!=='multiple_choice'||!Array.isArray(q.options)||q.options.length<2||!q.explanation)return q;
-  const RE=/-?\d+(?:\.\d+)?\s*\/\s*-?\d+(?:\.\d+)?|-?\d+(?:\.\d+)?/g;
-  const clean=s=>plainMath(String(s==null?'':s)).replace(/\(\s*(-?\d+(?:\.\d+)?)\s*\)\s*\/\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)/g,'$1/$2').replace(/,/g,'');
-  const toNum=tok=>{tok=tok.replace(/\s+/g,'');if(tok.indexOf('/')>=0){const p=tok.split('/').map(Number);return (p.length===2&&p[1])?p[0]/p[1]:null;}const n=Number(tok);return isFinite(n)?n:null;};
-  const optNums=q.options.map(o=>{const m=clean(o).match(RE);return m?toNum(m[0]):null;});
+  // Each option's stated value = the FIRST value token in it (so "1 7/8 cups" → 1.875).
+  const optNums=q.options.map(o=>{const t=plValTokens(o).tokens;return t.length?t[0].val:null;});
   if(!optNums.some(n=>n!=null))return q; // non-numeric options — leave to the answer-text guard
-  const plain=clean(q.explanation),toks=[...plain.matchAll(RE)];
+  const {clean:plain,tokens:toks}=plValTokens(q.explanation);
   for(let k=toks.length-1;k>=0;k--){
-    const val=toNum(toks[k][0]);if(val==null)continue;
+    const val=toks[k].val;
     const pre=plain.slice(Math.max(0,toks[k].index-24),toks[k].index).toLowerCase();
     if(/(not|n't|rather than|instead of|exclud|rule[ds]? out|mistake|error|wrong|incorrect|avoid|trap)/.test(pre))continue;
     const hits=[];optNums.forEach((n,idx)=>{if(n!=null&&Math.abs(n-val)<1e-6)hits.push(idx);});
@@ -756,6 +782,56 @@ function repointFromExplanation(q){
   }
   return q;
 }
+// De-duplicate identical multiple-choice options. Models occasionally emit the
+// same option twice (e.g. a distractor equal to the correct answer → two "3/8"
+// choices), which is confusing and, when the duplicate is the key, unanswerable.
+// Keep the first occurrence, drop later copies, and re-point answerIndex/whyWrong
+// to the surviving option. Runs before repoint so option values stay unique.
+function dedupeOptions(q){
+  if(!q||q.type!=='multiple_choice'||!Array.isArray(q.options)||q.options.length<2)return q;
+  const norm=x=>plainMath(String(x==null?'':x)).toLowerCase().replace(/\s+/g,'').replace(/[.,;]+$/,'');
+  const seen=new Map(),keep=[],origOf=[],remap=[];
+  q.options.forEach((o,i)=>{
+    const k=norm(o);
+    if(k!==''&&seen.has(k)){remap[i]=seen.get(k);}
+    else{const ni=keep.length;seen.set(k,ni);remap[i]=ni;keep.push(o);origOf[ni]=i;}
+  });
+  if(keep.length===q.options.length)return q; // no duplicates
+  q.options=keep;
+  if(typeof q.answerIndex==='number'&&remap[q.answerIndex]!=null)q.answerIndex=remap[q.answerIndex];
+  if(Array.isArray(q.whyWrong)&&q.whyWrong.length)q.whyWrong=origOf.map(oi=>q.whyWrong[oi]||'');
+  return q;
+}
+// Free cross-check: the prompt asks the model to mark the CORRECT option with an EMPTY
+// whyWrong and give a reason for each WRONG one. So if the KEYED option itself carries a
+// "why it's wrong" reason (a self-contradiction) AND exactly one OTHER option is left blank,
+// that blank is the model's real "this is the right one" — repoint the key to it. Tight
+// conditions mean it never fires on a cleanly-keyed question; the stronger explanation-based
+// repoint runs afterwards and can still override.
+function repointFromWhyWrong(q){
+  if(!q||q.type!=='multiple_choice'||!Array.isArray(q.options)||q.options.length<2)return q;
+  const ww=q.whyWrong;if(!Array.isArray(ww)||ww.length!==q.options.length)return q;
+  const blank=i=>String(ww[i]==null?'':ww[i]).trim()==='';
+  if(typeof q.answerIndex!=='number'||blank(q.answerIndex))return q; // key not contradicted → leave it
+  const blanks=[];for(let i=0;i<ww.length;i++)if(blank(i))blanks.push(i);
+  if(blanks.length===1)q.answerIndex=blanks[0];
+  return q;
+}
+// Repair mangled LaTeX (form-feed "\f"→"rac", "\frac(a)(b)"→"\frac{a}{b}", etc.) on every
+// served question. New generations are already repaired by the parser, but items BANKED or
+// filed to the mistakes notebook BEFORE the parser learned this — plus imported packs — heal
+// here on serve. Idempotent (a clean string is unchanged).
+function repairLatexStr(s){return (typeof PLParse!=='undefined'&&PLParse.unmangleLatex)?PLParse.unmangleLatex(String(s==null?'':s)):s;}
+function repairQ(q){
+  if(!q)return q;
+  ['question','answer','explanation','hint'].forEach(k=>{if(q[k]!=null)q[k]=repairLatexStr(q[k]);});
+  if(Array.isArray(q.options))q.options=q.options.map(repairLatexStr);
+  if(Array.isArray(q.acceptedAnswers))q.acceptedAnswers=q.acceptedAnswers.map(repairLatexStr);
+  if(Array.isArray(q.whyWrong))q.whyWrong=q.whyWrong.map(repairLatexStr);
+  return q;
+}
+// Combined per-question fixups applied at parse time AND on every serve path.
+function fixQuestion(q){return repointFromExplanation(repointFromWhyWrong(dedupeOptions(repairQ(q))));}
 // Output-token budget needed for a batch. Each question (with a short
 // explanation, options and maybe a small SVG) is ~900 tokens; give headroom so
 // big bank batches don't truncate. Clamped per provider's real ceiling.
@@ -792,33 +868,51 @@ function parseChecks(raw){
 // any failure (or an empty verdict) returns the originals so practice never breaks.
 async function verifyQuestions(s,qs){
   if(!CFG.verify||!qs||qs.length<1)return qs;
-  const items=qs.map((q,i)=>({i,type:q.type,question:q.question,options:(q.type==='multiple_choice'?q.options:undefined),markedIndex:(q.type==='multiple_choice'?q.answerIndex:undefined),markedAnswer:q.answer}));
+  // Include the STRUCTURED figure data (diagram spec) when a question has one, so
+  // the checker can solve figure-based questions (pictographs, bar/table reads,
+  // number lines) against the actual figure — catching answers that don't match
+  // the picture (e.g. "April − March" when both show the same count).
+  const items=qs.map((q,i)=>{const it={i,type:q.type,question:q.question,options:(q.type==='multiple_choice'?q.options:undefined),markedIndex:(q.type==='multiple_choice'?q.answerIndex:undefined),markedAnswer:q.answer};if(q.diagram&&typeof q.diagram==='object')it.figure=q.diagram;return it;});
   const vp=`You are a meticulous ${s.level||''} ${s.subject||''} exam answer-checker. For EACH question below, work out the answer YOURSELF, then judge the marked answer.
-Return ONLY JSON (no prose, no code fences): {"checks":[{"i":<index>,"verdict":"ok"|"fix"|"drop","correctIndex":<0-based option index, ONLY if multiple_choice and verdict is "fix">}]}
+When a question has a "figure" field, that JSON IS the exact data shown to the student (chart/table/number-line values); solve the question strictly from those values, and if they don't support any option, verdict "drop".
+ALWAYS report the answer YOU computed independently: "solvedIndex" (the 0-based option index you worked out, for multiple_choice) or "solved" (your computed value, for numeric/short) — even when the marked answer looks correct.
+Return ONLY JSON (no prose, no code fences): {"checks":[{"i":<index>,"verdict":"ok"|"fix"|"drop","solvedIndex":<0-based index you computed, multiple_choice>,"solved":"<value you computed, numeric/short>","correctIndex":<0-based option index, ONLY if multiple_choice and verdict is "fix">}]}
 - "ok": the marked answer is correct and the question has a single, unambiguous answer.
 - "fix": the question is sound but the marked answer is wrong — for multiple_choice, give the correct "correctIndex".
-- "drop": the question is broken, ambiguous, or has no single correct option.
+- "drop": the question is broken, ambiguous, has no single correct option, has two options with the same value (duplicate choices), or the figure data doesn't match any option.
 Be strict, but only flag "fix"/"drop" when you are confident.
 QUESTIONS:
 `+JSON.stringify(items);
   let raw;
   try{
     const mt=outTokens(qs.length,8192);
-    if(CFG.provider==='gemini')raw=await callGemini(vp,[],mt);
-    else if(CFG.provider==='claude')raw=await callClaude(vp,[],Math.min(8192,mt));
-    else raw=await callOpenAICompatible(vp,[],mt);
+    if(CFG.provider==='gemini')raw=await callGemini(vp,[],mt,0.2);
+    else if(CFG.provider==='claude')raw=await callClaude(vp,[],Math.min(8192,mt),0.2);
+    else raw=await callOpenAICompatible(vp,[],mt,0.2);
     usageBump(1);
   }catch(e){return qs;} // checker call failed → don't block the practice
   const checks=parseChecks(raw);if(!checks)return qs;
   const verdict={};checks.forEach(c=>{if(c&&typeof c.i==='number')verdict[c.i]=c;});
+  const inRange=(idx,q)=>Number.isInteger(idx)&&idx>=0&&idx<q.options.length;
   const out=[];
   qs.forEach((q,i)=>{
     const c=verdict[i];
-    if(!c||c.verdict==='ok'){out.push(q);return;}
-    if(c.verdict==='fix'&&q.type==='multiple_choice'&&Array.isArray(q.options)&&Number.isInteger(c.correctIndex)&&c.correctIndex>=0&&c.correctIndex<q.options.length){
-      q.answerIndex=c.correctIndex;q.answer=String(q.options[c.correctIndex]);out.push(q);return;
+    if(!c){out.push(q);return;}
+    if(c.verdict==='drop')return; // broken/ambiguous → leave out
+    const isMC=q.type==='multiple_choice'&&Array.isArray(q.options)&&q.options.length>0;
+    if(isMC){
+      // Explicit correction wins.
+      if(c.verdict==='fix'&&inRange(c.correctIndex,q)){q.answerIndex=c.correctIndex;q.answer=String(q.options[c.correctIndex]);out.push(q);return;}
+      // #5: cross-check the verifier's INDEPENDENT solve (not just its label). If it actually
+      // worked the question to a DIFFERENT option than the key, that's a real dispute — drop it
+      // rather than serve a contested answer (a mislabelled "ok" no longer slips through).
+      if(inRange(c.solvedIndex,q)&&c.solvedIndex!==q.answerIndex)return;
+      out.push(q);return;
     }
-    // "drop" or an un-actionable "fix" → leave it out (don't serve a disputed item)
+    // numeric/short: a "fix" with a computed value updates the accepted answer.
+    if(c.verdict==='fix'&&(q.type==='numeric'||q.type==='short')&&c.solved!=null&&String(c.solved).trim()!==''){q.answer=String(c.solved);out.push(q);return;}
+    if(c.verdict==='ok'){out.push(q);return;}
+    return; // unactionable fix → leave out (don't serve a disputed item)
   });
   return out.length?reindex(out):qs; // never return empty
 }
@@ -832,7 +926,7 @@ async function aiGradeFreeText(s,results){
   if(!items.length)return;
   const prompt=`You are a fair ${s.level||''} ${s.subject||''} exam marker. For EACH item decide if the student's answer is correct — i.e. equivalent in meaning/value to the accepted answer, allowing different wording, format, units or rounding. Return ONLY JSON (no prose/fences): {"marks":[{"i":<index>,"correct":true|false}]}.\nITEMS:\n`+JSON.stringify(items);
   let raw;
-  try{const mt=outTokens(items.length,4096);if(CFG.provider==='gemini')raw=await callGemini(prompt,[],mt);else if(CFG.provider==='claude')raw=await callClaude(prompt,[],Math.min(8192,mt));else raw=await callOpenAICompatible(prompt,[],mt);usageBump(1);}catch(e){return;}
+  try{const mt=outTokens(items.length,4096);if(CFG.provider==='gemini')raw=await callGemini(prompt,[],mt,0.2);else if(CFG.provider==='claude')raw=await callClaude(prompt,[],Math.min(8192,mt),0.2);else raw=await callOpenAICompatible(prompt,[],mt,0.2);usageBump(1);}catch(e){return;}
   let obj;try{let t=String(raw||'').trim().replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();const m=t.match(/\{[\s\S]*\}/);obj=JSON.parse(m?m[0]:t);}catch(e){return;}
   if(!obj||!Array.isArray(obj.marks))return;
   obj.marks.forEach(m=>{if(m&&typeof m.i==='number'&&results[m.i]&&results[m.i].status==='review'){results[m.i].status=m.correct?'correct':'wrong';results[m.i].auto=true;results[m.i].aiGraded=true;}});
@@ -843,9 +937,11 @@ async function generateQuestions(s,files){
   const prompt=buildPrompt(s,refsText);
   const count=s.count||10;
   let raw;
-  if(CFG.provider==='gemini')raw=await callGemini(prompt,files,outTokens(count,65536));
-  else if(CFG.provider==='claude')raw=await callClaude(prompt,files,outTokens(count,8192));
-  else raw=await callOpenAICompatible(prompt,files,outTokens(count,16384));
+  // Lower temperature (0.5) than chat default → fewer arithmetic/keying slips while keeping
+  // enough variety across a batch. The tolerant parser + verifier handle the rest.
+  if(CFG.provider==='gemini')raw=await callGemini(prompt,files,outTokens(count,65536),0.5);
+  else if(CFG.provider==='claude')raw=await callClaude(prompt,files,outTokens(count,8192),0.5);
+  else raw=await callOpenAICompatible(prompt,files,outTokens(count,16384),0.5);
   usageBump(1); // count every real API call (incl. each chunk of a big batch)
   const qs=parseQuestions(raw);
   if(!qs.length)throw new Error('The AI response had no usable questions. It sent: '+JSON.stringify(String(raw||'').slice(0,220)));
@@ -887,7 +983,7 @@ async function buildPracticeSet(s,files){
   const wantsFresh=(files&&files.length>0)||!!(s.notes&&s.notes.trim());
   let fromBank=[];
   if(!wantsFresh)fromBank=await bankTake(s,count);
-  if(fromBank.length>=count)return {questions:reindex(fromBank.slice(0,count)).map(repointFromExplanation),source:'bank',apiCalls:0};
+  if(fromBank.length>=count)return {questions:reindex(fromBank.slice(0,count)).map(fixQuestion),source:'bank',apiCalls:0};
   const need=count-fromBank.length;
   // One reliable call: serve `need` now, bank the modest surplus. (Big stock-ups
   // go through generateMany via the bank hub.)
@@ -895,7 +991,7 @@ async function buildPracticeSet(s,files){
   const gen=await generateQuestions({...s,count:batch},files);
   const sessionGen=gen.slice(0,need);
   if(!wantsFresh)await bankAdd(s,gen.slice(need)); // bank only the unused surplus (avoids immediate repeats)
-  return {questions:reindex(fromBank.concat(sessionGen)).map(repointFromExplanation),source:fromBank.length?'mixed':(wantsFresh?'fresh':'generated'),apiCalls:1};
+  return {questions:reindex(fromBank.concat(sessionGen)).map(fixQuestion),source:fromBank.length?'mixed':(wantsFresh?'fresh':'generated'),apiCalls:1};
 }
 // "Practice more like this": a focused drill on one topic, served from the bank first.
 async function practiceTopic(topic){
@@ -933,6 +1029,9 @@ async function practiceWeakSpots(){
 /* ============================================================ Marking ============================================================ */
 function normNum(s){if(s==null)return null;const m=String(s).replace(/[, $%]/g,'').match(/-?\d+(\.\d+)?/);return m?parseFloat(m[0]):null;}
 function normTxt(s){return String(s??'').toLowerCase().replace(/\s+/g,' ').replace(/[. ]+$/,'').trim();}
+// Value of an answer allowing fractions / mixed numbers / money / times (reuses the
+// robust plValTokens parser), so "1/2" ↔ "0.5", "1 3/4" ↔ "1.75", "$5" ↔ "5" all match.
+function answerNum(s){if(s==null)return null;const t=(typeof plValTokens==='function')?plValTokens(s).tokens:[];return t.length?t[0].val:null;}
 function gradeAnswer(q,userAns){
   if(userAns==null||userAns===''||userAns===-1)return {status:'wrong',auto:true,blank:true};
   if(q.type==='multiple_choice')return {status:(Number(userAns)===Number(q.answerIndex))?'correct':'wrong',auto:true};
@@ -941,6 +1040,9 @@ function gradeAnswer(q,userAns){
   if(candidates.some(c=>normTxt(c)===normTxt(ua)))return {status:'correct',auto:true};
   const un=normNum(ua);
   if(un!=null&&candidates.some(c=>{const cn=normNum(c);return cn!=null&&Math.abs(cn-un)<1e-6;}))return {status:'correct',auto:true};
+  // Fraction / mixed-number / money equivalence (accepts different-but-equal forms).
+  const uv=answerNum(ua);
+  if(uv!=null&&candidates.some(c=>{const cv=answerNum(c);return cv!=null&&Math.abs(cv-uv)<1e-6;}))return {status:'correct',auto:true};
   if(q.type==='short')return {status:'review',auto:false};
   return {status:'wrong',auto:true};
 }
@@ -1122,34 +1224,69 @@ function startPaper(pk,timed){
   // Pack answers are curated/verified, so we TRUST answerIndex — do NOT run the
   // AI mis-key backstop here (it can mis-fire on non-numeric answers like "leave
   // out the + card" whose explanation contains numbers matching other options).
+  // We DO collapse any accidental duplicate options (safe — it only merges exact
+  // copies and re-points the key to the survivor), guarding against a bad transcription.
   const qs=(pk.questions||[]).map((q,i)=>{
     let svg=q.svg||'';
     if(q.diagram&&typeof q.diagram==='object'&&typeof PLDiagram!=='undefined'){try{const d=PLDiagram.render(q.diagram);if(d)svg=d;}catch(e){}}
-    return Object.assign({},q,{id:'q'+i,svg:sanitizeSvg(svg),image:safeImage(q.image)});
+    return dedupeOptions(repairQ(Object.assign({},q,{id:'q'+i,svg:sanitizeSvg(svg),image:safeImage(q.image)})));
   });
   if(!qs.length)return toast('This paper has no questions yet.');
   startSession(setup,qs,'practice');viewRun();
 }
 function packSlug(p){return ('pack:'+[p.subject,p.level,p.year,p.title].filter(Boolean).join('-')).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/-+/g,'-').slice(0,80);}
 // Import one or more packs from a JSON file (a pack object, an array, or {packs:[…]}).
-async function importPacks(file){
-  try{
-    const data=JSON.parse(await file.text());
-    let arr=Array.isArray(data)?data:(Array.isArray(data.packs)?data.packs:[data]);
-    arr=arr.filter(p=>p&&Array.isArray(p.questions)&&p.questions.length);
-    if(!arr.length)return toast('No questions found in that file.');
-    let n=0;CFG.packsDeleted=CFG.packsDeleted||{};for(const p of arr){p.id=p.id||packSlug(p);p.updatedAt=Date.now();if(CFG.packsDeleted[p.id])delete CFG.packsDeleted[p.id];await dbPut('packs',p);n++;}saveCfg();
-    scheduleDriveSync();toast('Imported '+n+' pack'+(n>1?'s':'')+' — syncing to your devices…');viewPapers();
-  }catch(e){alert('Couldn’t read that pack file:\n\n'+(e.message||e));}
+// Import-time sanity check for a pack. Catches the transcription slips that make
+// a question wrong or unanswerable: duplicate multiple-choice options, an
+// answerIndex out of range, or an answer whose text doesn't match the keyed
+// option. Returns a list of human-readable issues ([] when clean). Non-blocking —
+// the pack still imports; we just surface the problems so they can be fixed.
+function packIssues(p){
+  const out=[],norm=x=>plainMath(String(x==null?'':x)).toLowerCase().replace(/\s+/g,'').replace(/[.,;]+$/,'');
+  (p.questions||[]).forEach((q,i)=>{
+    const at='“'+(p.title||p.id||'pack')+'” Q'+(i+1);
+    if(q.type!=='multiple_choice')return;
+    const o=Array.isArray(q.options)?q.options:[];
+    if(o.length<2){out.push(at+': fewer than 2 options');return;}
+    const seen={};o.forEach(x=>{const k=norm(x);if(k&&seen[k])out.push(at+': duplicate option “'+plainMath(String(x))+'”');seen[k]=1;});
+    if(typeof q.answerIndex!=='number'||q.answerIndex<0||q.answerIndex>=o.length){out.push(at+': answerIndex '+q.answerIndex+' out of range (0–'+(o.length-1)+')');return;}
+    if(q.answer!=null){const a=norm(q.answer),ka=norm(o[q.answerIndex]);if(a&&ka&&a!==ka&&ka.indexOf(a)<0&&a.indexOf(ka)<0)out.push(at+': answer “'+plainMath(String(q.answer))+'” ≠ keyed option “'+plainMath(String(o[q.answerIndex]))+'”');}
+  });
+  return out;
+}
+// Import one or MANY pack files at once. Each file is parsed independently so a single
+// unreadable file doesn't abort the rest — its name is collected and reported at the end.
+async function importPacks(files){
+  const list=(files&&files.length!=null)?Array.from(files):[files]; // accept a FileList, an array, or one File
+  if(!list.length)return;
+  let n=0,issues=[],failed=[];CFG.packsDeleted=CFG.packsDeleted||{};
+  for(const file of list){
+    try{
+      const data=JSON.parse(await file.text());
+      let arr=Array.isArray(data)?data:(Array.isArray(data.packs)?data.packs:[data]);
+      arr=arr.filter(p=>p&&Array.isArray(p.questions)&&p.questions.length);
+      if(!arr.length){failed.push((file.name||'a file')+' (no questions)');continue;}
+      for(const p of arr){p.id=p.id||packSlug(p);p.updatedAt=Date.now();if(CFG.packsDeleted[p.id])delete CFG.packsDeleted[p.id];await dbPut('packs',p);n++;const iss=packIssues(p);if(iss.length)issues.push(...iss);}
+    }catch(e){failed.push((file.name||'a file')+': '+(e.message||e));}
+  }
+  saveCfg();scheduleDriveSync();
+  if(issues.length)console.warn('⚠️ Pack import found '+issues.length+' question issue(s):\n • '+issues.join('\n • '));
+  if(failed.length)console.warn('⚠️ '+failed.length+' file(s) could not be imported:\n • '+failed.join('\n • '));
+  let msg=n?('Imported '+n+' pack'+(n>1?'s':'')):'No packs imported';
+  if(issues.length)msg+=' · ⚠️ '+issues.length+' question issue(s) (see console)';
+  if(failed.length)msg+=' · '+failed.length+' file(s) failed (see console)';
+  else if(n)msg+=' — syncing to your devices…';
+  toast(msg);
+  viewPapers();
 }
 async function delPack(id){const p=(await dbAll('packs')).find(x=>x.id===id);if(!p)return;if(!confirm('Remove “'+(p.title||'this pack')+'” from all your devices?'))return;await dbDel('packs',id);CFG.packsDeleted=CFG.packsDeleted||{};CFG.packsDeleted[id]=Date.now();saveCfg();scheduleDriveSync();viewPapers();}
 async function viewPapers(){
   stopTimer();
   const packs=(await dbAll('packs')).sort((a,b)=>String(a.title||'').localeCompare(String(b.title||'')));
-  const fileInput=el('input',{type:'file',accept:'.json,application/json',style:'display:none',onchange:e=>{if(e.target.files[0])importPacks(e.target.files[0]);}});
+  const fileInput=el('input',{type:'file',multiple:'',accept:'.json,application/json',style:'display:none',onchange:e=>{if(e.target.files&&e.target.files.length)importPacks(e.target.files);e.target.value='';}});
   const importCard=el('div',{class:'card'},el('div',{class:'row between',style:'align-items:center'},
-    el('div',{},el('b',{},'➕ Import a paper pack'),el('div',{class:'small muted'},'Load a transcribed past-paper file (.json). It syncs to all your devices.')),
-    el('button',{class:'btn',onclick:()=>fileInput.click()},'Choose file…')),fileInput);
+    el('div',{},el('b',{},'➕ Import paper packs'),el('div',{class:'small muted'},'Load one or more transcribed past-paper files (.json). They sync to all your devices.')),
+    el('button',{class:'btn',onclick:()=>fileInput.click()},'Choose files…')),fileInput);
   const body=[];
   if(!packs.length){
     body.push(el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'📄'),el('div',{},'No past-paper packs yet. Import one above — once added on any device it syncs everywhere.'))));
@@ -1440,10 +1577,12 @@ async function submitSession(){
         const streak=computeStreak((await dbAll('attempts')).filter(a=>a.profileId===pid()).map(a=>a.date));
         card=rollCard(attempt.percent,diff,streak);
         const aw=await cardAward(card);bumpPacks();
-        if(aw.dupe)candyGain+=card.tier*2; // duplicate → candy instead of a wasted card
+        // Duplicate → the extra copy is KEPT by default (adds to ×count for battles/trades);
+        // the kid can later choose on the results screen to convert it to candy instead.
+        if(aw.dupe){card.dupe=true;card.dupeCandy=card.tier*4;card.count=aw.rec.count;}
         // "double next pack" buff won from a battle → award a 2nd card, then clear it.
         const tb=await trainerGet();
-        if(tb.dblPack){const c2=rollCard(attempt.percent,diff,streak);const aw2=await cardAward(c2);if(aw2.dupe)candyGain+=c2.tier*2;attempt.reward2=c2;tb.dblPack=false;tb.updatedAt=Date.now();await dbPut('trainer',tb);}
+        if(tb.dblPack){const c2=rollCard(attempt.percent,diff,streak);const aw2=await cardAward(c2);if(aw2.dupe){c2.dupe=true;c2.dupeCandy=c2.tier*4;c2.count=aw2.rec.count;}attempt.reward2=c2;tb.dblPack=false;tb.updatedAt=Date.now();await dbPut('trainer',tb);}
       }
       // ⚡ Battle energy: 1 per practice, +1 at ≥80% accuracy (gates the battle game behind practising).
       const energyGain=1+(attempt.percent>=80?1:0);
@@ -1576,14 +1715,19 @@ function viewResults(a){
       a.levelUp?el('div',{style:'color:var(--brand);font-weight:700;margin-top:4px'},'🎉 Level up! Trainer Level '+a.levelUp):'',
       a.reward2?el('div',{style:'color:var(--brand);font-weight:700;margin-top:4px'},'✨ Double pack! You got TWO cards 🎉'):''):'',
     diffSuggestCard(a),
-    a.reward?packRevealCard(a.reward):'',
-    a.reward2?packRevealCard(a.reward2):'',
+    a.reward?packRevealCard(a.reward,a):'',
+    a.reward2?packRevealCard(a.reward2,a):'',
     topicReport(a),
     el('div',{class:'card'},el('h2',{},'Question by question'),el('p',{class:'sub'},'Read the explanations — that’s where the learning happens.'),list),
     el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>viewSetup()},'New practice'),el('button',{class:'btn',onclick:()=>printWorksheet(a.results,(a.examLabel||'Practice')+' — '+(a.level||''))},'🖨️ Print'),el('button',{class:'btn',onclick:()=>viewHome()},'Home'))));
   if(window.gsap&&!reduceMotion){const pctEl=$('.scorehero .pct');if(pctEl){const o={v:0};gsap.to(o,{v:a.percent,duration:.9,ease:'power2.out',onUpdate:()=>pctEl.textContent=Math.round(o.v)+'%'});}gsap.from('.qresult',{autoAlpha:0,y:16,duration:.3,stagger:.04,ease:'power2.out',delay:.12,clearProps:'all'});}
 }
-async function regrade(a,i,status){const r=a.results[i];if(r.status===status)return;r.status=status;a.correct=a.results.filter(x=>x.status==='correct').length;a.wrong=a.results.filter(x=>x.status==='wrong').length;a.needsReview=a.results.filter(x=>x.status==='review').length;a.gotMarks=a.results.reduce((s,x)=>s+(x.status==='correct'?x.marks:0),0);a.percent=a.totalMarks?Math.round(a.gotMarks/a.totalMarks*100):0;await dbPut('attempts',a);
+// A capped, device-local log of manual grade corrections — a parent-facing signal for
+// spotting questions/topics the AI keys or marks badly. Read in viewDashboard.
+function flagLog(){try{return JSON.parse(localStorage.getItem('practicelab.flags')||'[]');}catch(e){return [];}}
+function logFlag(e){try{const l=flagLog();l.unshift(e);while(l.length>40)l.pop();localStorage.setItem('practicelab.flags',JSON.stringify(l));}catch(e){}}
+async function regrade(a,i,status){const r=a.results[i];if(r.status===status)return;const prev=r.status;r.status=status;a.correct=a.results.filter(x=>x.status==='correct').length;a.wrong=a.results.filter(x=>x.status==='wrong').length;a.needsReview=a.results.filter(x=>x.status==='review').length;a.gotMarks=a.results.reduce((s,x)=>s+(x.status==='correct'?x.marks:0),0);a.percent=a.totalMarks?Math.round(a.gotMarks/a.totalMarks*100):0;await dbPut('attempts',a);
+  logFlag({at:todayISO(),profileId:a.profileId,student:a.student||profileName(a.profileId),topic:r.topic||'General',q:plainMath(String(r.question||'')).slice(0,110),from:prev,to:status,exam:a.examLabel||'',level:a.level||''});
   // If now marked correct, drop the matching mistakes-notebook entry (unless flagged).
   if(status==='correct'&&!r.flagged){try{for(const x of (await dbAll('review')).filter(x=>x.attemptId===a.id&&x.question===r.question))await dbDel('review',x.id);}catch(e){}}
   scheduleDriveSync();toast('Updated.');viewResults(a);}
@@ -1611,15 +1755,34 @@ function confettiBurst(){
     gsap.to(c,{y:window.innerHeight+50,x:'+='+(Math.random()*180-90),rotation:Math.random()*720,duration:1.5+Math.random(),ease:'power1.in',delay:Math.random()*0.3,onComplete:()=>c.remove()});}
   setTimeout(()=>{try{box.remove();}catch(e){}},3200);
 }
-function packRevealCard(reward){
+function packRevealCard(reward,attempt){
   const host=el('div',{class:'card',style:'text-align:center'});
-  const closed=el('button',{class:'packbox',type:'button'},el('div',{style:'font-size:54px'},'🎁'),el('div',{style:'font-weight:700;margin-top:6px'},'You earned a card!'),el('div',{class:'small muted'},'Tap to open your pack'));
-  closed.addEventListener('click',()=>{
+  const nm=(POKE_BY_ID[reward.dexId]?POKE_BY_ID[reward.dexId].name:reward.name||'It');
+  const who=(attempt&&attempt.profileId)||pid();
+  // Draw the opened face + (for duplicates) the keep-or-convert choice / its outcome.
+  const paint=()=>{
     const face=cardFace(reward,150);
-    host.innerHTML='';host.append(el('h2',{style:'margin:0 0 10px'},'You got a card! 🎉'),face,el('div',{class:'row',style:'justify-content:center;margin-top:12px'},el('button',{class:'btn sm',onclick:()=>viewCards()},'🎴 See collection')));
+    let extra='';
+    if(reward.dupe){
+      if(reward.resolved==='candy')
+        extra=el('div',{class:'card',style:'margin-top:10px;background:var(--feature);border-color:#cfe2ff'},el('div',{style:'font-weight:700;color:var(--brand)'},'Converted to 🍬 '+reward.dupeCandy+' candy ✓'));
+      else if(reward.resolved==='kept')
+        extra=el('div',{class:'card',style:'margin-top:10px;background:var(--feature);border-color:#cfe2ff'},el('div',{style:'font-weight:700'},'Kept! You now have ×'+(reward.count||2)+' '+esc(nm)+' 🎴'));
+      else{ // undecided → offer the choice (kept is the current default, since the copy was already added)
+        extra=el('div',{class:'card',style:'margin-top:10px;background:var(--feature);border-color:#cfe2ff'},
+          el('div',{style:'font-weight:700'},'You already have '+esc(nm)+' 🔁'),
+          el('div',{class:'small muted',style:'margin:2px 0 10px'},'Keep the duplicate for your collection, or convert it to candy.'),
+          el('div',{class:'row',style:'justify-content:center;gap:8px'},
+            el('button',{class:'btn sm primary',onclick:async()=>{reward.resolved='kept';if(attempt)await dbPut('attempts',attempt);scheduleDriveSync();paint();}},'🎴 Keep (×'+(reward.count||2)+')'),
+            el('button',{class:'btn sm',onclick:async()=>{await cardTakeFrom(who,reward.dexId);await trainerCandyMove(who,reward.dupeCandy);reward.resolved='candy';if(attempt)await dbPut('attempts',attempt);scheduleDriveSync();toast('🍬 +'+reward.dupeCandy+' candy!');paint();}},'🍬 Convert to '+reward.dupeCandy)));
+      }
+    }
+    host.innerHTML='';host.append(el('h2',{style:'margin:0 0 10px'},reward.dupe?'Another '+esc(nm)+'! 🔁':'You got a card! 🎉'),face,extra,el('div',{class:'row',style:'justify-content:center;margin-top:12px'},el('button',{class:'btn sm',onclick:()=>viewCards()},'🎴 See collection')));
     if(window.gsap&&!reduceMotion)gsap.from(face,{scale:.3,autoAlpha:0,rotation:-8,duration:.5,ease:'back.out(1.7)'});
-    if(reward.tier>=4)confettiBurst();
-  });
+    if(reward.tier>=4&&!reward.dupe)confettiBurst();
+  };
+  const closed=el('button',{class:'packbox',type:'button'},el('div',{style:'font-size:54px'},'🎁'),el('div',{style:'font-weight:700;margin-top:6px'},'You earned a card!'),el('div',{class:'small muted'},'Tap to open your pack'));
+  closed.addEventListener('click',paint);
   host.append(closed);return host;
 }
 function dexCell(p,rec){
@@ -1656,7 +1819,7 @@ async function viewCard(dexId){
     el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:10px'},el('h2',{style:'margin:0'},'Train'),el('span',{style:'font-weight:800'},'🍬 '+candy)),
       el('div',{class:'row',style:'gap:8px;flex-wrap:wrap'},
         lvl<CARD_MAX_LEVEL?el('button',{class:'btn primary'+(candy<upCost?' ghost':''),onclick:async()=>{if(await trainCard(dexId))viewCard(dexId);}},'⚡ Power Up (🍬'+upCost+')'):el('button',{class:'btn',disabled:'true'},'⚡ Max level'),
-        !rec.shiny?el('button',{class:'btn'+(candy<SHINY_COST?' ghost':''),onclick:async()=>{if(await makeCardShiny(dexId))viewCard(dexId);}},'✨ Make shiny (🍬'+SHINY_COST+')'):''),
+        !rec.shiny?el('button',{class:'btn'+(candy<shinyCost(p.t)?' ghost':''),onclick:async()=>{if(await makeCardShiny(dexId))viewCard(dexId);}},'✨ Make shiny (🍬'+shinyCost(p.t)+')'):''),
       el('p',{class:'small muted',style:'margin-top:10px'},'Power Up raises HP, Attack and move power. Earn more 🍬 candy by doing practices.'))));
 }
 async function viewCards(){
@@ -1686,15 +1849,17 @@ async function viewTrades(){
   const mine=open.filter(t=>t.sellerId===pid()),others=open.filter(t=>t.sellerId!==pid());
   const canMap={};for(const t of others)canMap[t.id]=await canFulfill(t.want);
   const tr=await trainerGet();
+  const costHint=t=>t.want.type==='candy'?'You’ll pay 🍬 '+t.want.amount+' candy (you keep all your cards).':'You’ll give your '+(POKE_BY_ID[t.want.dexId]?POKE_BY_ID[t.want.dexId].name:'Pokémon')+' for it.';
   const offerRow=(t,mineFlag)=>el('div',{class:'card'},
     tradeCardRow(t.card),
     el('div',{class:'row between',style:'margin-top:8px;gap:8px'},el('span',{class:'small'},mineFlag?'You’re offering this':('From '+esc(t.sellerName||profileName(t.sellerId)))),el('b',{},'Wants: '+wantLabel(t.want))),
     mineFlag?el('button',{class:'btn sm danger',style:'margin-top:10px',onclick:async()=>{await cancelTrade(t.id);viewTrades();}},'Cancel offer')
-      :(canMap[t.id]?el('button',{class:'btn sm primary',style:'margin-top:10px',onclick:async()=>{await acceptTrade(t.id);viewTrades();}},'✅ Take this deal')
+      :(canMap[t.id]?el('div',{},el('div',{class:'small muted',style:'margin-top:8px'},costHint(t)),el('button',{class:'btn sm primary',style:'margin-top:6px',onclick:async()=>{await acceptTrade(t.id);viewTrades();}},'✅ Take this deal'))
         :el('div',{class:'small muted',style:'margin-top:10px'},'You need '+wantLabel(t.want)+' first')));
   show(el('div',{},backBar('Trading Post',()=>viewCards()),
     el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('h2',{},'🔁 Trading Post'),
-      el('p',{class:'sub',style:'margin:0'},'Offer one of your Pokémon and say what you want. Anyone in the family can take the deal later — you don’t both need to be here! You have 🍬 '+(tr.candy||0)+' candy.')),
+      el('p',{class:'sub',style:'margin:0'},'Offer one of your Pokémon and say what you want. Anyone in the family can take the deal later — you don’t both need to be here! You have 🍬 '+(tr.candy||0)+' candy.'),
+      el('p',{class:'small muted',style:'margin:6px 0 0'},'💡 A candy deal costs the taker candy (no card leaves their collection); a card deal swaps card-for-card.')),
     el('button',{class:'btn primary block',style:'margin-bottom:6px',onclick:()=>viewTradeNew()},'➕ Make a new offer'),
     others.length?el('div',{class:'seclabel'},'Deals you can take'):'',
     ...others.map(t=>offerRow(t,false)),
@@ -1839,23 +2004,40 @@ function rollCard(accuracy,difficulty,streak){
 }
 function packsToday(){try{return (JSON.parse(localStorage.getItem('practicelab.packs')||'{}'))[todayISO()]||0;}catch(e){return 0;}}
 function bumpPacks(){const k='practicelab.packs';let u={};try{u=JSON.parse(localStorage.getItem(k)||'{}');}catch(e){}u[todayISO()]=(u[todayISO()]||0)+1;const ks=Object.keys(u).sort();while(ks.length>14)delete u[ks.shift()];localStorage.setItem(k,JSON.stringify(u));}
+// ----- Additive-safe economy ledgers (v2.27) -----
+// Drive sync merges by MAX (so neither device loses earned progress), which means a
+// plain "count--"/"candy--" SPEND used to be reverted on the next merge. Fix: track
+// MONOTONIC counters — a card pile carries `gained`/`lost` (count = gained − lost),
+// the trainer carries `candyEarned`/`candySpent` (candy = earned − spent). Every device
+// only ever increments these, so MAX-merge keeps the true total and spends STICK
+// (a taken trade / trained card / converted duplicate no longer reappears cross-device).
+function normCard(c){if(!c)return c;if(c.gained==null){c.gained=(c.count!=null?c.count:1);c.lost=c.lost||0;}if(c.lost==null)c.lost=0;c.count=Math.max(0,c.gained-c.lost);return c;}
+function normTrainer(t){if(!t)return t;if(t.candyEarned==null){t.candyEarned=t.candy||0;t.candySpent=t.candySpent||0;}if(t.candySpent==null)t.candySpent=0;t.candy=Math.max(0,t.candyEarned-t.candySpent);return t;}
+// Pure MAX-merge of the ledger fields — reused by mergeRemote and unit-tested.
+function mergeCardRec(cur,rem){const g=Math.max(cur.gained||0,rem.gained||0),l=Math.max(cur.lost||0,rem.lost||0);return {gained:g,lost:l,count:Math.max(0,g-l),level:Math.max(cur.level||1,rem.level||1),shiny:!!(cur.shiny||rem.shiny)};}
+function mergeTrainerVals(cur,rem){const earned=Math.max(cur.candyEarned||0,rem.candyEarned||0),spent=Math.max(cur.candySpent||0,rem.candySpent||0);return {xp:Math.max(cur.xp||0,rem.xp||0),candyEarned:earned,candySpent:spent,candy:Math.max(0,earned-spent)};}
 async function cardAward(card){
   const id=pid()+':'+card.dexId,all=await dbAll('cards');
-  let rec=all.find(c=>c.id===id),dupe=!!rec;
-  if(rec){rec.count=(rec.count||1)+1;if(card.shiny)rec.shiny=true;}
-  else rec={id,profileId:pid(),dexId:card.dexId,tier:card.tier,count:1,level:1,shiny:!!card.shiny,firstAt:Date.now()};
-  await dbPut('cards',rec);return {rec,dupe};
+  let rec=all.find(c=>c.id===id);if(rec)normCard(rec);
+  const dupe=!!rec&&rec.count>=1; // already OWN one (a count-0 pile that was traded away isn't a dupe — it's a fresh re-catch)
+  if(rec){rec.gained=(rec.gained||0)+1;if(card.shiny)rec.shiny=true;}
+  else rec={id,profileId:pid(),dexId:card.dexId,tier:card.tier,gained:1,lost:0,count:1,level:1,shiny:!!card.shiny,firstAt:Date.now()};
+  normCard(rec);await dbPut('cards',rec);return {rec,dupe};
 }
-async function cardsForProfile(){return (await dbAll('cards')).filter(c=>c.profileId===pid());}
+// Owned = at least one copy (count-0 piles are kept for the ledger but hidden).
+async function cardsForProfile(){return (await dbAll('cards')).map(normCard).filter(c=>c.profileId===pid()&&(c.count||0)>=1);}
 
 /* ----- Trainer: XP + level (infinite progression) + candy economy ----- */
 // XP curve: L1→2 needs 100, then +50 each level. Returns level + progress into it.
 function trainerLevel(xp){let lvl=1,need=100,acc=0;xp=Math.max(0,xp||0);while(xp>=acc+need){acc+=need;lvl++;need+=50;}return {level:lvl,into:xp-acc,need};}
 const CARD_MAX_LEVEL=20;
-function trainCost(level){return 6+(level||1)*3;} // candy to raise a card from `level` to level+1
-async function trainerGet(){return (await dbAll('trainer')).find(t=>t.id===pid())||{id:pid(),xp:0,candy:0};}
-async function trainerAdd(xp,candy){const t=await trainerGet();t.xp=(t.xp||0)+(xp||0);t.candy=(t.candy||0)+(candy||0);t.updatedAt=Date.now();await dbPut('trainer',t);return t;}
-async function trainerSpend(candy){const t=await trainerGet();if((t.candy||0)<candy)return false;t.candy=(t.candy||0)-candy;t.updatedAt=Date.now();await dbPut('trainer',t);return true;}
+// Candy to raise a card from `level` to level+1. Grows QUADRATICALLY so early
+// levels stay cheap/rewarding but higher levels are a real goal (L1≈13, L5≈53,
+// L10≈148, L19≈445) — a meaningful long-term candy sink.
+function trainCost(level){level=level||1;return 8+level*4+level*level;}
+async function trainerGet(){return normTrainer((await dbAll('trainer')).find(t=>t.id===pid())||{id:pid(),xp:0,candy:0,candyEarned:0,candySpent:0});}
+async function trainerAdd(xp,candy){const t=await trainerGet();t.xp=(t.xp||0)+(xp||0);t.candyEarned=(t.candyEarned||0)+(candy||0);normTrainer(t);t.updatedAt=Date.now();await dbPut('trainer',t);return t;}
+async function trainerSpend(candy){const t=await trainerGet();if((t.candy||0)<candy)return false;t.candySpent=(t.candySpent||0)+candy;normTrainer(t);t.updatedAt=Date.now();await dbPut('trainer',t);return true;}
 // Train (power up) a card a level. Returns true on success; caller refreshes its view.
 async function trainCard(dexId){
   const rec=(await cardsForProfile()).find(c=>c.dexId===dexId);if(!rec)return false;
@@ -1865,12 +2047,13 @@ async function trainCard(dexId){
   await trainerSpend(cost);rec.level=(rec.level||1)+1;await dbPut('cards',rec);scheduleDriveSync();
   toast('Trained! '+(POKE_BY_ID[dexId]?POKE_BY_ID[dexId].name:'')+' → Lv '+rec.level);return true;
 }
-// Spend candy to make a card shiny (cosmetic) — a flexible candy sink.
-const SHINY_COST=40;
+// Spend candy to make a card shiny (cosmetic) — a flexible candy sink. Cost
+// scales with rarity so a shiny legendary is a real achievement (t1=90 … t5=210).
+function shinyCost(tier){return 60+(tier||1)*30;}
 async function makeCardShiny(dexId){
   const rec=(await cardsForProfile()).find(c=>c.dexId===dexId);if(!rec||rec.shiny)return false;
-  const t=await trainerGet();if((t.candy||0)<SHINY_COST){toast('Need '+SHINY_COST+' 🍬 to make this shiny.');return false;}
-  await trainerSpend(SHINY_COST);rec.shiny=true;await dbPut('cards',rec);scheduleDriveSync();toast('✨ '+(POKE_BY_ID[dexId]?POKE_BY_ID[dexId].name:'It')+' is now shiny!');return true;
+  const cost=shinyCost(rec.tier),t=await trainerGet();if((t.candy||0)<cost){toast('Need '+cost+' 🍬 to make this shiny — you have '+(t.candy||0)+'.');return false;}
+  await trainerSpend(cost);rec.shiny=true;await dbPut('cards',rec);scheduleDriveSync();toast('✨ '+(POKE_BY_ID[dexId]?POKE_BY_ID[dexId].name:'It')+' is now shiny!');return true;
 }
 // Battle-ready stats + moves, derived from tier + level (no extra storage; reused by battles).
 function cardStats(tier,level){level=level||1;return {hp:20+tier*8+(level-1)*5,atk:6+tier*3+(level-1)*2,def:4+tier*2+Math.round((level-1)*1.5),spd:8+tier*2+(level-1)};}
@@ -1896,19 +2079,19 @@ function cardMoves(dexId,tier,level){
    specific Pokémon. */
 // Cross-profile card give/take (by profileId, not just the active one).
 async function cardGiveTo(profileId,snap){
-  const id=profileId+':'+snap.dexId,rec=(await dbAll('cards')).find(c=>c.id===id);
-  if(rec){rec.count=(rec.count||1)+1;rec.level=Math.max(rec.level||1,snap.level||1);if(snap.shiny)rec.shiny=true;await dbPut('cards',rec);}
-  else await dbPut('cards',{id,profileId,dexId:snap.dexId,tier:snap.tier,count:1,level:snap.level||1,shiny:!!snap.shiny,firstAt:Date.now()});
+  const id=profileId+':'+snap.dexId;let rec=(await dbAll('cards')).find(c=>c.id===id);if(rec)normCard(rec);
+  if(rec){rec.gained=(rec.gained||0)+1;rec.level=Math.max(rec.level||1,snap.level||1);if(snap.shiny)rec.shiny=true;normCard(rec);await dbPut('cards',rec);}
+  else await dbPut('cards',{id,profileId,dexId:snap.dexId,tier:snap.tier,gained:1,lost:0,count:1,level:snap.level||1,shiny:!!snap.shiny,firstAt:Date.now()});
 }
 async function cardTakeFrom(profileId,dexId){
-  const id=profileId+':'+dexId,rec=(await dbAll('cards')).find(c=>c.id===id);
-  if(!rec||(rec.count||1)<1)return null;
+  const id=profileId+':'+dexId;let rec=(await dbAll('cards')).find(c=>c.id===id);if(rec)normCard(rec);
+  if(!rec||(rec.count||0)<1)return null;
   const snap={dexId,tier:rec.tier,level:rec.level||1,shiny:!!rec.shiny};
-  rec.count=(rec.count||1)-1;if(rec.count<=0)await dbDel('cards',rec.id);else await dbPut('cards',rec);
+  rec.lost=(rec.lost||0)+1;normCard(rec);await dbPut('cards',rec); // keep the (now count-0) record so the ledger merge doesn't resurrect it
   return snap;
 }
-async function trainerGetFor(profileId){return (await dbAll('trainer')).find(t=>t.id===profileId)||{id:profileId,xp:0,candy:0};}
-async function trainerCandyMove(profileId,delta){const t=await trainerGetFor(profileId);t.candy=Math.max(0,(t.candy||0)+delta);t.updatedAt=Date.now();await dbPut('trainer',t);}
+async function trainerGetFor(profileId){return normTrainer((await dbAll('trainer')).find(t=>t.id===profileId)||{id:profileId,xp:0,candy:0,candyEarned:0,candySpent:0});}
+async function trainerCandyMove(profileId,delta){const t=await trainerGetFor(profileId);if(delta>=0)t.candyEarned=(t.candyEarned||0)+delta;else t.candySpent=(t.candySpent||0)+(-delta);normTrainer(t);t.updatedAt=Date.now();await dbPut('trainer',t);}
 function profileName(id){const p=CFG.profiles.find(x=>x.id===id);return p?p.name:'A player';}
 function wantLabel(w){return w.type==='candy'?('🍬 '+w.amount+' candy'):(POKE_BY_ID[w.dexId]?POKE_BY_ID[w.dexId].name:'a Pokémon');}
 async function tradesOpen(){return (await dbAll('trades')).filter(t=>t.status==='open');}
@@ -1946,7 +2129,7 @@ async function acceptTrade(id){
 function startReview(items){
   const pick=items.slice(0,Math.min(15,items.length));
   if(!pick.length)return toast('Nothing to practise here.');
-  const qs=pick.map((it,i)=>repointFromExplanation({id:'q'+i,reviewId:it.id,topic:it.topic,type:it.type,question:it.question,svg:it.svg,image:it.image,options:it.options,answerIndex:it.answerIndex,answer:it.answer,acceptedAnswers:it.acceptedAnswers,explanation:it.explanation,marks:it.marks,hint:it.hint,whyWrong:it.whyWrong}));
+  const qs=pick.map((it,i)=>fixQuestion({id:'q'+i,reviewId:it.id,topic:it.topic,type:it.type,question:it.question,svg:it.svg,image:it.image,options:it.options,answerIndex:it.answerIndex,answer:it.answer,acceptedAnswers:it.acceptedAnswers,explanation:it.explanation,marks:it.marks,hint:it.hint,whyWrong:it.whyWrong}));
   startSession({country:'',subject:'Review',exam:pick[0].exam||'general',examLabel:'Mistakes notebook re-test',level:'Mixed',topics:[],difficulty:3,style:'mixed',timeLimitMin:0},qs,'review');
   viewRun();
 }
@@ -2121,9 +2304,18 @@ async function viewDashboard(){
         el('button',{class:'btn sm',onclick:()=>openStudent(p.id,viewHistory)},'📈 Progress'),
         el('button',{class:'btn sm'+(toReview?'':' ghost'),onclick:()=>openStudent(p.id,viewReview)},'📓 Mistakes'+(toReview?' ('+toReview+')':''))));
   });
+  // Manual grade corrections (this device) — helps a parent spot questions the AI got wrong.
+  const flags=flagLog();
+  const flagCard=flags.length?el('div',{class:'card'},
+    el('div',{class:'row between',style:'align-items:center'},el('h2',{style:'margin:0'},'🚩 Corrected answers'),el('button',{class:'btn sm ghost',onclick:()=>{if(confirm('Clear the corrected-answers log?')){localStorage.removeItem('practicelab.flags');viewDashboard();}}},'Clear')),
+    el('p',{class:'sub'},'Where someone overrode the mark (this device). Repeated corrections in a topic can flag AI keying issues — check verification is on in Settings → AI.'),
+    ...flags.slice(0,12).map(f=>el('div',{class:'qresult',style:'margin-top:6px'},
+      el('div',{class:'row between'},el('b',{},esc(f.student||'Student')+' · '+esc(f.topic||'')),el('span',{class:'small muted'},(f.to==='correct'?'→ ✓ correct':'→ ✗ wrong')+' · '+f.at)),
+      el('div',{class:'small muted',style:'margin-top:2px'},esc((f.q||'').slice(0,110))+((f.q||'').length>=110?'…':''))))):'';
   show(el('div',{},
     el('div',{class:'card'},el('h2',{},'👨‍👩‍👧 Family dashboard'),el('p',{class:'sub'},'Each student’s progress at a glance. Tap Open to practise as them, or dig into Progress / Mistakes.')),
     ...cards,
+    flagCard,
     el('div',{class:'small muted',style:'text-align:center;margin-top:6px'},driveToken?'☁️ Synced with Google Drive':'💡 Connect Google Drive (Settings) on each device to see everyone’s progress here.')));
 }
 
@@ -2142,6 +2334,9 @@ function viewSettings(){
     buildAICard(parent),
     sec('Read-aloud'),
     buildVoiceCard(),
+    parent?sec('Daily goal'):null,
+    parent?el('div',{class:'card'},el('h2',{},'🎯 Today’s goal'),el('p',{class:'sub'},'How many questions each student aims to answer per day — shown on the home goal bar. Applies to every student and syncs across devices.'),
+      field('Questions per day','',selOf(CFG.dailyGoal||10,[5,10,15,20,25,30,40,50],v=>{CFG.dailyGoal=+v;markSettingsChanged();}))):null,
     parent?sec('Notifications'):null,
     parent?el('div',{class:'card'},el('h2',{},'📧 Email summaries'),el('p',{class:'sub'},'Email a recap (including the questions to review) when a practice finishes.'),
       toggle('Send summary emails',CFG.emailEnabled,v=>CFG.emailEnabled=v),
@@ -2370,10 +2565,15 @@ async function mergeRemote(remote){
   for(const r of(await dbAll('refs')))if(rdel[r.id])await dbDel('refs',r.id);
   const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[])){if(rdel[r.id])continue;if(!lf.has(r.id))await dbPut('refs',r);}
   const lb=new Map((await dbAll('bank')).map(b=>[b.id,b]));for(const b of(remote.bank||[])){if(isCleared('bank',b,'createdAt'))continue;if(!lb.has(b.id))await dbPut('bank',b);}
-  // Cards: merge by id keeping the higher count/level + any shiny (so neither device loses progress).
-  const lc=new Map((await dbAll('cards')).map(c=>[c.id,c]));for(const c of(remote.cards||[])){const cur=lc.get(c.id);if(!cur)await dbPut('cards',c);else if((c.count||1)>(cur.count||1)||(c.level||1)>(cur.level||1)||(c.shiny&&!cur.shiny)){cur.count=Math.max(cur.count||1,c.count||1);cur.level=Math.max(cur.level||1,c.level||1);cur.shiny=cur.shiny||c.shiny;await dbPut('cards',cur);}}
-  // Trainer XP/candy: keep the higher of each (additive merge can't sum safely across devices).
-  const lt=new Map((await dbAll('trainer')).map(t=>[t.id,t]));for(const t of(remote.trainer||[])){const cur=lt.get(t.id);if(!cur)await dbPut('trainer',t);else if((t.xp||0)>(cur.xp||0)||(t.candy||0)>(cur.candy||0)){cur.xp=Math.max(cur.xp||0,t.xp||0);cur.candy=Math.max(cur.candy||0,t.candy||0);await dbPut('trainer',cur);}}
+  // Cards: MAX-merge the monotonic gained/lost ledger (count = gained − lost) + level (max) +
+  // shiny (or). Because gained/lost only ever grow, a SPEND (lost++) survives the merge — a
+  // traded-away/converted card stays gone instead of resurrecting. Count-0 piles are kept.
+  const lc=new Map((await dbAll('cards')).map(c=>[c.id,normCard(c)]));
+  for(const c of(remote.cards||[])){normCard(c);const cur=lc.get(c.id);if(!cur){await dbPut('cards',c);continue;}const m=mergeCardRec(cur,c);if(m.gained!==cur.gained||m.lost!==cur.lost||m.level!==cur.level||m.shiny!==cur.shiny){Object.assign(cur,m);await dbPut('cards',cur);}}
+  // Trainer: MAX-merge XP and the candyEarned/candySpent ledger (candy = earned − spent), so a
+  // candy SPEND (trained card / shiny / trade) sticks cross-device instead of being restored.
+  const lt=new Map((await dbAll('trainer')).map(t=>[t.id,normTrainer(t)]));
+  for(const t of(remote.trainer||[])){normTrainer(t);const cur=lt.get(t.id);if(!cur){await dbPut('trainer',t);continue;}const m=mergeTrainerVals(cur,t);if(m.xp!==cur.xp||m.candyEarned!==cur.candyEarned||m.candySpent!==cur.candySpent){Object.assign(cur,m);await dbPut('trainer',cur);}}
   // Trades: a resolved (done/cancelled) status always wins over open, so a taken offer can't reopen.
   const rank=s=>s==='open'?0:1;
   const lq=new Map((await dbAll('trades')).map(t=>[t.id,t]));for(const t of(remote.trades||[])){const cur=lq.get(t.id);if(!cur)await dbPut('trades',t);else if(rank(t.status)>rank(cur.status)||(t.resolvedAt||0)>(cur.resolvedAt||0))await dbPut('trades',t);}
@@ -2481,7 +2681,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.25';
+const APP_VERSION='v2.28';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

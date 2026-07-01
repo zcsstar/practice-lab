@@ -82,6 +82,11 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   keeping every COMPLETE question (skips a bad one, stops at a truncated tail) —
   never throws, returns `[]` if nothing is recoverable. `parseQuestions()` in
   index.html just maps its output to the app shape (+`sanitizeSvg`).
+  `unmangleLatex` un-corrupts commands whose first letter is a JSON escape (`\frac`→form-feed
+  "rac", `\times`→tab, `\beta`→backspace) AND rewrites `\frac(a)(b)`→`\frac{a}{b}` (models
+  sometimes use parens → "rac(1)(2)"). Because stored bank/review data predates this,
+  index.html re-applies it on serve via `repairQ` (inside `fixQuestion` + `startPaper`), so old
+  items and packs self-heal too.
 - **Reference library + grounding** — `viewRefs` ("📚 Reference library", home menu)
   manages real past papers in the `refs` store, **shared** (`profileId:'all'`) and
   tagged `{exam,subject,level,year}`. Import auto-tags from the filename
@@ -128,7 +133,9 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `practicelab.usage`; `freeDailyLimit()` is 20 for Gemini. `viewBank()` is the
   hub (usage meter, per-setup counts, manual pre-generate, clear). Bank flows
   through export/import and Drive merge like the other stores.
-- **Marking** — `gradeAnswer()`: MC by index; numeric by tolerant numeric match;
+- **Marking** — `gradeAnswer()`: MC by index; numeric by tolerant numeric match; plus a
+  **fraction/mixed/money-equivalence** pass (v2.28) via `answerNum` (reuses `plValTokens`) so
+  "1/2"↔"0.5", "1 3/4"↔"1.75", "$5"↔"5" all count as correct;
   short answers that don't match become `review` (self-check toggle on results).
   The AI occasionally mis-keys a question (right explanation, wrong `answerIndex`).
   Mitigations: (1) prompt has a CRITICAL self-check requiring key == explanation
@@ -141,9 +148,23 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   from the END and re-points the key to the option that UNIQUELY matches the last
   concluding value — skipping distractor mentions ("a common mistake is 180",
   "not 6") and no-op'ing when the key already agrees (so correct questions are
-  never touched; non-numeric/non-MC are left to guard 2). Applied at parse time
-  AND on serve (`buildPracticeSet`, `startReview`) so already-banked mis-keys are
-  fixed too. Tested in [repoint.test.js](repoint.test.js); (4) results show
+  never touched; non-numeric/non-MC are left to guard 2). Value parsing goes
+  through `plValTokens` (v2.26), which reads **times** ("8:15 am" → 495 min so
+  8:00/8:10/8:15 stay distinct instead of collapsing to the hour "8"), **mixed
+  numbers** ("1 7/8" → 1.875, incl. `\frac`), fractions and decimals — earlier
+  versions scanned digit-by-digit and mis-keyed time/mixed-number answers.
+  On serve, `fixQuestion(q)` = `dedupeOptions(q)` → `repointFromWhyWrong(q)` → `repointFromExplanation(q)`,
+  applied at parse time AND on serve (`buildPracticeSet`, `startReview`) so
+  already-banked mis-keys are fixed too. **`repointFromWhyWrong` (v2.28, free signal):** the
+  model marks the correct option with an EMPTY `whyWrong`; if the KEYED option instead carries
+  a "why it's wrong" reason (self-contradiction) and exactly one option is blank, repoint to
+  that blank. Tight conditions → never fires on a clean key; explanation-repoint runs after and
+  can override. **`dedupeOptions` (v2.26)** collapses
+  **duplicate MC options** (models sometimes emit two identical choices, e.g. two
+  "3/8" — confusing, and unanswerable when the key is on the copy): keep the first,
+  drop later copies, re-point answerIndex/whyWrong to the survivor. The generation
+  prompt now requires 4 DISTINCT options and the verifier "drop"s a question with
+  duplicate choices. Tested in [repoint.test.js](repoint.test.js); (4) results show
   **"✓ My answer was actually right"** on wrong items (and "Mark as wrong" on
   correct) → `regrade()` recomputes the score and removes the matching mistakes-
   notebook entry. So a bad key is always correctable by the parent/student.
@@ -183,6 +204,13 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   - **Answer verification** (`CFG.verify`, default on): `verifyQuestions(s,qs)` inside
     `generateQuestions` makes ONE extra AI call that re-solves each generated question and
     keeps / repoints (MC) / drops it (`parseChecks` = tolerant `{checks:[…]}` parse).
+    **It's figure-aware (v2.27):** a question's structured `diagram` spec is passed as a
+    `figure` field so the checker solves chart/table/number-line questions against the
+    actual figure values and drops ones where the figure supports no option.
+    **It reports its INDEPENDENT solve (v2.28):** `solvedIndex` (MC) / `solved` (numeric); if
+    that disagrees with the key even on a "ok" verdict, the item is DROPPED (a mislabelled
+    verdict can't slip a wrong answer through) — a `fix` still repoints. The verify + AI-grade
+    calls run at **temperature 0.2** and generation at **0.5** (fewer arithmetic/keying slips).
     Best-effort — any failure returns the originals. Settings → AI toggle.
   - **AI-marked written answers** (`CFG.aiGrade`, default off): `aiGradeFreeText(s,results)`
     in `submitSession` batch-grades short/numeric self-check answers (accepts equivalent
@@ -238,12 +266,17 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   by id, newer `updatedAt` wins) so they reach the **public Pages app on every device**
   without being committed. Delivery: `importPacks(file)` reads a **`.json` pack file**
   via the "📄 Past papers" screen's file picker → writes to the store → `scheduleDriveSync`
-  → syncs everywhere. `seedLocalPacks()` also seeds from a bundled gitignored
+  → syncs everywhere. **On import, `packIssues(p)` (v2.27) validates each MC question**
+  (duplicate options, out-of-range `answerIndex`, answer-text ≠ keyed option) and, being
+  non-blocking, still imports but `console.warn`s + toasts the count so transcription slips
+  surface. `seedLocalPacks()` also seeds from a bundled gitignored
   `papers.local.js` (`window.PL_QUESTION_PACKS`) for local/dev. The home item always
   shows (so import is reachable). `startPaper(pack)` drills directly (NOT via the
   difficulty-keyed bank), rendering `diagram` specs and sanitising `image`s, and
   **trusts the curated `answerIndex`** (does NOT run `repointFromExplanation`, which
-  can mis-fire on non-numeric answers like "leave out the + card"). Pack file shape:
+  can mis-fire on non-numeric answers like "leave out the + card") — but it DOES run
+  `dedupeOptions` (v2.27) as cheap insurance against a duplicate-option transcription.
+  Pack file shape:
   `{title,subject,level,year,exam,setup,questions:[…]}`. Transcribed from `papers/`
   (gitignored) by rendering each scanned page (PyMuPDF, a local dev tool) and reading
   it — bespoke figures cropped to `image` (compressed), standard/schematic figures as
@@ -285,11 +318,18 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   flows through Drive sync (merge keeps higher count + any shiny) + export/import.
 - **Trainer progression (Phase A meta-game)** — every practice grants **XP**
   (`correct × (2+difficulty)` — quality) and **candy** (effort; even low accuracy
-  earns some) via `trainerAdd`, stored in the `trainer` store (per-profile xp +
-  candy). `trainerLevel(xp)` is an infinite curve (L1→2 = 100 XP, +50 each). Pack
-  **duplicates convert to candy** (so they're never wasted). Candy is spent in
-  `viewCards` to **train** a card up a level (`trainCard`, `trainCost`, cap
-  `CARD_MAX_LEVEL` 20). Rewards shown on results (`xpGain`/`candyGain`/`levelUp`).
+  earns some) via `trainerAdd`, stored in the `trainer` store (per-profile). **Candy is a
+  monotonic ledger (v2.28): `candyEarned`/`candySpent`, with `candy = earned − spent`**
+  (`normTrainer`) so a spend survives Drive's MAX-merge (see Drive sync). `trainerLevel(xp)`
+  is an infinite curve (L1→2 = 100 XP, +50 each). On a **duplicate** pack, the extra copy is
+  KEPT by default (adds to ×count) and the results reveal (`packRevealCard`) lets the kid
+  **choose: keep it or convert to `tier×4` candy** (`reward.dupe`/`dupeCandy`/`resolved`
+  stamped on the attempt; convert calls `cardTakeFrom`+`trainerCandyMove` on the earner). Candy is spent in
+  `viewCards` to **train** a card up a level (`trainCard`; `trainCost(level)` is
+  QUADRATIC `8+4L+L²` so higher levels cost meaningfully more, v2.27; cap
+  `CARD_MAX_LEVEL` 20) or to **make a card shiny** (`makeCardShiny`; `shinyCost(tier)`
+  = `60+tier×30` so rarer shinies cost more, v2.27). Rewards shown on results
+  (`xpGain`/`candyGain`/`levelUp`).
   `trainer` syncs (merge keeps higher xp/candy) + export/import; card `level`
   merges by max.
 - **Card detail (`viewCard`)** — tapping an owned dex cell opens a detail screen:
@@ -304,9 +344,12 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   amount OR a specific dexId); anyone in the family can `acceptTrade` later (no
   simultaneous online needed). Cross-profile transfers use `cardGiveTo`/
   `cardTakeFrom`/`trainerCandyMove`. `trades` store (DB v6) syncs (merge: resolved
-  status wins over open) + export/import. **Reliable on a shared device / profile
-  switching; cross-device "spends" don't propagate under the additive sync** (a
-  known limit).
+  status wins over open) + export/import. **Cross-device spends now propagate (v2.28)** —
+  cards carry a monotonic `gained`/`lost` ledger (`count = gained − lost`, `normCard`; a spent
+  pile is kept at count 0, not deleted, so the merge can't resurrect it) and candy uses
+  `candyEarned`/`candySpent`, both MAX-merged (`mergeCardRec`/`mergeTrainerVals`). Concurrent
+  OFFLINE edits on two devices still take the higher total (inherent additive limit), but a
+  taken trade / trained card / converted duplicate no longer reappears.
 - **Battle vs PC ([battle.js](battle.js), `viewBattle`)** — practice-GATED: each
   practice grants `⚡ energy` (`battleAddEnergy`, +1, +1 at ≥80%, cap 12, stored on
   the trainer doc); a battle costs 1. `viewBattle` is a **team builder**: pick up
@@ -383,6 +426,11 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   button returns there); students land on their own `viewHome`. Each student card
   shows tiles + streak + **Open** (`openStudent(id,view)` switches active profile →
   their home) / **Progress** / **Mistakes**. Cross-device data requires Drive sync.
+  Also shows a **🚩 Corrected answers** card (v2.28) — a device-local capped log
+  (`flagLog`/`logFlag`, written by `regrade`) of manual mark overrides, so a parent can
+  spot topics the AI keys/marks badly.
+- **Daily goal setting (v2.28)** — parent-only Settings control writes the global
+  `CFG.dailyGoal` (already in `SYNC_SETTINGS`); the home goal bar reads it.
 - **Synced settings** — a whitelist `SYNC_SETTINGS` (emailEnabled, emailTo,
   emailjs, dailyGoal, webSearch, examContext — NOT the API key, NOT device-specific
   voice/active-student) syncs via Drive with newest-edit-wins: `markSettingsChanged()`
@@ -415,7 +463,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.25**). Claude suggests the next number on
+  minor on each release (currently at **v2.28**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach
@@ -431,6 +479,8 @@ locally. It runs by double-clicking `index.html` or hosting it statically
    index.html; covers canonical types, the effectiveness chart, stat/move shapes).
    **Diagrams:** `node diagram.test.js` (the `diagram.js` renderer: every type makes
    valid safe SVG; pie/array/clock geometry; aliases; bad specs → '' fallback).
+   **Economy ledger:** `node economy.test.js` (extracts `normCard`/`normTrainer`/
+   `mergeCardRec`/`mergeTrainerVals`; verifies spends survive the additive MAX-merge).
 2. **Run it:** `python -m http.server 8744` in this dir, open
    `http://localhost:8744/index.html`.
 3. **JS syntax check** without a browser:

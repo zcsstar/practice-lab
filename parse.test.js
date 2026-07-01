@@ -26,6 +26,8 @@ ok(qt('{"questions":[{"question":"What is $\\frac{1}{2}$?","answer":"0.5"}]}') =
 ok(qt('{"questions":[{"question":"$3 \\times 4$","answer":"12"}]}') === '$3 \\times 4$', '\\times survives (tab collision)');
 ok(qt('{"questions":[{"question":"angle $\\theta$","answer":"x"}]}') === 'angle $\\theta$', '\\theta survives (tab collision)');
 ok(qt('{"questions":[{"question":"$\\beta$ greater?","answer":"x"}]}') === '$\\beta$ greater?', '\\beta survives (backspace collision)');
+// 3c. \frac written with PARENTHESES instead of braces ("rac(1)(2)" after \f-mangling) → braces
+ok(qt('{"questions":[{"question":"Half is $\\frac(1)(2)$","answer":"0.5"}]}') === 'Half is $\\frac{1}{2}$', '\\frac(1)(2) parens repaired to braces');
 // genuine newlines in explanations must NOT be clobbered by the repair above
 ok(P.extractQuestions('{"questions":[{"question":"q","explanation":"Step 1\\nStep 2","answer":"1"}]}')[0].explanation === 'Step 1\nStep 2', 'genuine \\n newline preserved');
 

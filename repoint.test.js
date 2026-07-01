@@ -20,8 +20,15 @@ function extract(name) {
 }
 
 const ctx = {};
-new Function(extract('plainMath') + '\n' + extract('repointFromExplanation') + '\nthis.repointFromExplanation=repointFromExplanation;').call(ctx);
+new Function(
+  extract('plainMath') + '\n' + extract('plValTokens') + '\n' +
+  extract('repointFromExplanation') + '\n' + extract('dedupeOptions') + '\n' +
+  extract('repointFromWhyWrong') + '\n' +
+  'this.repointFromExplanation=repointFromExplanation;this.dedupeOptions=dedupeOptions;this.repointFromWhyWrong=repointFromWhyWrong;'
+).call(ctx);
 const repoint = ctx.repointFromExplanation;
+const dedupe = ctx.dedupeOptions;
+const whyWrong = ctx.repointFromWhyWrong;
 
 let pass = 0, fail = 0;
 const check = (desc, q, expected) => {
@@ -100,6 +107,73 @@ check('fraction: explanation 1/2 → option C', {
   answer: '$\\frac{1}{4}$',
   explanation: 'Half the cake remains, so the fraction is $\\frac{1}{2}$.'
 }, 2);
+
+// ── Time answers: 8:00/8:10/8:15 must stay distinct (was: all collapsed to "8") ─
+check('time: leaves 7:30 + 45min → 8:15 is C, key was B (8:10)', {
+  type: 'multiple_choice',
+  options: ['7:45 am', '8:10 am', '8:15 am', '8:20 am'],
+  answerIndex: 1,                       // mis-keyed to B (8:10)
+  answer: '8:10 am',
+  explanation: 'Start time is $7:30$ am. Add 30 minutes to reach $8:00$ am. There are 15 minutes left ($45-30=15$). Add the remaining 15 minutes to $8:00$ am. Whaea Mere arrives at $8:15$ am.'
+}, 2);
+
+check('time: correctly keyed 8:15 stays put', {
+  type: 'multiple_choice',
+  options: ['7:45 am', '8:10 am', '8:15 am', '8:20 am'],
+  answerIndex: 2,
+  answer: '8:15 am',
+  explanation: 'Whaea Mere arrives at $8:15$ am.'
+}, 2);
+
+// ── Mixed numbers: 3/4 × 2½ = 15/8 = 1⅞ is A, key wrongly on B (2¼) ────────────
+check('mixed number: 15/8 = 1 7/8 is A, key was B', {
+  type: 'multiple_choice',
+  options: ['$1\\frac{7}{8}$ cups', '$2\\frac{1}{4}$ cups', '$1\\frac{1}{2}$ cups', '$2\\frac{1}{2}$ cups'],
+  answerIndex: 1,                       // mis-keyed to B
+  answer: '$2\\frac{1}{4}$ cups',
+  explanation: 'Convert mixed numbers to improper fractions: $2\\frac{1}{2} = \\frac{5}{2}$. Multiply the fractions: $\\frac{3}{4} \\times \\frac{5}{2} = \\frac{15}{8}$. Convert back to a mixed number: $\\frac{15}{8} = 1\\frac{7}{8}$.'
+}, 0);
+
+// ── Duplicate options: two identical "3/8" collapse; key follows survivor ──────
+{
+  const d = dedupe({
+    type: 'multiple_choice',
+    options: ['$\\frac{3}{8}$', '$\\frac{2}{8}$', '$\\frac{3}{5}$', '$\\frac{3}{8}$'],
+    answerIndex: 3,                     // keyed to the DUPLICATE copy
+    answer: '$\\frac{3}{8}$',
+    whyWrong: ['', 'too few', 'wrong denom', '']
+  });
+  const ok = d.options.length === 3 && d.answerIndex === 0 && d.whyWrong.length === 3;
+  if (ok) { pass++; } else { fail++; console.log(`  ✗ duplicate options collapse\n      got options=${JSON.stringify(d.options)} answerIndex=${d.answerIndex}`); }
+}
+// Non-duplicate options must be left untouched (identity)
+{
+  const d = dedupe({ type: 'multiple_choice', options: ['1', '2', '3', '4'], answerIndex: 2 });
+  if (d.options.length === 4 && d.answerIndex === 2) { pass++; }
+  else { fail++; console.log('  ✗ non-duplicate options changed'); }
+}
+
+// ── whyWrong ↔ key consistency: keyed option has a "why wrong" reason (contradiction)
+//    and exactly one option is blank → repoint to the blank (model's real "correct") ──
+{
+  const q = whyWrong({ type: 'multiple_choice', options: ['A', 'B', 'C', 'D'], answerIndex: 1, whyWrong: ['', 'off by one', 'forgot to carry', 'used wrong op'] });
+  if (q.answerIndex === 0) pass++; else { fail++; console.log('  ✗ whyWrong repoints to the blank option, got ' + q.answerIndex); }
+}
+// Safety: a cleanly-keyed question (correct option blank) must NOT change.
+{
+  const q = whyWrong({ type: 'multiple_choice', options: ['A', 'B', 'C', 'D'], answerIndex: 2, whyWrong: ['wrong', 'wrong', '', 'wrong'] });
+  if (q.answerIndex === 2) pass++; else { fail++; console.log('  ✗ whyWrong changed a clean key, got ' + q.answerIndex); }
+}
+// Safety: two blanks (convention not followed) → no-op.
+{
+  const q = whyWrong({ type: 'multiple_choice', options: ['A', 'B', 'C', 'D'], answerIndex: 1, whyWrong: ['', '', 'wrong', 'wrong'] });
+  if (q.answerIndex === 1) pass++; else { fail++; console.log('  ✗ whyWrong acted on ambiguous blanks, got ' + q.answerIndex); }
+}
+// Safety: no whyWrong / mismatched length → no-op.
+{
+  const q = whyWrong({ type: 'multiple_choice', options: ['A', 'B', 'C', 'D'], answerIndex: 1, whyWrong: ['only one'] });
+  if (q.answerIndex === 1) pass++; else { fail++; console.log('  ✗ whyWrong acted on mismatched-length array'); }
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

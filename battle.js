@@ -274,6 +274,15 @@
       setBusy(true); await trainerCandyMove(pid(), -5);
       resolveRound({ kind: 'potion' });
     }
+    // A bench-Pokémon button (switch / choose-next) showing its SPRITE + name + HP/types.
+    function monBtn(c, onClick) {
+      var img = pokeImg(c.dexId, c.shiny, 32);
+      try { img.style.flex = '0 0 auto'; } catch (e) {}
+      return el('button', { class: 'btn bt-move', onclick: onClick, style: 'align-items:center' },
+        img,
+        el('span', { class: 'mvname' }, c.name + ' Lv' + c.level),
+        el('span', { class: 'mvsub' }, '❤️' + Math.round(c.hp) + '/' + c.maxhp + ' · ' + c.types.join('/')));
+    }
     function openSwitch() {
       if (busy || over) return;
       if (switchesLeft <= 0) return toast('No switches left this battle!');
@@ -281,11 +290,7 @@
       if (!bench.length) return toast('No one else to switch to!');
       actions.innerHTML = '';
       actions.append(el('div', { class: 'small muted', style: 'grid-column:1/-1;text-align:center' }, 'Switching uses your turn — the foe gets a free move.'));
-      bench.forEach(function (k) {
-        var c = myTeam[k];
-        actions.append(el('button', { class: 'btn bt-move', onclick: function () { chooseSwitch(k); } },
-          el('span', { class: 'mvname' }, c.name + ' Lv' + c.level), el('span', { class: 'mvsub' }, '❤️' + Math.round(c.hp) + '/' + c.maxhp + ' · ' + c.types.join('/'))));
-      });
+      bench.forEach(function (k) { actions.append(monBtn(myTeam[k], function () { chooseSwitch(k); })); });
       actions.append(el('button', { class: 'btn ghost', onclick: renderActions }, '↩ Cancel'));
     }
     function chooseSwitch(idx) { if (busy || over) return; setBusy(true); resolveRound({ kind: 'switch', idx: idx }); }
@@ -293,11 +298,7 @@
       return new Promise(function (resolve) {
         actions.innerHTML = '';
         actions.append(el('div', { class: 'small muted', style: 'grid-column:1/-1;text-align:center' }, 'Choose your next Pokémon!'));
-        alive.forEach(function (k) {
-          var c = myTeam[k];
-          actions.append(el('button', { class: 'btn bt-move', onclick: function () { resolve(k); } },
-            el('span', { class: 'mvname' }, c.name + ' Lv' + c.level), el('span', { class: 'mvsub' }, '❤️' + Math.round(c.hp) + '/' + c.maxhp + ' · ' + c.types.join('/'))));
-        });
+        alive.forEach(function (k) { actions.append(monBtn(myTeam[k], function () { resolve(k); })); });
         [].forEach.call(actions.querySelectorAll('button'), function (x) { x.disabled = false; });
       });
     }
@@ -409,7 +410,9 @@
       var rewardEls = [];
       if (outcome === 'win') {
         var xp = 0, candy = 0; foeTeam.forEach(function (f) { xp += 5 + f.tier * 3 + f.level; candy += 2 + f.tier; });
-        var t = await trainerGet(); t.xp = (t.xp || 0) + xp; t.candy = (t.candy || 0) + candy;
+        // Candy goes through the monotonic ledger (candyEarned) so it survives Drive's MAX-merge;
+        // t.candy is derived (earned − spent). XP is stored directly (already monotonic).
+        var t = await trainerGet(); t.xp = (t.xp || 0) + xp; t.candyEarned = (t.candyEarned || 0) + candy; t.candy = Math.max(0, (t.candyEarned || 0) - (t.candySpent || 0));
         var caught = Math.random() < 0.35, dbl = Math.random() < 0.20, cf = foeTeam[Math.floor(Math.random() * foeTeam.length)];
         if (dbl) t.dblPack = true; t.updatedAt = Date.now(); await dbPut('trainer', t);
         if (caught) await cardAward({ dexId: cf.dexId, tier: cf.tier, shiny: cf.shiny });
