@@ -728,7 +728,14 @@ function parseQuestions(raw){
       acceptedAnswers:Array.isArray(q.acceptedAnswers)?q.acceptedAnswers.map(String):(Array.isArray(q.accepted)?q.accepted.map(String):[]),
       explanation:q.explanation||q.solution||q.working||q.reason||'',marks:Number(q.marks||q.mark||q.points)||1,
       hint:(q.hint!=null?String(q.hint):''),whyWrong:Array.isArray(q.whyWrong)?q.whyWrong.map(x=>x==null?'':String(x)):[],
-      svg:sanitizeSvg(svgRaw),image:safeImage(q.image)};return fixQuestion(o);});
+      svg:sanitizeSvg(svgRaw),image:safeImage(q.image),
+      // Keep the STRUCTURED figure spec so verifyQuestions can hand it to the
+      // checker as `figure` and solve chart/table/pictograph reads against the
+      // ACTUAL values (v2.29 — without this the figure-aware verify never saw a
+      // figure, so mismatches like "April − March" pictographs slipped through).
+      // In-memory only: the bank/attempt/review spreads whitelist fields and don't
+      // persist it, so blast radius is nil (the rendered `svg` is what's stored).
+      diagram:(dgm&&typeof dgm==='object')?dgm:undefined};return fixQuestion(o);});
 }
 // Mis-key backstop: trust the worked explanation's CONCLUDED value over a
 // possibly wrong answer key. Models sometimes set BOTH "answer" and
@@ -2681,7 +2688,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.28';
+const APP_VERSION='v2.29';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
