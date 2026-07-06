@@ -779,11 +779,25 @@ function repointFromExplanation(q){
   const optNums=q.options.map(o=>{const t=plValTokens(o).tokens;return t.length?t[0].val:null;});
   if(!optNums.some(n=>n!=null))return q; // non-numeric options — leave to the answer-text guard
   const {clean:plain,tokens:toks}=plValTokens(q.explanation);
+  const optHits=val=>{const h=[];optNums.forEach((n,idx)=>{if(n!=null&&Math.abs(n-val)<1e-6)h.push(idx);});return h;};
+  // Distractor/negation mention right before a number ("a common mistake is 180", "not 6").
+  const distractor=at=>/(not|n't|rather than|instead of|exclud|rule[ds]? out|mistake|error|wrong|incorrect|avoid|trap)/.test(plain.slice(Math.max(0,at-24),at).toLowerCase());
+  // COUNTING questions ("how many …") conclude with a COUNT that is usually FOLLOWED
+  // by an enumeration of the counted items (themselves numbers) and/or a descriptor —
+  // e.g. "…3 possible 4-digit codes: 1374, 2370, 2376." A plain scan-from-end then
+  // grabs a listed code or the "4" of "4-digit" instead of the count "3". So first
+  // trust the LAST non-distractor concluding-count phrase that uniquely maps to one option.
+  if(/how many|how much/i.test(q.question||'')){
+    const cre=/(?:there (?:are|were|is|was)|total(?:\s+of)?|answer(?:\s+is)?|=)\s*\**\s*(-?\d+(?:\.\d+)?)\b|(-?\d+(?:\.\d+)?)\s+(?:possible|different|distinct|unique|valid|ways|combinations|arrangements|solutions|values|numbers|codes|of them)\b/gi;
+    let cm,last=null;
+    while((cm=cre.exec(plain))){if(distractor(cm.index))continue;last=+((cm[1]!=null)?cm[1]:cm[2]);}
+    if(last!=null&&isFinite(last)){const h=optHits(last);if(h.length===1){if(h[0]!==q.answerIndex)q.answerIndex=h[0];return q;}}
+  }
   for(let k=toks.length-1;k>=0;k--){
-    const val=toks[k].val;
-    const pre=plain.slice(Math.max(0,toks[k].index-24),toks[k].index).toLowerCase();
-    if(/(not|n't|rather than|instead of|exclud|rule[ds]? out|mistake|error|wrong|incorrect|avoid|trap)/.test(pre))continue;
-    const hits=[];optNums.forEach((n,idx)=>{if(n!=null&&Math.abs(n-val)<1e-6)hits.push(idx);});
+    const end=toks[k].index+toks[k].text.length;
+    if(/^-\s*digits?\b/i.test(plain.slice(end,end+8)))continue; // "4-digit(s)" is a descriptor, not a result
+    if(distractor(toks[k].index))continue;
+    const hits=optHits(toks[k].val);
     if(hits.length===1){if(hits[0]!==q.answerIndex)q.answerIndex=hits[0];return q;}
     if(hits.indexOf(q.answerIndex)>=0)return q; // explanation's last value agrees with the key — stop
   }
@@ -2688,7 +2702,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.29';
+const APP_VERSION='v2.30';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

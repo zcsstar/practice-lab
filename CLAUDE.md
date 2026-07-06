@@ -148,7 +148,14 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   from the END and re-points the key to the option that UNIQUELY matches the last
   concluding value — skipping distractor mentions ("a common mistake is 180",
   "not 6") and no-op'ing when the key already agrees (so correct questions are
-  never touched; non-numeric/non-MC are left to guard 2). Value parsing goes
+  never touched; non-numeric/non-MC are left to guard 2). **Counting-aware
+  (v2.30):** for "how many…" questions the concluded COUNT is usually FOLLOWED by an
+  enumeration of the counted items (themselves numbers) and/or a descriptor
+  ("…3 possible **4-digit** codes: 1374, 2370, 2376"), so the plain scan-from-end
+  grabbed a listed code / the "4" of "4-digit" and confirmed the wrong key. Fix:
+  a counting-conclusion detector (`there are N` / `N possible|ways|codes|…`) runs
+  FIRST and wins when it uniquely maps to an option, and the general scan now skips
+  hyphenated `N-digit(s)` descriptors. Value parsing goes
   through `plValTokens` (v2.26), which reads **times** ("8:15 am" → 495 min so
   8:00/8:10/8:15 stay distinct instead of collapsing to the hour "8"), **mixed
   numbers** ("1 7/8" → 1.875, incl. `\frac`), fractions and decimals — earlier
@@ -463,7 +470,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.28**). Claude suggests the next number on
+  minor on each release (currently at **v2.30**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

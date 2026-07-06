@@ -4,17 +4,39 @@ const fs = require('fs');
 const src = fs.readFileSync('index.html', 'utf8');
 
 // Pull a `function NAME(...) {...}` body out of the source by brace-matching.
+// Regex-aware: skips string/template literals, // and /* */ comments, and REGEX
+// literals (incl. their [char classes] and {quantifiers}) so braces/quotes inside
+// them don't throw off the depth count.
 function extract(name) {
   const start = src.indexOf('function ' + name + '(');
   if (start < 0) throw new Error('not found: ' + name);
-  let i = src.indexOf('{', start), depth = 0, inStr = false, q = '', esc = false;
+  let i = src.indexOf('{', start), depth = 0, inStr = false, q = '', esc = false, prev = '';
+  const REGEX_CTX = /[([{,;:=!&|?+\-*%~^<>]/; // a `/` here starts a regex, not division
   for (; i < src.length; i++) {
     const c = src[i];
-    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === q) inStr = false; }
-    else if (c === '"' || c === "'" || c === '`') { inStr = true; q = c; }
-    else if (c === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; }
-    else if (c === '{') depth++;
+    if (inStr) {
+      if (esc) esc = false; else if (c === '\\') esc = true; else if (c === q) inStr = false;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') { inStr = true; q = c; prev = c; continue; }
+    if (c === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
+    if (c === '/' && src[i + 1] === '*') { i += 2; while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++; i++; prev = '/'; continue; }
+    if (c === '/' && REGEX_CTX.test(prev || '(')) {
+      let cls = false, re = false;                 // skip a regex literal to its closing '/'
+      for (i++; i < src.length; i++) {
+        const d = src[i];
+        if (re) { re = false; continue; }
+        if (d === '\\') { re = true; }
+        else if (d === '[') cls = true;
+        else if (d === ']') cls = false;
+        else if (d === '/' && !cls) break;
+      }
+      while (i + 1 < src.length && /[a-z]/i.test(src[i + 1])) i++; // flags
+      prev = '/'; continue;
+    }
+    if (c === '{') depth++;
     else if (c === '}') { depth--; if (depth === 0) { i++; break; } }
+    if (!/\s/.test(c)) prev = c;
   }
   return src.slice(start, i);
 }
@@ -56,6 +78,49 @@ check('Q4 divisors of 36: 9 is D, key was B', {
   answer: '6',
   explanation: 'List all pairs of positive integer factors of 36: (1, 36), (2, 18), (3, 12), (4, 9), (6, 6), (9, 4), (12, 3), (18, 2), (36, 1). Count the unique values for A: These are 1, 2, 3, 4, 6, 9, 12, 18, 36. There are 9 different possible values for A.'
 }, 3);
+
+// ── Counting questions ("how many …"): the concluded COUNT is followed by an
+//    enumeration of the counted items and a "N-digit" descriptor, so a naive
+//    scan-from-end grabs a listed code / the "4" of "4-digit" instead of the
+//    count. (Reported: the ?37? lock-code question.) ──────────────────────────
+check('lock code "how many": concludes 3 codes, key wrongly D (4)', {
+  type: 'multiple_choice',
+  question: 'A code for a lock is a 4-digit number shown as ?37?. Less than 5000, even, divisible by 3, made of 4 different digits. How many possible 4-digit codes are there?',
+  options: ['1', '2', '3', '4'],
+  answerIndex: 3,                       // mis-keyed to D (4)
+  answer: '4',
+  explanation: 'The code is ?37?, so A37B. Less than 5000: A can be 1, 2, 3, 4. Even: B is 0, 2, 4, 6, 8. 4 different digits: 3 and 7 are used, so A is 1, 2 or 4. Divisible by 3: A + 3 + 7 + B = A + B + 10. There are 3 possible 4-digit codes: 1374, 2370, 2376.'
+}, 2);
+
+// Safety: the same counting question correctly keyed to C (3) must not move.
+check('lock code correctly keyed C (3) stays put', {
+  type: 'multiple_choice',
+  question: 'How many possible 4-digit codes are there?',
+  options: ['1', '2', '3', '4'],
+  answerIndex: 2,
+  answer: '3',
+  explanation: 'There are 3 possible 4-digit codes: 1374, 2370, 2376.'
+}, 2);
+
+// Safety: a distractor count inside a counting explanation is ignored.
+check('counting: distractor "a common mistake is 4" ignored, concludes 3', {
+  type: 'multiple_choice',
+  question: 'How many valid numbers are there?',
+  options: ['2', '3', '4', '5'],
+  answerIndex: 2,                       // mis-keyed to 4
+  answer: '4',
+  explanation: 'Checking each case, there are 3 valid numbers. A common mistake is 4 numbers.'
+}, 1);
+
+// Non-counting: a trailing "4-digit" descriptor must not be read as the result.
+check('non-counting: trailing "4-digit" descriptor skipped, concludes 8', {
+  type: 'multiple_choice',
+  question: 'Which number works?',
+  options: ['4', '8', '12', '16'],
+  answerIndex: 0,                       // mis-keyed to 4
+  answer: '4',
+  explanation: 'Testing values, only 8 works. Remember the code is a 4-digit number.'
+}, 1);
 
 // ── Safety: a correctly-keyed question must NOT be changed ────────────────────
 check('correct key stays put (200 already C)', {
