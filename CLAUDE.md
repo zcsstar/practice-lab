@@ -31,8 +31,9 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   learning toggles `verify` (double-check answers, default on), `autoDifficulty`
   (auto-apply adaptive level vs suggest, default off) and `aiGrade` (AI-mark
   written answers, default off). Also holds the sync deletion bookkeeping
-  `packsDeleted`/`refsDeleted` (tombstones) and `cleared` (`"store:profileId"→ts`
-  for Clear-bank/Clear-history) — see Drive sync.
+  `packsDeleted`/`refsDeleted` (tombstones), `cleared` (`"store:profileId"→ts`
+  for Clear-bank/Clear-history) and `blocked` (`"profileId|qhash"→ts` for the
+  "remove this question everywhere" block-list) — see Drive sync.
 - **IndexedDB** (`practicelab`, v3), four stores:
   - `attempts` — every completed practice (full question + result snapshot)
   - `review` — wrong/unsure questions for spaced revision (`mastered` after 2
@@ -130,7 +131,17 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   for variety, and `buildPrompt` likewise tells the generator to spread widely
   (≤~2 per topic) across the exam's topic list. **Attached past papers or per-session notes always force a
   fresh generation and are NOT banked.** Daily call count lives in `localStorage`
-  `practicelab.usage`; `freeDailyLimit()` is 20 for Gemini. `viewBank()` is the
+  `practicelab.usage`; `freeDailyLimit()` is 20 for Gemini.
+  - **Unseen-first + Auto-fresh variety (v2.31)** — fixes "the questions are almost
+    all ones I've done before". `bankTake(s,count,{allowSeen,exclude})` now serves
+    **UNSEEN** questions (`servedCount===0`) FIRST and only dips into already-seen ones
+    when `allowSeen` (fallback). `buildPracticeSet` is **Auto**: (1) fill from unseen
+    bank (0 calls); (2) if short AND under the daily free limit, **generate fresh** —
+    passing `recentStems(s)` as an `avoid` list so `buildPrompt` makes GENUINELY
+    different questions (new scenarios/numbers, same style) — and bank the surplus (not
+    the just-served ones); (3) only if still short (limit hit / offline) rotate in
+    already-seen bank items; (4) never show a blank practice. A final `qhash` de-dupe
+    guarantees no repeat within one practice. `viewBank()` is the
   hub (usage meter, per-setup counts, manual pre-generate, clear). Bank flows
   through export/import and Drive merge like the other stores.
 - **Marking** — `gradeAnswer()`: MC by index; numeric by tolerant numeric match; plus a
@@ -175,6 +186,30 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   **"✓ My answer was actually right"** on wrong items (and "Mark as wrong" on
   correct) → `regrade()` recomputes the score and removes the matching mistakes-
   notebook entry. So a bad key is always correctable by the parent/student.
+- **Broken-question detection (v2.31)** — the reported failure: a question with NO
+  correct option got served AND marked wrong, its explanation rambling "I got it wrong
+  and the correct answer should be…". `questionBroken(q)` catches this **deterministically
+  (no API call)**: `explanationSelfCorrects(expl)` (tight regex for self-correction /
+  think-aloud / "none of the options" admissions — the same phrases the prompt forbids)
+  OR `mcConcludesOffList(q)` (an all-numeric MC whose explanation, at an explicit
+  conclusion cue, reaches a value matching NONE of the options; conservatively gated so an
+  incidental trailing number can't false-positive a sound question). It runs **before
+  display** (`buildPracticeSet`'s `clean()` drops broken+blocked and backfills; `bankAdd`
+  skips them; `startReview` filters them) AND **before marking** (`submitSession`
+  downgrades a broken item to self-check — never WRONG — flags it for the parent via
+  `logFlag`, and keeps it out of the notebook). The verifier also now receives a trimmed
+  `explanation` and is told to "drop" a self-contradictory/uncertain one. Tested in
+  [accuracy.test.js](accuracy.test.js).
+- **Remove a question everywhere (v2.31)** — the fix for "a bad question (wrong image /
+  no correct answer) keeps coming back even after clearing the bank" (it also lived in the
+  notebook or re-synced from another device). A **🗑 Remove** control on the runner
+  (⚠️ Report a problem), results and mistakes notebook calls `removeQuestionEverywhere(q)`:
+  it deletes the active student's `bank` + `review` copies by `qhash` and adds a
+  `CFG.blocked["profileId|qhash"]` tombstone. `isBlockedHash`/`isBlockedQ`/`blockQuestion`
+  gate every serve path (`bankTake`/`bankAdd`, generated sets, `startReview`,
+  `startPaper`) so it never returns — and the flat tombstone map syncs like `packsDeleted`
+  (max-wins in `mergeRemote`, which also drops any now-blocked bank/review item), so a
+  Drive merge can't resurrect it.
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
   Bank/Dashboard/Skills/Guide`. `show(node)` swaps `#app` and re-runs KaTeX. No router;
   functions call each other. `viewBank` = question-bank hub; `viewDashboard` =
@@ -197,6 +232,16 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `submitSession` only FILES items; the wrapper does the mastery/SR update — don't
   duplicate that increment (it caused a double-count bug, fixed with a `S.committed`
   re-entry guard).
+  - **Understand-it-better (v2.31)** — for questions a kid doesn't get even with the
+    explanation. Each notebook item AND each wrong/self-check result carries a
+    `learnActions(q,ctx,base,save,onRemove)` row: **🧒 Explain it simpler** →
+    `explainSimpler(q,ctx,host,save)` makes ONE AI call for a very-simple, age-matched,
+    analogy-friendly re-explanation, renders it via `fmtExplain`, and **caches** it on the
+    item (`simpleExplanation`, persisted to `review`/the attempt) so re-opening is free;
+    **🔁 Practise similar** → `practiceLikeQuestion(q,base)` builds a fresh 6-question
+    drill grounded on THAT specific question via a new `buildPrompt` **`exemplar`** field
+    ("same skill, new numbers/context") — treated as `wantsFresh` (never banked). Small
+    text calls go through the `callAI(prompt,maxTokens,temp)` provider-dispatch helper.
 - **Progress & stats** (`viewHistory`, home "📈 Progress & stats") — analytics
   dashboard: at-a-glance tiles (questions/accuracy/time/streak), a score-trend
   line and per-day activity bars (`chartLine`/`chartBars` — tiny inline-SVG
@@ -216,7 +261,10 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     actual figure values and drops ones where the figure supports no option.
     **It reports its INDEPENDENT solve (v2.28):** `solvedIndex` (MC) / `solved` (numeric); if
     that disagrees with the key even on a "ok" verdict, the item is DROPPED (a mislabelled
-    verdict can't slip a wrong answer through) — a `fix` still repoints. The verify + AI-grade
+    verdict can't slip a wrong answer through) — a `fix` still repoints. **It now sees the
+    `explanation` (v2.31):** a trimmed copy is sent so the checker can "drop" a question whose
+    own working is self-contradictory/uncertain or concludes a value not among the options
+    (belt-and-braces with the deterministic `questionBroken` guard). The verify + AI-grade
     calls run at **temperature 0.2** and generation at **0.5** (fewer arithmetic/keying slips).
     Best-effort — any failure returns the originals. Settings → AI toggle.
   - **AI-marked written answers** (`CFG.aiGrade`, default off): `aiGradeFreeText(s,results)`
@@ -470,7 +518,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.30**). Claude suggests the next number on
+  minor on each release (currently at **v2.31**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach
@@ -488,6 +536,9 @@ locally. It runs by double-clicking `index.html` or hosting it statically
    valid safe SVG; pie/array/clock geometry; aliases; bad specs → '' fallback).
    **Economy ledger:** `node economy.test.js` (extracts `normCard`/`normTrainer`/
    `mergeCardRec`/`mergeTrainerVals`; verifies spends survive the additive MAX-merge).
+   **Broken-question detection:** `node accuracy.test.js` (extracts
+   `explanationSelfCorrects`/`mcConcludesOffList`/`questionBroken`; verifies the "no
+   correct answer / self-correcting explanation" catch fires and never flags a sound one).
 2. **Run it:** `python -m http.server 8744` in this dir, open
    `http://localhost:8744/index.html`.
 3. **JS syntax check** without a browser:

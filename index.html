@@ -447,7 +447,8 @@ const DEFAULT_CFG={
   examContext:{},  // saved per-exam extra context text, keyed by exam id
   packsDeleted:{}, // tombstones {packId: deletedAt} so a deleted pack stays deleted across Drive syncs
   refsDeleted:{},  // tombstones {refId: deletedAt} so a deleted reference paper stays deleted across Drive syncs
-  cleared:{}       // {"store:profileId": clearedAt} so Clear-bank / Clear-history stick across Drive syncs (drops items older than the stamp)
+  cleared:{},      // {"store:profileId": clearedAt} so Clear-bank / Clear-history stick across Drive syncs (drops items older than the stamp)
+  blocked:{}       // tombstones {"profileId|qhash": ts} for a "remove this question everywhere" — filtered out of the bank, generation, notebook re-tests and packs so a bad question never comes back for that student (synced like the others)
 };
 // Non-secret, device-independent settings that sync across devices via Drive
 // (newest edit wins). Excludes the API key (use KEYVAULT) and device-specific
@@ -467,6 +468,7 @@ function loadCfg(){
   c.packsDeleted=raw.packsDeleted||{};
   c.refsDeleted=raw.refsDeleted||{};
   c.cleared=raw.cleared||{};
+  c.blocked=raw.blocked||{};
   // migrate old single studentName
   if(!c.profiles.length){const nm=raw.studentName||'';c.profiles=[{id:uid(),name:nm||'Student'}];c.activeProfileId=c.profiles[0].id;}
   if(!c.activeProfileId||!c.profiles.find(p=>p.id===c.activeProfileId))c.activeProfileId=c.profiles[0].id;
@@ -498,12 +500,32 @@ function normQ(s){return String(s||'').toLowerCase().replace(/\$/g,' ').replace(
 function qhash(s){const t=normQ(s);let h=2166136261>>>0;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return 'h'+(h>>>0).toString(36);}
 function bankKey(s){return [s.country,s.subject,s.exam,s.level,s.difficulty,s.style].map(x=>String(x==null?'':x).toLowerCase().trim()).join('|');}
 function reindex(arr){return arr.map((q,i)=>({...q,id:'q'+i}));}
+/* ---------- "remove this question everywhere" block-list ----------
+   A parent/student can flag a broken question (wrong image, no correct option, …).
+   We tombstone it by (profile, question-hash) so it's dropped from the bank, from
+   fresh generations, from mistakes-notebook re-tests and from past-paper packs —
+   and, because the map is a flat {"profileId|qhash":ts} synced like packsDeleted,
+   it stays gone across devices and can't be resurrected by a Drive merge. */
+function blockId(h,p){return (p||pid())+'|'+h;}
+function isBlockedHash(h,p){return !!(CFG.blocked||{})[blockId(h,p)];}
+function isBlockedQ(qOrText,p){const t=(qOrText&&qOrText.question!=null)?qOrText.question:qOrText;return !!t&&isBlockedHash(qhash(String(t)),p);}
+function blockQuestion(qOrText){const t=(qOrText&&qOrText.question!=null)?qOrText.question:qOrText;if(!t)return;CFG.blocked=CFG.blocked||{};CFG.blocked[blockId(qhash(String(t)))]=Date.now();saveCfg();}
+// Delete a question wherever the active student's copies live (bank + notebook) AND
+// block it so it never returns. Returns how many stored copies were removed.
+async function removeQuestionEverywhere(qOrText){
+  const t=(qOrText&&qOrText.question!=null)?qOrText.question:qOrText;if(!t)return 0;
+  const h=qhash(String(t));let n=0;
+  for(const b of (await dbAll('bank')).filter(b=>b.profileId===pid()&&b.qhash===h)){await dbDel('bank',b.id);n++;}
+  for(const r of (await dbAll('review')).filter(r=>r.profileId===pid()&&qhash(String(r.question||''))===h)){await dbDel('review',r.id);n++;}
+  blockQuestion(t);scheduleDriveSync();
+  return n;
+}
 async function bankAdd(s,questions){
   const key=bankKey(s);
   const seen=new Set((await dbAll('bank')).filter(b=>b.profileId===pid()).map(b=>b.qhash));
   let added=0;
   for(const q of (questions||[])){
-    if(!q||!q.question)continue;const hsh=qhash(q.question);if(seen.has(hsh))continue;seen.add(hsh);
+    if(!q||!q.question)continue;const hsh=qhash(q.question);if(seen.has(hsh)||isBlockedHash(hsh)||questionBroken(q))continue;seen.add(hsh);
     await dbPut('bank',{id:uid(),profileId:pid(),key,createdAt:Date.now(),servedCount:0,lastServedAt:0,qhash:hsh,
       country:s.country,subject:s.subject,exam:s.exam,examLabel:s.examLabel,level:s.level,difficulty:s.difficulty,style:s.style,
       topic:q.topic,question:q.question,svg:q.svg,image:q.image,type:q.type,options:q.options,answerIndex:q.answerIndex,
@@ -521,28 +543,43 @@ async function bankPrune(key){
   pool.sort((a,b)=>((b.servedCount||0)-(a.servedCount||0))||(a.createdAt-b.createdAt)); // most-served & oldest first
   for(const b of pool.slice(0,pool.length-BANK_CAP))await dbDel('bank',b.id);
 }
-// Pull up to `count` matching questions, marking them served. Honours selected topics strictly.
-async function bankTake(s,count){
+// Pull up to `count` matching questions, marking them served. UNSEEN questions
+// (never served to this student) come first so every practice feels fresh; already-seen
+// ones are only used when `opts.allowSeen` (default true) and unseen stock runs out.
+// Honours selected topics strictly, skips blocked questions, and honours opts.exclude
+// (a Set of qhashes already chosen this call, so a fill pass can't re-serve them).
+async function bankTake(s,count,opts={}){
+  const allowSeen=opts.allowSeen!==false,exclude=opts.exclude;
   const key=bankKey(s);
-  let pool=(await dbAll('bank')).filter(b=>b.profileId===pid()&&b.key===key);
+  let pool=(await dbAll('bank')).filter(b=>b.profileId===pid()&&b.key===key&&!isBlockedHash(b.qhash));
+  if(exclude&&exclude.size)pool=pool.filter(b=>!exclude.has(b.qhash));
   const topics=(s.topics||[]).map(t=>String(t).toLowerCase());
+  if(topics.length)pool=pool.filter(b=>topics.includes(String(b.topic||'').toLowerCase()));
   const servedSort=(a,b)=>((a.servedCount||0)-(b.servedCount||0))||((a.lastServedAt||0)-(b.lastServedAt||0))||(a.createdAt-b.createdAt);
-  let chosen;
-  if(topics.length){
-    // specific topics requested → serve only those, least-served first.
-    pool=pool.filter(b=>topics.includes(String(b.topic||'').toLowerCase()));
-    pool.sort(servedSort);chosen=pool.slice(0,count);
-  }else{
-    // no topics chosen → round-robin across distinct topics for VARIETY, starting
-    // with the least-practised topics so coverage spreads over time.
-    const byTopic={};for(const b of pool){(byTopic[b.topic||'General']=byTopic[b.topic||'General']||[]).push(b);}
+  // Order a set: least-served first; when NO topics were chosen, round-robin across
+  // distinct topics (least-practised topic first) for variety.
+  const order=arr=>{
+    if(topics.length)return arr.slice().sort(servedSort);
+    const byTopic={};for(const b of arr){(byTopic[b.topic||'General']=byTopic[b.topic||'General']||[]).push(b);}
     const names=Object.keys(byTopic);for(const t of names)byTopic[t].sort(servedSort);
-    names.sort((a,b)=>((byTopic[a][0].servedCount||0)-(byTopic[b][0].servedCount||0)));
-    chosen=[];let progressed=true;
-    while(chosen.length<count&&progressed){progressed=false;for(const t of names){const arr=byTopic[t];if(arr.length){chosen.push(arr.shift());progressed=true;if(chosen.length>=count)break;}}}
-  }
+    names.sort((a,b)=>((byTopic[a][0].servedCount||0)-(byTopic[b][0].servedCount||0))||((byTopic[a][0].lastServedAt||0)-(byTopic[b][0].lastServedAt||0)));
+    const out=[];let progressed=true;
+    while(progressed){progressed=false;for(const t of names){const a=byTopic[t];if(a.length){out.push(a.shift());progressed=true;}}}
+    return out;
+  };
+  let chosen=order(pool.filter(b=>!(b.servedCount>0))).slice(0,count); // unseen first
+  if(allowSeen&&chosen.length<count)chosen=chosen.concat(order(pool.filter(b=>b.servedCount>0)).slice(0,count-chosen.length));
   for(const b of chosen){b.servedCount=(b.servedCount||0)+1;b.lastServedAt=Date.now();await dbPut('bank',b);}
   return chosen.map(b=>({topic:b.topic,type:b.type,question:b.question,svg:b.svg,image:b.image,options:b.options,answerIndex:b.answerIndex,answer:b.answer,acceptedAnswers:b.acceptedAnswers,explanation:b.explanation,marks:b.marks,hint:b.hint,whyWrong:b.whyWrong,fromBank:true}));
+}
+// Recent question stems the active student has already seen for this setup — fed to
+// the generator as an "avoid" list so fresh questions use NEW scenarios/numbers.
+async function recentStems(s,limit){
+  const key=bankKey(s),out=[],seen=new Set();
+  const push=t=>{t=plainMath(String(t||'')).replace(/\s+/g,' ').trim();if(!t)return;const h=qhash(t);if(seen.has(h))return;seen.add(h);out.push(t.slice(0,120));};
+  (await dbAll('bank')).filter(b=>b.profileId===pid()&&b.key===key&&b.servedCount>0).sort((a,b)=>(b.lastServedAt||0)-(a.lastServedAt||0)).forEach(b=>push(b.question));
+  (await dbAll('attempts')).filter(a=>a.profileId===pid()&&a.subject===s.subject&&(!s.level||a.level===s.level)).sort((a,b)=>b.startedAt-a.startedAt).slice(0,4).forEach(a=>(a.results||[]).forEach(r=>push(r.question)));
+  return out.slice(0,limit||20);
 }
 function dayISO(d){return d.toISOString().slice(0,10);}
 // Consecutive-day streak ending today or yesterday, from a list of YYYY-MM-DD strings.
@@ -608,6 +645,8 @@ TOPICS TO COVER: ${topics}
 DIFFICULTY: ${s.difficulty} (1=gentle warm-up … 5=competition-hard)
 FORMAT: ${styleLine}`;
   if(s.context&&s.context.trim())p+=`\n\nADDITIONAL CONTEXT FROM PARENT (follow closely):\n${s.context.trim()}`;
+  if(s.exemplar&&String(s.exemplar).trim())p+=`\n\nPRACTISE-LIKE-THIS EXAMPLE — the student needs more practice with the SKILL below. Create ${s.count} NEW questions that test the SAME underlying concept/skill at a SIMILAR difficulty and in the same style, but with DIFFERENT numbers, names, contexts and wording. Do NOT copy or lightly reword it. Vary the scenario each time.\n"""\n${String(s.exemplar).slice(0,1500)}\n"""`;
+  if(Array.isArray(s.avoid)&&s.avoid.length)p+=`\n\nALREADY-SEEN QUESTIONS — the student has recently practised the ones below. Do NOT repeat or lightly reword them; make GENUINELY DIFFERENT questions (new scenarios, names, numbers and contexts) while keeping the same exam style and topic coverage:\n- ${s.avoid.slice(0,20).map(x=>String(x).replace(/\n/g,' ')).join('\n- ')}`;
   if(refsText&&refsText.trim())p+=`\n\nREAL PAST-PAPER REFERENCE MATERIAL — closely match the style, wording, format, topic coverage and difficulty of these genuine questions. Do NOT copy them verbatim; create fresh equivalents:\n"""\n${refsText.slice(0,12000)}\n"""`;
   else if(s.webSearch)p+=`\n\nUse your knowledge of real ${exam.label} ${s.subject} papers for ${s.country} ${s.level} to match authentic style, topics and difficulty as closely as possible.`;
   if(s.paperImages)p+=`\n\nThe attached images are pages SAMPLED FROM ACROSS A COMPLETE real past paper (beginning, middle and end). A full paper deliberately covers MANY DIFFERENT TOPICS and RAMPS from easy early questions to hard later ones. Study the whole sample, then generate a FULL, VARIED set that mirrors the paper's authentic style and format and reproduces its BREADTH: span the SAME RANGE OF TOPICS and the COMPLETE difficulty range — from the easy warm-ups through to the hardest competition-level questions. Do NOT produce only easy questions, and do NOT limit yourself to the handful of topics visible on any single sampled page. Create fresh originals; never copy a question verbatim.`;
@@ -851,6 +890,39 @@ function repairQ(q){
   if(Array.isArray(q.whyWrong))q.whyWrong=q.whyWrong.map(repairLatexStr);
   return q;
 }
+// ---- Broken-question detection (deterministic, no API call) ----
+// The generation prompt forbids "thinking out loud" / self-correction, but models
+// still occasionally emit an explanation that ADMITS the keyed answer is wrong or
+// that none of the options fit — the reported case: a question marked wrong where
+// "there wasn't a correct answer in the options" and the explanation rambled
+// "I got it wrong and the correct answer should be …". Such an item is unanswerable,
+// so we detect it and DROP it before it's shown AND before it's marked. Kept tight so
+// sound questions are never touched.
+const SELF_CORRECT_RE=/\b(i (?:made|got) (?:a|an|it|the|this)\b|i(?:'| a)?m sorry|i apologi|actually,|wait[,.]|let me (?:re|think|reconsider|recompute|recalculate|check again)|on second thought|scratch that|my mistake|correction:|the correct answer (?:should|is actually|would|must|has to) be|none of (?:the|these|them|the above|the options)|not (?:listed|shown|among|one of|an option)|isn'?t (?:an|one of the) option|no correct (?:option|answer|choice)|oops)\b/i;
+function explanationSelfCorrects(text){return SELF_CORRECT_RE.test(plainMath(String(text==null?'':text)));}
+// A multiple-choice item whose worked explanation, at an explicit CONCLUSION, arrives
+// at a numeric value that matches NONE of the options → there is no correct choice.
+// Deliberately conservative: require every option to be numeric AND the concluding
+// value to sit right after a conclusion cue ("= ", "is", "answer", "so", …), so an
+// incidental trailing number (e.g. "…divide by 4") can't false-positive a good question.
+function mcConcludesOffList(q){
+  if(!q||q.type!=='multiple_choice'||!Array.isArray(q.options)||q.options.length<2||!q.explanation)return false;
+  const optNums=q.options.map(o=>{const t=plValTokens(o).tokens;return t.length?t[0].val:null;});
+  if(optNums.some(n=>n==null))return false; // some option isn't numeric → can't judge safely
+  const {clean:plain,tokens:toks}=plValTokens(q.explanation);
+  const cue=at=>/(?:=|\bis\b|\bare\b|\bequals?\b|\bgives?\b|answer|therefore|thus|\bso\b|total|result|=)\s*[:=]?\s*[$*\s]*$/i.test(plain.slice(Math.max(0,at-20),at));
+  const distractor=at=>/(not|n't|rather than|instead of|exclud|mistake|error|wrong|incorrect|avoid|trap|common)/i.test(plain.slice(Math.max(0,at-24),at));
+  for(let k=toks.length-1;k>=0;k--){
+    const t=toks[k],end=t.index+t.text.length;
+    if(/^-\s*digits?\b/i.test(plain.slice(end,end+8)))continue; // "4-digit" descriptor
+    if(distractor(t.index))continue;
+    if(!cue(t.index))return false;            // last real value isn't presented as a conclusion → don't judge
+    return !optNums.some(n=>Math.abs(n-t.val)<1e-6);
+  }
+  return false;
+}
+// True when a question is broken/unanswerable and should be dropped or not counted.
+function questionBroken(q){return !!q&&(explanationSelfCorrects(q.explanation)||mcConcludesOffList(q));}
 // Combined per-question fixups applied at parse time AND on every serve path.
 function fixQuestion(q){return repointFromExplanation(repointFromWhyWrong(dedupeOptions(repairQ(q))));}
 // Output-token budget needed for a batch. Each question (with a short
@@ -893,7 +965,7 @@ async function verifyQuestions(s,qs){
   // the checker can solve figure-based questions (pictographs, bar/table reads,
   // number lines) against the actual figure — catching answers that don't match
   // the picture (e.g. "April − March" when both show the same count).
-  const items=qs.map((q,i)=>{const it={i,type:q.type,question:q.question,options:(q.type==='multiple_choice'?q.options:undefined),markedIndex:(q.type==='multiple_choice'?q.answerIndex:undefined),markedAnswer:q.answer};if(q.diagram&&typeof q.diagram==='object')it.figure=q.diagram;return it;});
+  const items=qs.map((q,i)=>{const it={i,type:q.type,question:q.question,options:(q.type==='multiple_choice'?q.options:undefined),markedIndex:(q.type==='multiple_choice'?q.answerIndex:undefined),markedAnswer:q.answer};if(q.explanation)it.explanation=String(q.explanation).slice(0,400);if(q.diagram&&typeof q.diagram==='object')it.figure=q.diagram;return it;});
   const vp=`You are a meticulous ${s.level||''} ${s.subject||''} exam answer-checker. For EACH question below, work out the answer YOURSELF, then judge the marked answer.
 When a question has a "figure" field, that JSON IS the exact data shown to the student (chart/table/number-line values); solve the question strictly from those values, and if they don't support any option, verdict "drop".
 ALWAYS report the answer YOU computed independently: "solvedIndex" (the 0-based option index you worked out, for multiple_choice) or "solved" (your computed value, for numeric/short) — even when the marked answer looks correct.
@@ -901,6 +973,7 @@ Return ONLY JSON (no prose, no code fences): {"checks":[{"i":<index>,"verdict":"
 - "ok": the marked answer is correct and the question has a single, unambiguous answer.
 - "fix": the question is sound but the marked answer is wrong — for multiple_choice, give the correct "correctIndex".
 - "drop": the question is broken, ambiguous, has no single correct option, has two options with the same value (duplicate choices), or the figure data doesn't match any option.
+- The "explanation" field is the original marker's own working. Verdict "drop" if it is self-contradictory or uncertain — e.g. it admits the answer is wrong, apologises, second-guesses ("wait", "actually", "let me reconsider"), says none of the options fit, or concludes a value that is NOT one of the options. A clean question has a confident explanation that matches the correct option.
 Be strict, but only flag "fix"/"drop" when you are confident.
 QUESTIONS:
 `+JSON.stringify(items);
@@ -1001,18 +1074,43 @@ async function generateMany(s,files,target,onProgress){
    (and are NOT banked, since they're specific to that request). */
 async function buildPracticeSet(s,files){
   const count=s.count||10;
-  const wantsFresh=(files&&files.length>0)||!!(s.notes&&s.notes.trim());
-  let fromBank=[];
-  if(!wantsFresh)fromBank=await bankTake(s,count);
-  if(fromBank.length>=count)return {questions:reindex(fromBank.slice(0,count)).map(fixQuestion),source:'bank',apiCalls:0};
-  const need=count-fromBank.length;
-  // One reliable call: serve `need` now, bank the modest surplus. (Big stock-ups
-  // go through generateMany via the bank hub.)
-  const batch=wantsFresh?count:Math.max(BANK_PREFILL,need);
-  const gen=await generateQuestions({...s,count:batch},files);
-  const sessionGen=gen.slice(0,need);
-  if(!wantsFresh)await bankAdd(s,gen.slice(need)); // bank only the unused surplus (avoids immediate repeats)
-  return {questions:reindex(fromBank.concat(sessionGen)).map(fixQuestion),source:fromBank.length?'mixed':(wantsFresh?'fresh':'generated'),apiCalls:1};
+  // Attached papers / per-session notes / a "practise like this" exemplar always force
+  // a fresh, non-banked generation specific to that request.
+  const wantsFresh=(files&&files.length>0)||!!(s.notes&&s.notes.trim())||!!(s.exemplar&&String(s.exemplar).trim());
+  // Drop blocked ("removed") and broken (no correct option / self-correcting explanation)
+  // questions BEFORE they can be shown or marked.
+  const clean=arr=>(arr||[]).filter(q=>q&&q.question&&!isBlockedQ(q)&&!questionBroken(q));
+  // Generate a batch, keep `want` fresh questions, and bank the rest (NOT the served
+  // ones, to avoid an immediate repeat). bankAdd re-filters broken/blocked/duplicates.
+  const genServe=async want=>{
+    const avoid=wantsFresh?null:await recentStems(s,20);
+    const batch=wantsFresh?count:Math.max(BANK_PREFILL,want);
+    const gen=await generateQuestions({...s,count:batch,...(avoid&&avoid.length?{avoid}:{})},files);
+    const fresh=clean(gen).slice(0,want);
+    if(!wantsFresh){const servedH=new Set(fresh.map(q=>qhash(q.question)));await bankAdd(s,gen.filter(q=>q&&q.question&&!servedH.has(qhash(q.question))));}
+    return fresh;
+  };
+  const finish=(served,source,apiCalls)=>{
+    const seen=new Set();served=served.filter(q=>{const h=qhash(q.question||'');if(!h||seen.has(h))return false;seen.add(h);return true;}); // no repeat within one practice
+    return {questions:reindex(served.slice(0,count)).map(fixQuestion),source,apiCalls};
+  };
+  if(wantsFresh)return finish(await genServe(count),'fresh',1);
+  // 1) UNSEEN bank questions first — keeps every practice fresh (0 API calls).
+  let served=clean(await bankTake(s,count,{allowSeen:false}));
+  let apiCalls=0,genErr=null;
+  // 2) Short on unseen? Auto: generate fresh while under the daily free limit — new
+  //    scenarios in the same style, told to avoid what the student has already seen.
+  const lim=freeDailyLimit();
+  if(served.length<count&&CFG.apiKey&&(!lim||usageToday()<lim)){
+    try{served=served.concat(await genServe(count-served.length));apiCalls=1;}
+    catch(e){genErr=e;} // limit/transient/no-key — fall back to the bank below
+  }
+  // 3) Still short (limit reached / offline / partial) → rotate in already-seen bank items.
+  if(served.length<count){const have=new Set(served.map(q=>qhash(q.question)));served=served.concat(clean(await bankTake(s,count-served.length,{allowSeen:true,exclude:have})));}
+  // 4) Truly nothing to show (empty bank + generation blocked) → force one generation
+  //    so a practice is never blank; if that also fails, surface the real error.
+  if(!served.length){if(genErr)throw genErr;served=await genServe(count);apiCalls=1;}
+  return finish(served,apiCalls?(served.some(q=>q.fromBank)?'mixed':'generated'):'bank',apiCalls);
 }
 // "Practice more like this": a focused drill on one topic, served from the bank first.
 async function practiceTopic(topic){
@@ -1045,6 +1143,68 @@ async function practiceWeakSpots(){
   show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building your weak-spot drill…'),el('div',{class:'muted small',style:'margin-top:6px'},'Focusing on: '+topics.slice(0,5).join(', '))))));
   try{const set=await buildPracticeSet(s,[]);startSession(s,set.questions,'practice');if(set.source==='bank')toast('⚡ From your saved bank — no AI used');viewRun();}
   catch(e){alert('Couldn’t build that drill:\n\n'+(e.message||e));viewHome();}
+}
+
+/* ---------- Understand-it-better: simpler explanation + practise-similar (Howard's ask) ---------- */
+// Correct answer as readable text ("C. 3/4" for MC, else the plain answer).
+function correctAnswerText(q){
+  if(q.type==='multiple_choice'&&Array.isArray(q.options)&&typeof q.answerIndex==='number')return String.fromCharCode(65+q.answerIndex)+'. '+plainMath(String(q.options[q.answerIndex]??q.answer??''));
+  return plainMath(String(q.answer||''));
+}
+// One-shot text AI call (no files) — DRYs the provider dispatch for the small helper calls.
+async function callAI(prompt,maxTokens,temp){
+  const mt=maxTokens||2048;
+  if(CFG.provider==='gemini')return await callGemini(prompt,[],mt,temp);
+  if(CFG.provider==='claude')return await callClaude(prompt,[],Math.min(8192,mt),temp);
+  return await callOpenAICompatible(prompt,[],mt,temp);
+}
+// Re-explain a question in the SIMPLEST possible way for a student who found the normal
+// explanation confusing. Renders into `host`; `save(txt)` (optional) caches it so re-opening
+// costs no AI. `ctx` supplies {level, subject} for age-appropriate wording.
+async function explainSimpler(q,ctx,host,save){
+  if(!CFG.apiKey){toast('Add an AI key in Settings to get a simpler explanation.');return;}
+  ctx=ctx||{};
+  host.innerHTML='';host.append(el('div',{class:'small muted'},'✨ Thinking of a simpler way to explain this…'));
+  const opts=(q.type==='multiple_choice'&&Array.isArray(q.options))?('\nOptions:\n'+q.options.map((o,i)=>String.fromCharCode(65+i)+'. '+plainMath(String(o))).join('\n')):'';
+  const prompt=`A ${ctx.level||''} student found the explanation for this ${ctx.subject||''} question hard to understand. Re-explain how to reach the answer in the SIMPLEST possible way for that child.
+RULES: very short sentences; everyday words a young student knows; ONE idea per step; use a concrete real-life example or picture-in-words / analogy if it helps; number the steps ("1. ", "2. "); keep any maths inside $...$ and write fractions as \\frac{a}{b}; no jargon; finish by clearly stating the answer. Keep it under ~90 words. Be warm and encouraging.
+QUESTION: ${plainMath(q.question)}${opts}
+CORRECT ANSWER: ${correctAnswerText(q)}
+ORIGINAL EXPLANATION: ${plainMath(q.explanation||'')}
+Return ONLY the new explanation (no preamble, no JSON, no code fences).`;
+  try{
+    let raw=await callAI(prompt,1200,0.3);usageBump(1);
+    let txt=String(raw||'').trim().replace(/^```[a-z]*\s*/i,'').replace(/```\s*$/,'').trim();
+    if(!txt){host.innerHTML='';host.append(el('div',{class:'small muted'},'Couldn’t simplify that one — please try again.'));return;}
+    host.innerHTML='';host.append(el('div',{class:'h'},'🧒 Simpler explanation'),el('div',{html:fmtExplain(txt)}));
+    renderMath(host);
+    if(save){try{q.simpleExplanation=txt;await save(txt);}catch(e){}}
+  }catch(e){host.innerHTML='';host.append(el('div',{class:'small muted'},'Couldn’t simplify: '+(e.message||e)));}
+}
+// "Practise similar": generate a fresh drill grounded on THIS specific question (same
+// skill/concept, new numbers & context). `base` supplies subject/level/exam/difficulty.
+async function practiceLikeQuestion(q,base){
+  base=base||defaultSettingsFor(activeProfile());
+  const examId=EXAMS[base.exam]?base.exam:'icas',exam=EXAMS[examId]||EXAMS.icas;
+  const exemplar=plainMath(q.question)
+    +((q.type==='multiple_choice'&&Array.isArray(q.options))?('\nOptions: '+q.options.map(o=>plainMath(String(o))).join(' / ')):'')
+    +'\nAnswer: '+correctAnswerText(q)+(q.explanation?('\nMethod: '+plainMath(q.explanation).slice(0,400)):'');
+  const s={country:base.country||exam.country,subject:base.subject||'Mathematics',exam:examId,level:base.level,topics:q.topic?[q.topic]:[],count:6,difficulty:base.difficulty||3,style:base.style||exam.style||'mixed',context:CFG.examContext[examId]||'',webSearch:CFG.webSearch,notes:'',exemplar,examLabel:exam.label};
+  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building similar questions…'),el('div',{class:'muted small',style:'margin-top:6px'},'6 questions like “'+plainMath(q.question).slice(0,50)+'…”')))));
+  try{const set=await buildPracticeSet(s,[]);if(!set.questions.length)throw new Error('No questions came back — please try again.');startSession(s,set.questions,'practice');viewRun();}
+  catch(e){alert('Couldn’t build similar questions:\n\n'+(e.message||e));viewHome();}
+}
+// Reusable "understand + fix" action row for a question shown on results / in the notebook:
+// Explain-it-simpler (with a render host + cache), Practise-similar, and Remove-everywhere.
+function learnActions(q,ctx,base,save,onRemove){
+  const host=el('div',{style:'margin-top:8px'});
+  if(q.simpleExplanation)host.append(el('div',{class:'explain',style:'background:#f0fdf4;border-color:#bbf7d0'},el('div',{class:'h'},'🧒 Simpler explanation'),el('div',{html:fmtExplain(q.simpleExplanation)})));
+  const simplerBtn=el('button',{class:'btn sm',type:'button',onclick:async()=>{simplerBtn.disabled=true;const box=el('div',{class:'explain',style:'background:#f0fdf4;border-color:#bbf7d0'});host.innerHTML='';host.append(box);await explainSimpler(q,ctx,box,save);simplerBtn.disabled=false;}},'🧒 Explain it simpler');
+  const row=el('div',{class:'row',style:'margin-top:10px;gap:8px;flex-wrap:wrap'},
+    simplerBtn,
+    el('button',{class:'btn sm',type:'button',onclick:()=>practiceLikeQuestion(q,base)},'🔁 Practise similar'));
+  if(onRemove)row.append(el('button',{class:'btn sm ghost',type:'button',onclick:onRemove},'🗑 Remove'));
+  return el('div',{},row,host);
 }
 
 /* ============================================================ Marking ============================================================ */
@@ -1247,11 +1407,11 @@ function startPaper(pk,timed){
   // out the + card" whose explanation contains numbers matching other options).
   // We DO collapse any accidental duplicate options (safe — it only merges exact
   // copies and re-points the key to the survivor), guarding against a bad transcription.
-  const qs=(pk.questions||[]).map((q,i)=>{
+  const qs=(pk.questions||[]).filter(q=>!isBlockedQ(q)).map((q,i)=>{ // honour "removed" questions per student
     let svg=q.svg||'';
     if(q.diagram&&typeof q.diagram==='object'&&typeof PLDiagram!=='undefined'){try{const d=PLDiagram.render(q.diagram);if(d)svg=d;}catch(e){}}
     return dedupeOptions(repairQ(Object.assign({},q,{id:'q'+i,svg:sanitizeSvg(svg),image:safeImage(q.image)})));
-  });
+  }).map((q,i)=>({...q,id:'q'+i}));
   if(!qs.length)return toast('This paper has no questions yet.');
   startSession(setup,qs,'practice');viewRun();
 }
@@ -1513,13 +1673,21 @@ async function doGenerate(){
 
 /* ----- RUN ----- */
 function viewRun(){
-  const total=S.questions.length;
   const timerEl=el('div',{class:'timer',id:'timerEl'},S.limitSec?fmtTime(S.limitSec):'0:00');
   const navWrap=el('div',{class:'nav-grid',id:'navGrid'});
   const qHost=el('div',{id:'qHost'});
   function renderNav(){navWrap.innerHTML='';S.questions.forEach((q,i)=>{const answered=S.answers[i]!=null&&S.answers[i]!==''&&S.answers[i]!==-1;navWrap.append(el('button',{class:'qchip'+(i===S.cur?' cur':'')+(answered?' answered':'')+(S.flags[i]?' flagged':''),onclick:()=>{S.cur=i;renderQ();renderNav();}},String(i+1)));});}
+  async function reportProblem(){
+    const q=S.questions[S.cur];if(!q)return;
+    if(!confirm('Remove this question?\n\nIf it looks wrong (bad picture, no correct answer) it’s taken out now and won’t come back.'))return;
+    try{await removeQuestionEverywhere(q.question);}catch(e){blockQuestion(q.question);}
+    S.questions.splice(S.cur,1);S.answers.splice(S.cur,1);S.flags.splice(S.cur,1);
+    if(!S.questions.length){toast('That was the only question — leaving practice.');return viewHome();}
+    if(S.cur>=S.questions.length)S.cur=S.questions.length-1;
+    toast('Removed — it won’t come back.');renderNav();renderQ();
+  }
   function renderQ(){
-    const i=S.cur,q=S.questions[i];qHost.innerHTML='';
+    const i=S.cur,q=S.questions[i],total=S.questions.length;qHost.innerHTML='';
     const head=el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)+' of '+total),el('span',{class:'pill'},q.topic),el('span',{class:'pill'},q.marks+' mark'+(q.marks>1?'s':'')),(S.settings&&S.settings.difficulty)?el('span',{class:'pill'},diffLabel(S.settings.difficulty)):'',(S.limitSec?el('span',{class:'pill',style:'color:var(--warn)'},'⏱ Timed exam'):'')),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak(qSpeakText(q))},'🔊'));
     const qtext=el('div',{class:'qtext',html:esc(q.question)});
     const fig=figureEl(q);
@@ -1529,8 +1697,9 @@ function viewRun(){
     const flagBtn=el('button',{class:'chip',type:'button','aria-pressed':String(S.flags[i]),onclick:()=>{S.flags[i]=!S.flags[i];flagBtn.setAttribute('aria-pressed',String(S.flags[i]));renderNav();}},'🚩 Unsure — flag for later');
     let hintBox='',hintBtn='';
     if(q.hint){hintBox=el('div',{style:'display:none;margin-top:10px;padding:10px 13px;background:#eef6ff;border:1px solid #cfe2ff;border-radius:10px;font-size:14px'},'💡 '+q.hint);hintBtn=el('button',{class:'chip',type:'button',onclick:()=>{const open=hintBox.style.display==='none';hintBox.style.display=open?'block':'none';hintBtn.textContent=open?'💡 Hide hint':'💡 Hint';if(open)renderMath(hintBox);}},'💡 Hint');}
+    const reportBtn=el('button',{class:'chip',type:'button',title:'Remove a wrong / broken question',onclick:()=>reportProblem()},'⚠️ Report a problem');
     const nav=el('div',{class:'row between',style:'margin-top:18px'},el('button',{class:'btn ghost',disabled:i===0,onclick:()=>{S.cur=Math.max(0,i-1);renderQ();renderNav();}},'← Prev'),(i===total-1)?el('button',{class:'btn primary',onclick:()=>confirmSubmit()},'Submit ✓'):el('button',{class:'btn primary',onclick:()=>{S.cur=Math.min(total-1,i+1);renderQ();renderNav();}},'Next →'));
-    qHost.append(el('div',{class:'card'},head,qtext,fig,input,hintBox,el('div',{class:'flagrow'},flagBtn,hintBtn),nav));renderMath(qHost);if(window.gsap&&!reduceMotion)gsap.from(qHost.firstElementChild,{autoAlpha:0,y:8,duration:.2,ease:'power2.out'});
+    qHost.append(el('div',{class:'card'},head,qtext,fig,input,hintBox,el('div',{class:'flagrow'},flagBtn,hintBtn,reportBtn),nav));renderMath(qHost);if(window.gsap&&!reduceMotion)gsap.from(qHost.firstElementChild,{autoAlpha:0,y:8,duration:.2,ease:'power2.out'});
   }
   show(el('div',{},
     el('div',{class:'runbar'},el('button',{class:'iconbtn',onclick:()=>{if(confirm('Leave this practice? Progress will be lost.'))viewHome();}},'✕'),el('div',{},el('div',{class:'small muted'},S.settings.examLabel+' · '+S.settings.subject),el('div',{class:'small muted'},S.settings.level)),el('div',{class:'spacer'}),el('div',{style:'text-align:right'},el('div',{class:'small muted'},S.limitSec?'Time left':'Time'),timerEl)),
@@ -1563,8 +1732,14 @@ async function difficultySuggestion(a){
 async function submitSession(){
   if(S.committed)return;S.committed=true; // re-entry guard: never double-count mastery/XP (timer + manual submit, double-tap…)
   stopTimer();S.submitted=true;S.elapsed=Math.round((Date.now()-S.startedAt)/1000);
-  const results=S.questions.map((q,i)=>{const g=gradeAnswer(q,S.answers[i]);return {q,i,userAns:S.answers[i],flagged:S.flags[i],...g};});
-  if(S.mode!=='review'){try{await aiGradeFreeText(S.settings,results);}catch(e){console.warn('aiGrade',e);}}
+  const results=S.questions.map((q,i)=>{const g=gradeAnswer(q,S.answers[i]);const r={q,i,userAns:S.answers[i],flagged:S.flags[i],...g};
+    // Safety net BEFORE marking: a broken question (no correct option / self-correcting
+    // explanation) that slipped through — e.g. from an imported pack — must never count
+    // as WRONG against the student. Downgrade to self-check and note it for the parent.
+    if(questionBroken(q)){r.status='review';r.broken=true;r.auto=false;}
+    return r;});
+  if(S.mode!=='review'){try{await aiGradeFreeText(S.settings,results.filter(r=>!r.broken));}catch(e){console.warn('aiGrade',e);}}
+  for(const r of results)if(r.broken)logFlag({at:todayISO(),profileId:pid(),student:activeProfile().name,topic:r.q.topic||'General',q:plainMath(String(r.q.question||'')).slice(0,110),from:'auto',to:'broken (no correct answer)',exam:S.settings.examLabel||'',level:S.settings.level||''});
   const totalMarks=S.questions.reduce((s,q)=>s+q.marks,0);
   const gotMarks=results.reduce((s,r)=>s+(r.status==='correct'?r.q.marks:0),0);
   const percent=totalMarks?Math.round(gotMarks/totalMarks*100):0;
@@ -1572,13 +1747,13 @@ async function submitSession(){
     country:S.settings.country,subject:S.settings.subject,exam:S.settings.exam,examLabel:S.settings.examLabel,level:S.settings.level,
     topicsRequested:S.settings.topics,difficulty:S.settings.difficulty,count:S.questions.length,elapsed:S.elapsed,totalMarks,gotMarks,percent,
     correct:results.filter(r=>r.status==='correct').length,wrong:results.filter(r=>r.status==='wrong').length,needsReview:results.filter(r=>r.status==='review').length,flagged:results.filter(r=>r.flagged).length,
-    results:results.map(r=>({topic:r.q.topic,type:r.q.type,question:r.q.question,svg:r.q.svg,image:r.q.image,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,hint:r.q.hint,whyWrong:r.q.whyWrong,userAns:r.userAns,flagged:r.flagged,status:r.status,auto:r.auto}))};
+    results:results.map(r=>({topic:r.q.topic,type:r.q.type,question:r.q.question,svg:r.q.svg,image:r.q.image,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,hint:r.q.hint,whyWrong:r.q.whyWrong,userAns:r.userAns,flagged:r.flagged,status:r.status,auto:r.auto,broken:r.broken||false}))};
   await dbPut('attempts',attempt);
   // Practice mode: file each wrong / self-check / flagged question into the mistakes
   // notebook (due now). REVIEW re-tests don't file new items — the submitSession
   // wrapper (below) updates the existing item's mastery + spaced-repetition due date.
   if(S.mode!=='review'){
-    for(const r of results){if(r.status==='wrong'||r.status==='review'||r.flagged){await dbPut('review',{id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),dueAt:Date.now(),attemptId:S.id,exam:S.settings.exam,subject:S.settings.subject,level:S.settings.level,topic:r.q.topic,reason:r.flagged?'flagged':(r.status==='review'?'review':'wrong'),timesSeen:1,timesCorrect:0,mastered:false,question:r.q.question,svg:r.q.svg,image:r.q.image,type:r.q.type,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,hint:r.q.hint,whyWrong:r.q.whyWrong});}}
+    for(const r of results){if(r.broken)continue;if(r.status==='wrong'||r.status==='review'||r.flagged){await dbPut('review',{id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),dueAt:Date.now(),attemptId:S.id,exam:S.settings.exam,subject:S.settings.subject,level:S.settings.level,topic:r.q.topic,reason:r.flagged?'flagged':(r.status==='review'?'review':'wrong'),timesSeen:1,timesCorrect:0,mastered:false,question:r.q.question,svg:r.q.svg,image:r.q.image,type:r.q.type,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,hint:r.q.hint,whyWrong:r.q.whyWrong});}}
   }
   // Rewards (practice mode): XP from correct answers × difficulty (quality), candy
   // for completing (effort — even low accuracy earns some), and a Poké-Pack card if
@@ -1716,16 +1891,23 @@ function viewResults(a){
     const yourAns=r.type==='multiple_choice'?(r.userAns===-1||r.userAns==null?'—':(String.fromCharCode(65+r.userAns)+'. '+(r.options?.[r.userAns]??''))):(r.userAns||'—');
     const correctAns=r.type==='multiple_choice'?(String.fromCharCode(65+r.answerIndex)+'. '+(r.options?.[r.answerIndex]??r.answer)):(r.answer+(r.acceptedAnswers?.length?` (also: ${r.acceptedAnswers.join(', ')})`:''));
     const ww=(r.type==='multiple_choice'&&r.options&&Array.isArray(r.whyWrong)&&r.whyWrong.some(x=>x&&String(x).trim()))?el('div',{class:'explain',style:'margin-top:8px;background:#fff7ed;border-color:#fed7aa'},el('div',{class:'h'},'Why the other answers are wrong'),el('ul',{style:'margin:6px 0 0;padding-left:18px'},...r.options.map((opt,oi)=>(oi===r.answerIndex||!(r.whyWrong[oi]&&String(r.whyWrong[oi]).trim()))?'':el('li',{style:'margin:3px 0',html:'<b>'+String.fromCharCode(65+oi)+'.</b> '+esc(r.whyWrong[oi])})).filter(Boolean))):'';
+    const brokenNote=r.broken?el('div',{class:'explain',style:'margin-top:8px;background:#fef2f2;border-color:#fecaca'},el('div',{class:'h'},'⚠️ This question looked broken'),el('div',{class:'small'},'The app couldn’t find a correct answer among the options, so it was NOT counted against you. Tap Remove to stop it coming back.')):'';
+    // Understand-it-better + fix actions. Explain/Practise on the learning cases; Remove always.
+    const ctx={level:a.level,subject:a.subject};
+    const base={subject:a.subject,level:a.level,exam:(EXAMS[a.exam]?a.exam:'icas'),difficulty:a.difficulty,country:a.country};
+    const save=async txt=>{r.simpleExplanation=txt;try{await dbPut('attempts',a);}catch(e){}};
+    const onRemove=async()=>{if(!confirm('Remove this question so it never comes back for '+(a.student||activeProfile().name)+'?\n\nIt’s deleted from the bank and mistakes notebook and blocked on all your devices.'))return;await removeQuestionEverywhere(r.question);toast('Removed — it won’t come back.');};
+    const learn=(r.broken||r.status==='wrong'||r.status==='review')?learnActions(r,ctx,base,save,onRemove):el('div',{class:'row',style:'margin-top:10px;gap:8px;flex-wrap:wrap'},el('button',{class:'btn sm',type:'button',onclick:()=>practiceLikeQuestion(r,base)},'🔁 Practise similar'),el('button',{class:'btn sm ghost',type:'button',onclick:onRemove},'🗑 Remove'));
     list.append(el('div',{class:'qresult '+cls},
       el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)),el('span',{class:'pill'},r.topic),r.flagged?el('span',{class:'pill',style:'color:#d97706'},'🚩 flagged'):''),badge),
       el('div',{class:'qtext',style:'font-size:16px;margin:8px 0 6px',html:esc(r.question)}),
-      figureEl(r),
+      figureEl(r),brokenNote,
       el('div',{class:'ans-line'},el('b',{},'Your answer: '),el('span',{html:esc(yourAns)})),
       el('div',{class:'ans-line'},el('b',{},'Correct answer: '),el('span',{html:esc(correctAns)})),
       r.status==='review'?el('div',{class:'row',style:'margin-top:10px;gap:8px'},el('button',{class:'btn sm',onclick:()=>regrade(a,i,'correct')},'I got it right'),el('button',{class:'btn sm danger',onclick:()=>regrade(a,i,'wrong')},'I got it wrong')):'',
       r.status==='wrong'?el('div',{class:'row',style:'margin-top:10px;gap:8px;align-items:center'},el('button',{class:'btn sm',onclick:()=>regrade(a,i,'correct')},'✓ My answer was actually right'),el('span',{class:'small muted'},'(if the key looks wrong)')):'',
       r.status==='correct'?el('div',{class:'row',style:'margin-top:10px'},el('button',{class:'btn sm ghost',onclick:()=>regrade(a,i,'wrong')},'Mark as wrong')):'',
-      el('div',{class:'explain'},el('div',{class:'row between'},el('div',{class:'h'},'How to solve it'),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak(qSpeakText(r)+'. '+r.explanation)},'🔊')),el('div',{html:fmtExplain(r.explanation)})),ww));
+      el('div',{class:'explain'},el('div',{class:'row between'},el('div',{class:'h'},'How to solve it'),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak(qSpeakText(r)+'. '+r.explanation)},'🔊')),el('div',{html:fmtExplain(r.explanation)})),ww,learn));
   });
   show(el('div',{},backBar('Results',()=>viewHome()),
     el('div',{class:'card'},el('div',{class:'scorehero'},el('div',{style:'font-size:46px'},emoji),el('div',{class:'pct'},a.percent+'%'),el('div',{class:'frac'},`${a.gotMarks} / ${a.totalMarks} marks · ${a.correct}/${a.count} correct · ${fmtTime(a.elapsed)}`),el('p',{style:'margin:12px 0 0;font-weight:600'},msg)),
@@ -2148,7 +2330,7 @@ async function acceptTrade(id){
 /* ----- MISTAKES NOTEBOOK ----- */
 // Start a re-test session from a list of review items (oldest/least-mastered first, capped).
 function startReview(items){
-  const pick=items.slice(0,Math.min(15,items.length));
+  const pick=items.filter(it=>!isBlockedQ(it)&&!questionBroken(it)).slice(0,Math.min(15,items.length)); // don't re-test removed/broken items
   if(!pick.length)return toast('Nothing to practise here.');
   const qs=pick.map((it,i)=>fixQuestion({id:'q'+i,reviewId:it.id,topic:it.topic,type:it.type,question:it.question,svg:it.svg,image:it.image,options:it.options,answerIndex:it.answerIndex,answer:it.answer,acceptedAnswers:it.acceptedAnswers,explanation:it.explanation,marks:it.marks,hint:it.hint,whyWrong:it.whyWrong}));
   startSession({country:'',subject:'Review',exam:pick[0].exam||'general',examLabel:'Mistakes notebook re-test',level:'Mixed',topics:[],difficulty:3,style:'mixed',timeLimitMin:0},qs,'review');
@@ -2166,8 +2348,13 @@ async function viewReview(){
   // group by topic
   const groups={};active.forEach(it=>{const t=it.topic||'General';(groups[t]=groups[t]||[]).push(it);});
   const groupEls=Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).map(([topic,items])=>{
+    const dbase=defaultSettingsFor(activeProfile());
     const rows=items.map(it=>{
       const corr=it.type==='multiple_choice'?(String.fromCharCode(65+it.answerIndex)+'. '+((it.options||[])[it.answerIndex]??it.answer)):(it.answer||'');
+      const ctx={level:it.level||dbase.level,subject:it.subject||dbase.subject};
+      const base={subject:it.subject||dbase.subject,level:it.level||dbase.level,exam:(EXAMS[it.exam]?it.exam:dbase.exam),difficulty:dbase.difficulty,country:dbase.country};
+      const save=async txt=>{it.simpleExplanation=txt;try{await dbPut('review',it);}catch(e){}};
+      const onRemove=async()=>{if(!confirm('Remove this question from the notebook and stop it coming back on all your devices?'))return;await removeQuestionEverywhere(it.question);toast('Removed.');viewReview();};
       return el('details',{class:'qresult',style:'cursor:pointer'},
         el('summary',{style:'list-style:none'},el('div',{class:'row between'},
           el('div',{class:'qtext',style:'font-size:15px;margin:0;flex:1',html:esc(it.question)}),
@@ -2175,7 +2362,9 @@ async function viewReview(){
         figureEl(it),
         el('div',{class:'ans-line'},el('b',{},'Correct answer: '),el('span',{html:esc(corr)})),
         el('div',{class:'small muted',style:'margin-top:4px'},(reasonTag[it.reason]||'to revise')+' · seen '+(it.timesSeen||0)+'× · '+(it.timesCorrect||0)+'/2 correct to master'),
-        el('div',{class:'explain'},el('div',{class:'row between'},el('div',{class:'h'},'How to solve it'),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:(e)=>{e.preventDefault();speak((it.question||'')+'. '+it.explanation);}},'🔊')),el('div',{html:fmtExplain(it.explanation)})));
+        el('div',{class:'explain'},el('div',{class:'row between'},el('div',{class:'h'},'How to solve it'),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:(e)=>{e.preventDefault();speak((it.question||'')+'. '+it.explanation);}},'🔊')),el('div',{html:fmtExplain(it.explanation)})),
+        el('div',{style:'margin-top:6px'},'💬 Struggling with this one?'),
+        learnActions(it,ctx,base,save,onRemove));
     });
     return el('div',{class:'card'},
       el('div',{class:'row between'},el('h2',{style:'margin:0'},topic),el('button',{class:'btn sm primary',onclick:()=>startReview(items)},'Re-test ('+items.length+')')),
@@ -2559,7 +2748,7 @@ async function driveSyncNow(){if(!driveToken)return;try{const fileId=await drive
 // extracted text + tags travel; the PDF/image stays on the device that imported
 // it (where grounding/pre-generation happens). Keeps the sync blob light.
 const refsLite=(await dbAll('refs')).map(({dataB64,...r})=>r);
-const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),packsDeleted:CFG.packsDeleted||{},refsDeleted:CFG.refsDeleted||{},cleared:CFG.cleared||{},profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),packsDeleted:CFG.packsDeleted||{},refsDeleted:CFG.refsDeleted||{},cleared:CFG.cleared||{},blocked:CFG.blocked||{},profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
   // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
   if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
@@ -2573,19 +2762,24 @@ async function mergeRemote(remote){
   // then drop any local item created at/before its stamp — so a wholesale Clear sticks and
   // propagates across devices, while items generated AFTER the clear survive.
   if(remote.cleared){CFG.cleared=CFG.cleared||{};for(const k in remote.cleared){const t=remote.cleared[k];if(t>(CFG.cleared[k]||0))CFG.cleared[k]=t;}saveCfg();}
+  // "Remove this question" block-list {"profileId|qhash":ts}: union remote (max wins),
+  // then drop any local bank/review copy now blocked — so a remove sticks everywhere.
+  if(remote.blocked){CFG.blocked=CFG.blocked||{};for(const k in remote.blocked){const t=remote.blocked[k];if(t>(CFG.blocked[k]||0))CFG.blocked[k]=t;}saveCfg();
+    for(const b of(await dbAll('bank')))if(isBlockedHash(b.qhash,b.profileId))await dbDel('bank',b.id);
+    for(const r of(await dbAll('review')))if(isBlockedHash(qhash(String(r.question||'')),r.profileId))await dbDel('review',r.id);}
   const clr=CFG.cleared||{};
   const isCleared=(store,it,tsField)=>{const t=clr[store+':'+it.profileId]||0;return t>0&&((it[tsField]||0)<=t);};
   for(const a of(await dbAll('attempts')))if(isCleared('attempts',a,'startedAt'))await dbDel('attempts',a.id);
   for(const r of(await dbAll('review')))if(isCleared('review',r,'createdAt'))await dbDel('review',r.id);
   for(const b of(await dbAll('bank')))if(isCleared('bank',b,'createdAt'))await dbDel('bank',b.id);
   const la=new Map((await dbAll('attempts')).map(a=>[a.id,a]));for(const a of(remote.attempts||[])){if(isCleared('attempts',a,'startedAt'))continue;if(!la.has(a.id))await dbPut('attempts',a);}
-  const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[])){if(isCleared('review',r,'createdAt'))continue;if(!lr.has(r.id))await dbPut('review',r);}
+  const lr=new Map((await dbAll('review')).map(r=>[r.id,r]));for(const r of(remote.review||[])){if(isCleared('review',r,'createdAt'))continue;if(isBlockedHash(qhash(String(r.question||'')),r.profileId))continue;if(!lr.has(r.id))await dbPut('review',r);}
   // Reference papers: tombstone deletions (ref ids are unique per import, so a deleted id never recurs).
   if(remote.refsDeleted){CFG.refsDeleted=CFG.refsDeleted||{};for(const id in remote.refsDeleted){const t=remote.refsDeleted[id];if(t>(CFG.refsDeleted[id]||0))CFG.refsDeleted[id]=t;}saveCfg();}
   const rdel=CFG.refsDeleted||{};
   for(const r of(await dbAll('refs')))if(rdel[r.id])await dbDel('refs',r.id);
   const lf=new Map((await dbAll('refs')).map(r=>[r.id,r]));for(const r of(remote.refs||[])){if(rdel[r.id])continue;if(!lf.has(r.id))await dbPut('refs',r);}
-  const lb=new Map((await dbAll('bank')).map(b=>[b.id,b]));for(const b of(remote.bank||[])){if(isCleared('bank',b,'createdAt'))continue;if(!lb.has(b.id))await dbPut('bank',b);}
+  const lb=new Map((await dbAll('bank')).map(b=>[b.id,b]));for(const b of(remote.bank||[])){if(isCleared('bank',b,'createdAt'))continue;if(isBlockedHash(b.qhash,b.profileId))continue;if(!lb.has(b.id))await dbPut('bank',b);}
   // Cards: MAX-merge the monotonic gained/lost ledger (count = gained − lost) + level (max) +
   // shiny (or). Because gained/lost only ever grow, a SPEND (lost++) survives the merge — a
   // traded-away/converted card stays gone instead of resurrecting. Count-0 piles are kept.
@@ -2702,7 +2896,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.30';
+const APP_VERSION='v2.31';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
