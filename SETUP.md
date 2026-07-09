@@ -236,6 +236,24 @@ The **“Extra context to improve accuracy”** box on the setup screen is saved
 exam — put anything that helps, e.g. *“ICAS Paper C = Year 5, ~35 questions,
 increasing difficulty, no calculator.”*
 
+## Knowledge map — ground it on the real curriculum (OPTIONAL)
+
+The **Knowledge map** (Home → **Knowledge map**) teaches each skill with a concept
+card + formulas. By default it’s built from the AI’s own knowledge; you can ground
+it on the **real curriculum** two ways:
+
+1. **Import a syllabus doc** — Reference library → **🔗 Official curriculum sources**
+   → Open one (e.g. NZ Curriculum Maths, NZQA, ICAS) → download the PDF → **Import**
+   it → tap **Edit tags** → toggle **“Curriculum / syllabus doc”** → **↻ Rebuild map**.
+   The map then shows **“Grounded on: …”**.
+
+2. **Auto-import (zero clicks each time)** — copy `curriculum.local.example.js` to
+   **`curriculum.local.js`** (same folder as `index.html`). It’s loaded on boot and
+   the curriculum text is imported automatically (and Drive-synced to your other
+   devices). Optionally paste the official syllabus text into it first for best
+   fidelity. `curriculum.local.js` is **gitignored** — it never goes in the repo, so
+   keep private/copyrighted text there, not in the committed example.
+
 ## Daily use
 
 Home → **Start a practice** → choose **country, subject, exam** (ICAS / Rangitoto

@@ -297,6 +297,10 @@
 <!-- PRIVATE transcribed question packs (real past papers), if present. Gitignored, never
      in the public repo; the app works fine without it (a 404 here is harmless). -->
 <script src="papers.local.js"></script>
+<!-- PRIVATE curriculum/syllabus grounding text (window.PL_CURRICULUM), if present. Gitignored;
+     copy from curriculum.local.example.js. Auto-imported into the refs store to ground the
+     Knowledge map. A 404 here is harmless — the app works without it. -->
+<script src="curriculum.local.js"></script>
 <script>
 /* ============================================================ Practice Lab ============================================================ */
 const $=(s,el=document)=>el.querySelector(s);
@@ -1681,6 +1685,27 @@ async function seedLocalPacks(){
     const have=new Set((await dbAll('packs')).map(p=>p.id));
     for(const p of arr){if(!p||!Array.isArray(p.questions))continue;const id=p.id||packSlug(p);if(!have.has(id)){p.id=id;p.updatedAt=p.updatedAt||Date.now();await dbPut('packs',p);}}
   }catch(e){console.warn('seedLocalPacks',e);}
+}
+// Seed CURRICULUM/syllabus reference docs from a bundled curriculum.local.js
+// (window.PL_CURRICULUM = [{id,name,subject,exam?,level?,text}]) on boot — a private,
+// gitignored file (copy from curriculum.local.example.js). Each becomes a shared refs
+// record tagged kind:'curriculum', so the Knowledge map auto-grounds on real syllabus
+// TEXT with zero manual import. Skips ids already present or deleted (refsDeleted tombstone).
+async function seedLocalCurriculum(){
+  try{
+    const arr=(typeof window!=='undefined'&&window.PL_CURRICULUM)||[];if(!arr.length)return;
+    const have=new Set((await dbAll('refs')).map(r=>r.id));CFG.refsDeleted=CFG.refsDeleted||{};
+    let n=0;
+    for(const c of arr){
+      if(!c||!c.text||!String(c.text).trim())continue;
+      const id=c.id||('curr-'+String(c.name||c.subject||'doc').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60));
+      if(have.has(id)||CFG.refsDeleted[id])continue;
+      await dbPut('refs',{id,profileId:'all',kind:'curriculum',addedAt:Date.now(),name:c.name||'Curriculum',mime:'text/plain',text:String(c.text),
+        tags:{country:c.country||'New Zealand',exam:c.exam||'',subject:c.subject||'Mathematics',level:c.level||'',year:c.year||''}});
+      have.add(id);n++;
+    }
+    if(n)scheduleDriveSync();
+  }catch(e){console.warn('seedLocalCurriculum',e);}
 }
 
 /* ----- PROFILES ----- */
@@ -3363,6 +3388,7 @@ async function startApp(){
   applyVaultMeta();
   await reconcileProfiles();
   await seedLocalPacks();
+  await seedLocalCurriculum();
   initEmailJS();refreshHeaderProfile();
   if(CFG.drive.enabled&&driveClientId()&&location.protocol==='https:'){const t=()=>{if(window.google&&google.accounts&&google.accounts.oauth2)driveConnect(false);else setTimeout(t,500);};setTimeout(t,800);}
   // First run (never seen the guide + no practices yet): show the "How it works" guide once.
@@ -3373,7 +3399,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.38';
+const APP_VERSION='v2.39';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
