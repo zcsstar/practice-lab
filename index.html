@@ -2589,7 +2589,7 @@ async function viewTradeNew(){
 function autoTagFromName(name){
   const n=String(name||'').toLowerCase().replace(/[_]+/g,' '); // underscores are word chars → break \b matching
   const subject=/\bmath|maths|mathematics\b/.test(n)?'Mathematics':/\bscience\b/.test(n)?'Science':/\benglish|reading|comprehension\b/.test(n)?'English':/\bwriting\b/.test(n)?'Writing':/\bspell/.test(n)?'Spelling':'Mathematics';
-  const exam=/\bicas\b/.test(n)?'icas':/\bncea\b/.test(n)?'ncea':/\bapsmo|olympiad|competition\b/.test(n)?'general':'icas';
+  const exam=/\brangitoto\b/.test(n)?'rangitoto':/\bicas\b/.test(n)?'icas':/\bncea\b/.test(n)?'ncea':/\bapsmo|olympiad|competition\b/.test(n)?'general':'icas';
   const ym=n.match(/\b(20\d{2}|19\d{2})\b/);const year=ym?ym[1]:'';
   let level='';const gm=n.match(/(?:year|grade|yr|gr)\s*([1-9]\d?)/i),pm=n.match(/paper\s*([a-f])/i);
   if(gm&&pm)level='Year '+gm[1]+' (Paper '+pm[1].toUpperCase()+')';
@@ -3430,7 +3430,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.42';
+const APP_VERSION='v2.43';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
