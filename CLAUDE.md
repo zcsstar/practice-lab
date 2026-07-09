@@ -491,10 +491,15 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   (Google Fonts `<link>` in `<head>`; system font `-apple-system…` is the offline /
   `file://` fallback). **`.katex{font-family:var(--font)}`** (no `!important`) renders
   maths NUMBERS in Inter too so they match the text, while KaTeX keeps its own
-  italic-variable / symbol / delimiter fonts (√, big brackets). iOS system colours
-  (canvas `#f2f2f7`, blue `#007aff`, green/red/orange semantics), flat primary buttons,
-  iOS toggle switches (`input[type=checkbox].sw`). No serif. References:
-  `design/DESIGN-GUIDELINES.md` (superseded by iOS look) and `design/gsap-skills.md`.
+  italic-variable / symbol / delimiter fonts (√, big brackets). **Maths is sized
+  `1.08em` (v2.34)** — a touch bigger than the text, not KaTeX's default `1.21em`
+  (which made numbers look oversized). **Question text is ONE size everywhere: the
+  `.qtext` class = 16px; do NOT override it inline** (v2.34 removed per-view 15/16/18px
+  overrides in results / notebook / study / browser that made question size inconsistent
+  page-to-page). iOS system colours (canvas `#f2f2f7`, blue `#007aff`, green/red/orange
+  semantics), flat primary buttons, iOS toggle switches (`input[type=checkbox].sw`). No
+  serif. References: `design/DESIGN-GUIDELINES.md` (superseded by iOS look) and
+  `design/gsap-skills.md`.
 - **Animation (GSAP)** — loaded from CDN. `animateIn(scope)` (called by `show()`)
   fades/rises cards on every view; results screen counts up the score and
   staggers question cards; the runner cross-fades on question swap. Transform/
@@ -544,7 +549,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.33**). Claude suggests the next number on
+  minor on each release (currently at **v2.34**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

@@ -50,7 +50,7 @@
   /* Render KaTeX maths in the same font so NUMBERS match the rest of the app. Only the
      base family is overridden (no !important), so KaTeX keeps its italic-variable and
      symbol/delimiter fonts (√, big brackets) while digits & operators use Inter. */
-  .katex{font-family:var(--font)}
+  .katex{font-family:var(--font);font-size:1.08em}  /* numbers a touch bigger than text, not KaTeX's default 1.21em */
   .title h1{font-weight:700;letter-spacing:-.4px}
   .card h2{font-weight:700;letter-spacing:-.3px}
   /* iOS-style switches */
@@ -126,7 +126,7 @@
   .qchip.answered{background:#e7f0ff;border-color:#b9d7ff;color:var(--brand)}
   .qchip.flagged::after{content:"";position:absolute;top:-3px;right:-3px;width:11px;height:11px;border-radius:50%;background:var(--warn);border:2px solid #fff}
 
-  .qtext{font-size:16.5px;line-height:1.6;margin:6px 0 12px}
+  .qtext{font-size:16px;line-height:1.6;margin:6px 0 12px}  /* ONE question size everywhere (don't override inline) */
   .opts{display:grid;gap:8px}
   .opt{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:10px 13px;cursor:pointer;background:#fff;transition:.12s;font-size:15px;line-height:1.5}
   .opt:hover{border-color:var(--brand)}
@@ -1246,7 +1246,7 @@ async function viewStudy(q,ctx,opts){
       el('div',{class:'row between'},
         el('div',{},q.topic?el('span',{class:'pill'},q.topic):'',inNb?el('span',{class:'pill',style:'margin-left:6px;color:var(--brand)'},'📓 in notebook'):''),
         el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak((q.question||'')+'. '+(q.explanation||''))},'🔊')),
-      el('div',{class:'qtext',style:'font-size:18px;margin:10px 0',html:esc(q.question)}),
+      el('div',{class:'qtext',style:'margin:10px 0',html:esc(q.question)}),
       figureEl(q),
       corr?el('div',{class:'ans-line'},el('b',{},'Answer: '),el('span',{html:esc(corr)})):'',
       q.explanation?el('div',{class:'explain'},el('div',{class:'h'},'How to solve it'),el('div',{html:fmtExplain(q.explanation)})):'',
@@ -1282,7 +1282,7 @@ async function viewAllQuestions(){
       const ctx={level:a.level,subject:a.subject,exam:(EXAMS[a.exam]?a.exam:'icas'),difficulty:a.difficulty,country:a.country};
       listHost.append(el('div',{class:'qresult',style:'cursor:pointer',onclick:()=>viewStudy(r,ctx,{base:ctx,back:()=>viewAllQuestions()})},
         el('div',{class:'row between'},
-          el('div',{style:'flex:1'},el('span',{class:'pill'},r.topic||'General'),el('div',{class:'qtext',style:'font-size:15px;margin:6px 0 0',html:esc(r.question)})),
+          el('div',{style:'flex:1'},el('span',{class:'pill'},r.topic||'General'),el('div',{class:'qtext',style:'margin:6px 0 0',html:esc(r.question)})),
           el('div',{style:'flex:none;margin-left:8px;text-align:right'},statusBadge(r.status),el('div',{class:'small muted',style:'margin-top:4px'},a.date)))));
     }
     renderMath(listHost);
@@ -2011,7 +2011,7 @@ function viewResults(a){
     const learn=(r.broken||r.status==='wrong'||r.status==='review')?learnActions(r,ctx,base,save,{onRemove}):learnActions(r,ctx,base,save,{onRemove,addToNotebook:true});
     list.append(el('div',{class:'qresult '+cls},
       el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)),el('span',{class:'pill'},r.topic),r.flagged?el('span',{class:'pill',style:'color:#d97706'},'🚩 flagged'):''),badge),
-      el('div',{class:'qtext',style:'font-size:16px;margin:8px 0 6px',html:esc(r.question)}),
+      el('div',{class:'qtext',style:'margin:8px 0 6px',html:esc(r.question)}),
       figureEl(r),brokenNote,
       el('div',{class:'ans-line'},el('b',{},'Your answer: '),el('span',{html:esc(yourAns)})),
       el('div',{class:'ans-line'},el('b',{},'Correct answer: '),el('span',{html:esc(correctAns)})),
@@ -2507,7 +2507,7 @@ async function viewReview(){
       const studyBtn=el('button',{class:'btn sm',type:'button',style:'flex:none;margin-left:8px',onclick:(e)=>{e.preventDefault();e.stopPropagation();viewStudy(it,ctx,{base,save,back:()=>viewReview()});}},'📖 Study');
       return el('details',{class:'qresult',style:'cursor:pointer'},
         el('summary',{style:'list-style:none'},el('div',{class:'row between'},
-          el('div',{class:'qtext',style:'font-size:15px;margin:0;flex:1',html:esc(it.question)}),
+          el('div',{class:'qtext',style:'margin:0;flex:1',html:esc(it.question)}),
           studyBtn,
           el('span',{class:'pill',style:'flex:none;margin-left:8px'},(it.timesCorrect||0)+'/2'))),
         figureEl(it),
@@ -3048,7 +3048,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.33';
+const APP_VERSION='v2.34';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
