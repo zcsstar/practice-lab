@@ -37,9 +37,10 @@ const ctx = {};
 new Function(
   selfRe + '\n' + extract('plainMath') + '\n' + extract('plValTokens') + '\n' +
   extract('explanationSelfCorrects') + '\n' + extract('mcConcludesOffList') + '\n' + extract('questionBroken') + '\n' +
-  'this.explanationSelfCorrects=explanationSelfCorrects;this.mcConcludesOffList=mcConcludesOffList;this.questionBroken=questionBroken;'
+  extract('validateTree') + '\n' + extract('formulaCautions') + '\n' +
+  'this.explanationSelfCorrects=explanationSelfCorrects;this.mcConcludesOffList=mcConcludesOffList;this.questionBroken=questionBroken;this.validateTree=validateTree;this.formulaCautions=formulaCautions;'
 ).call(ctx);
-const { explanationSelfCorrects, mcConcludesOffList, questionBroken } = ctx;
+const { explanationSelfCorrects, mcConcludesOffList, questionBroken, validateTree, formulaCautions } = ctx;
 
 let pass = 0, fail = 0;
 const check = (desc, got, expected) => { if (got === expected) pass++; else { fail++; console.log(`  ✗ ${desc}\n      expected ${expected}, got ${got}`); } };
@@ -72,6 +73,33 @@ check('questionBroken: off-list MC conclusion', questionBroken(mc(['1', '2', '3'
 check('questionBroken: sound MC not flagged', questionBroken(mc(['4', '6', '8', '9'], 'Adding step by step, the answer is 8.')), false);
 check('questionBroken: numeric/short with clean working not flagged', questionBroken({ type: 'numeric', answer: '200', explanation: '80 × 2.5 = 200.' }), false);
 check('questionBroken: null-safe', questionBroken(null), false);
+
+// ── validateTree: clean the knowledge tree into a foundational→advanced DAG ──
+{
+  const r = validateTree([{ id: 'a', prereq: [] }, { id: 'b', prereq: ['a', 'zzz'] }]);
+  check('validateTree drops a dangling prereq', JSON.stringify(r.points[1].prereq), JSON.stringify(['a']));
+  check('validateTree flags repaired on dangling', r.repaired, true);
+}
+check('validateTree drops a self-prereq', validateTree([{ id: 'a', prereq: ['a'] }]).points[0].prereq.length, 0);
+check('validateTree drops a forward/cyclic prereq', validateTree([{ id: 'a', prereq: ['b'] }, { id: 'b', prereq: [] }]).points[0].prereq.length, 0);
+{
+  const r = validateTree([{ id: 'a', prereq: [] }, { id: 'b', prereq: ['a'] }]); // clean foundational→advanced
+  check('validateTree keeps a valid earlier prereq', JSON.stringify(r.points[1].prereq), JSON.stringify(['a']));
+  check('validateTree: clean tree not flagged repaired', r.repaired, false);
+}
+check('validateTree: non-array → empty+repaired', validateTree(null).points.length, 0);
+
+// ── formulaCautions: flag known-wrong primary formulas (best-effort, no rewrite) ──
+check('formula: triangle area ½(b+h) is flagged', formulaCautions('Area of a triangle', ['$A=\\frac{1}{2}(b+h)$']).length > 0, true);
+check('formula: triangle area ½bh is NOT flagged', formulaCautions('Area of a triangle', ['$A=\\frac{1}{2}bh$']).length, 0);
+check('formula: circle area 2πr is flagged', formulaCautions('Area of a circle', ['$A=2\\pi r$']).length > 0, true);
+check('formula: circle area πr² is NOT flagged', formulaCautions('Area of a circle', ['$A=\\pi r^2$']).length, 0);
+check('formula: circumference using r² is flagged', formulaCautions('Circumference of a circle', ['$C=\\pi r^2$']).length > 0, true);
+check('formula: unrelated point is NOT flagged', formulaCautions('Add fractions with unlike denominators', ['$\\frac{a}{b}+\\frac{c}{d}$']).length, 0);
+check('formula: no formulas → no cautions', formulaCautions('Area of a triangle', []).length, 0);
+// correct area formula alongside a perimeter note (which contains b+h) must NOT false-flag
+check('formula: triangle ½bh + perimeter note NOT flagged', formulaCautions('Area of a triangle', ['$A=\\frac{1}{2}bh$', '$P=a+b+h$']).length, 0);
+check('formula: triangle ½×b×h NOT flagged', formulaCautions('Area of a triangle', ['$A=\\frac{1}{2}\\times b\\times h$']).length, 0);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -215,6 +215,36 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `startPaper`) so it never returns — and the flat tombstone map syncs like `packsDeleted`
   (max-wins in `mergeRemote`, which also drops any now-blocked bank/review item), so a
   Drive merge can't resurrect it.
+- **Accuracy hardening (v2.36, "make the taught knowledge correct")** — layered on the
+  honest premise that an LLM can't be 100% right (its own self-check can share its bias),
+  so stack checks of DIFFERENT kinds + surface + let a human correct:
+  - **Numeric verify symmetry:** `verifyQuestions`' numeric/short `ok` branch now cross-checks
+    the verifier's own `solved` against the key (mirrors the MC `solvedIndex` guard). DELIBERATELY
+    conservative to avoid false-dropping CORRECT questions (this was the code-review's top risk):
+    accepts the key + all `acceptedAnswers`, compares EVERY numeric token of `solved` (so working
+    like "240×0.15=36" matches the concluding 36), ~2% tolerance (rounded/π/recurring agree), and
+    SKIPS time answers (`:` → minutes mis-parse). Only drops on a clear no-overlap dispute.
+  - **Real web-search grounding:** `callGemini(prompt,files,maxTokens,temp,grounded)` now sends
+    `tools:[{google_search:{}}]` (dropping JSON mode, which is incompatible → the tolerant PLParse
+    recovers) when `s.webSearch` is on AND nothing else grounds it. `generateQuestions` computes
+    the `grounded` flag. A model that rejects the tool (e.g. Gemini 1.5 → 400) **retries once
+    without it** (prompt-only fallback) instead of failing. (Previously the toggle was prompt-text
+    only — CLAUDE.md claimed a feature the code didn't implement.)
+  - **Concept-card safety** (LEARN content had NO checks): `ensureConceptCard` runs `formulaCautions`
+    (deterministic known-wrong-formula flags for triangle/circle area & circumference — no rewrite),
+    `explanationSelfCorrects` on the card text, and a self-consistency prompt clause; `viewConcept`
+    KaTeX-validates each `$…$` span (`latexValid`) and shows a caution instead of a red error, a
+    permanent "🤖 AI-generated — double-check" note, and a **🚩 Looks wrong** report (`reportCard`
+    → `flagLog`). `generateKnowledgeTree` runs `validateTree` (drops dangling/forward/self prereqs,
+    breaks cycles → `rec.needsReview`) + a level-scope prompt clause.
+  - **Observable quality:** `qualityBump`/`qualityRecent` (`practicelab.quality`, device-local)
+    tally verify drops/fixes; the parent dashboard shows "N double-checked, X fixed, Y dropped"
+    (only counted when the filtered set is actually served, not the all-dropped fallback).
+  - All deterministic pieces (`validateTree`/`formulaCautions`) unit-tested in
+    [accuracy.test.js](accuracy.test.js); the diff was reviewed by an adversarial code-review
+    workflow and all confirmed findings fixed. **Still Tier-1** — Tier-2 (ground the LEARN layer
+    on packs/curriculum docs) and Tier-3 (concept-card AI verify, cross-provider adjudication,
+    parent approval queue) are the follow-ups.
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
   Bank/Dashboard/Skills/Guide/Study/AllQuestions`. `show(node)` swaps `#app` and re-runs
   KaTeX. No router; functions call each other. `viewBank` = question-bank hub;
@@ -573,7 +603,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.35**). Claude suggests the next number on
+  minor on each release (currently at **v2.36**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

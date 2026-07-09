@@ -510,6 +510,12 @@ const USAGE_KEY='practicelab.usage';
 function usageGet(){let u={};try{u=JSON.parse(localStorage.getItem(USAGE_KEY)||'{}');}catch(e){}return u;}
 function usageToday(){return usageGet()[todayISO()]||0;}
 function usageBump(n=1){const u=usageGet(),d=todayISO();u[d]=(u[d]||0)+n;const ks=Object.keys(u).sort();while(ks.length>21)delete u[ks.shift()];localStorage.setItem(USAGE_KEY,JSON.stringify(u));}
+// Content-quality tally: how many verified questions the AI double-check dropped/fixed, per day.
+// Device-local (like usage); surfaced on the parent dashboard so accuracy is OBSERVABLE, not asserted.
+const QUALITY_KEY='practicelab.quality';
+function qualityGet(){try{return JSON.parse(localStorage.getItem(QUALITY_KEY)||'{}');}catch(e){return {};}}
+function qualityBump(field,n){if(!n)return;const q=qualityGet(),d=todayISO();q[d]=q[d]||{checked:0,dropped:0,fixed:0};q[d][field]=(q[d][field]||0)+n;const ks=Object.keys(q).sort();while(ks.length>30)delete q[ks.shift()];localStorage.setItem(QUALITY_KEY,JSON.stringify(q));}
+function qualityRecent(days){const q=qualityGet(),o={checked:0,dropped:0,fixed:0},cut=Object.keys(q).sort().slice(-(days||14));cut.forEach(d=>{o.checked+=q[d].checked||0;o.dropped+=q[d].dropped||0;o.fixed+=q[d].fixed||0;});return o;}
 function freeDailyLimit(){return CFG.provider==='gemini'?20:0;} // 0 = unknown / not free-tier-limited
 const BANK_PREFILL=24; // single-call batch when a practice misses the bank — one request serves now + banks a big surplus (the daily limit is requests, not tokens, so we maximise yield per call; the tolerant parser keeps whatever returns if it truncates)
 const BANK_DEEP=40;    // total for a manual "stock the bank" pre-generation — fetched reliably in small chunks via generateMany
@@ -707,18 +713,26 @@ Return ONLY valid JSON, no markdown fences, exactly:
   return p;
 }
 
-async function callGemini(prompt,files,maxTokens,temp){
+async function callGemini(prompt,files,maxTokens,temp,grounded){
   const model=CFG.model||'gemini-2.0-flash';
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(CFG.apiKey)}`;
   const parts=[{text:prompt}];
   for(const f of (files||[]))parts.push({inline_data:{mime_type:f.mime,data:f.dataB64}});
+  // REAL web-search grounding (v2.36): when asked to ground and no files are attached, enable
+  // Google Search so answers/facts come from live sources — NOT just model memory. JSON mode is
+  // INCOMPATIBLE with the search tool, so drop responseMimeType in that case and rely on the
+  // tolerant PLParse to recover the questions from the free-form reply.
+  let useSearch=!!grounded&&!(files&&files.length);
   // Strict JSON mode (escapes LaTeX backslashes correctly). For 2.5 "thinking"
   // models, disable thinking AND give a large output budget — otherwise hidden
   // thinking eats the budget and the JSON answer gets truncated. Budget scales
   // with batch size so large bank pre-generations complete in one call.
-  const gc={temperature:(temp==null?0.8:temp),responseMimeType:'application/json',maxOutputTokens:maxTokens||16384};
+  const gc={temperature:(temp==null?0.8:temp),maxOutputTokens:maxTokens||16384};
+  if(!useSearch)gc.responseMimeType='application/json';
   if(/2\.5|thinking|gemini-flash|gemini-pro/i.test(model))gc.thinkingConfig={thinkingBudget:0,includeThoughts:false};
-  const body=JSON.stringify({contents:[{parts}],generationConfig:gc});
+  const reqBody={contents:[{parts}],generationConfig:gc};
+  if(useSearch)reqBody.tools=[{google_search:{}}];
+  let body=JSON.stringify(reqBody);
   let r,attempt=0;
   while(true){
     r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
@@ -726,6 +740,9 @@ async function callGemini(prompt,files,maxTokens,temp){
     // Retry only transient server errors (busy). Do NOT retry 429 — that's a
     // quota limit, and retrying just burns more of it.
     if((r.status===503||r.status===500)&&attempt<4){attempt++;await new Promise(res=>setTimeout(res,1500*attempt));continue;}
+    // Some models (e.g. Gemini 1.5) reject the google_search tool with 400 — retry ONCE
+    // without it (falls back to prompt-only grounding) instead of failing the practice.
+    if(r.status===400&&useSearch){useSearch=false;delete reqBody.tools;reqBody.generationConfig.responseMimeType='application/json';body=JSON.stringify(reqBody);continue;}
     const t=(await r.text()).slice(0,400);
     let msg=t;
     if(r.status===503)msg='the model is busy right now — please try again in a moment.';
@@ -1005,26 +1022,48 @@ QUESTIONS:
   const checks=parseChecks(raw);if(!checks)return qs;
   const verdict={};checks.forEach(c=>{if(c&&typeof c.i==='number')verdict[c.i]=c;});
   const inRange=(idx,q)=>Number.isInteger(idx)&&idx>=0&&idx<q.options.length;
-  const out=[];
+  const out=[];let dropped=0,fixed=0;
   qs.forEach((q,i)=>{
     const c=verdict[i];
     if(!c){out.push(q);return;}
-    if(c.verdict==='drop')return; // broken/ambiguous → leave out
+    if(c.verdict==='drop'){dropped++;return;} // broken/ambiguous → leave out
     const isMC=q.type==='multiple_choice'&&Array.isArray(q.options)&&q.options.length>0;
     if(isMC){
       // Explicit correction wins.
-      if(c.verdict==='fix'&&inRange(c.correctIndex,q)){q.answerIndex=c.correctIndex;q.answer=String(q.options[c.correctIndex]);out.push(q);return;}
+      if(c.verdict==='fix'&&inRange(c.correctIndex,q)){if(c.correctIndex!==q.answerIndex)fixed++;q.answerIndex=c.correctIndex;q.answer=String(q.options[c.correctIndex]);out.push(q);return;}
       // #5: cross-check the verifier's INDEPENDENT solve (not just its label). If it actually
       // worked the question to a DIFFERENT option than the key, that's a real dispute — drop it
       // rather than serve a contested answer (a mislabelled "ok" no longer slips through).
-      if(inRange(c.solvedIndex,q)&&c.solvedIndex!==q.answerIndex)return;
+      if(inRange(c.solvedIndex,q)&&c.solvedIndex!==q.answerIndex){dropped++;return;}
       out.push(q);return;
     }
     // numeric/short: a "fix" with a computed value updates the accepted answer.
-    if(c.verdict==='fix'&&(q.type==='numeric'||q.type==='short')&&c.solved!=null&&String(c.solved).trim()!==''){q.answer=String(c.solved);out.push(q);return;}
-    if(c.verdict==='ok'){out.push(q);return;}
-    return; // unactionable fix → leave out (don't serve a disputed item)
+    if(c.verdict==='fix'&&(q.type==='numeric'||q.type==='short')&&c.solved!=null&&String(c.solved).trim()!==''){fixed++;q.answer=String(c.solved);out.push(q);return;}
+    if(c.verdict==='ok'){
+      // Symmetry with the MC guard above: even on an "ok" verdict, cross-check the verifier's
+      // OWN computed value (c.solved) against the key for a plain NUMERIC answer, so a mislabelled
+      // "ok" on a wrong key is caught (e.g. "15% of 240" keyed 30 while the verifier solved 36).
+      // DELIBERATELY CONSERVATIVE to avoid false-dropping CORRECT questions (see review): we
+      //  • accept the key AND every acceptedAnswers form,
+      //  • compare against EVERY numeric token in `solved` (so working like "240×0.15=36" still
+      //    matches the concluding 36),
+      //  • use a generous ~2% tolerance (recurring/rounded/π answers agree),
+      //  • skip time answers (":" parses to minutes and would mis-compare).
+      // Only DROP when the verifier's numbers share NOTHING with any accepted key value — a clear
+      // dispute. This REDUCES, not eliminates, the mislabelled-ok class (a same-model slip can agree).
+      if(q.type==='numeric'&&c.solved!=null&&String(c.solved).trim()!==''&&!/:/.test(String(q.answer))&&!/:/.test(String(c.solved))){
+        const keyVals=[q.answer].concat(Array.isArray(q.acceptedAnswers)?q.acceptedAnswers:[]).map(x=>answerNum(x)).filter(v=>v!=null&&isFinite(v));
+        const solvedVals=((typeof plValTokens==='function')?(plValTokens(String(c.solved)).tokens||[]):[]).map(t=>t.val).filter(v=>v!=null&&isFinite(v));
+        const near=(x,y)=>Math.abs(x-y)<=1e-6+0.02*Math.max(1,Math.abs(x),Math.abs(y));
+        if(keyVals.length&&solvedVals.length&&!solvedVals.some(sv=>keyVals.some(kv=>near(kv,sv)))){dropped++;return;}
+      }
+      out.push(q);return;
+    }
+    dropped++;return; // unactionable fix → leave out (don't serve a disputed item)
   });
+  // Record the tally only when the filtered set is actually served — if EVERY item dropped we
+  // fall back to the originals below, so nothing was really suppressed.
+  qualityBump('checked',qs.length);if(out.length){qualityBump('dropped',dropped);qualityBump('fixed',fixed);}
   return out.length?reindex(out):qs; // never return empty
 }
 // AI-mark short/numeric answers that didn't auto-match (status 'review'): one
@@ -1050,7 +1089,10 @@ async function generateQuestions(s,files){
   let raw;
   // Lower temperature (0.5) than chat default → fewer arithmetic/keying slips while keeping
   // enough variety across a batch. The tolerant parser + verifier handle the rest.
-  if(CFG.provider==='gemini')raw=await callGemini(prompt,files,outTokens(count,65536),0.5);
+  // Ground on live web search (Gemini) only when the user opted in AND we're NOT already
+  // grounding on an attached paper / pack text — i.e. the "web-knowledge" fallback path.
+  const grounded=!!s.webSearch&&!refsText&&!(files&&files.length);
+  if(CFG.provider==='gemini')raw=await callGemini(prompt,files,outTokens(count,65536),0.5,grounded);
   else if(CFG.provider==='claude')raw=await callClaude(prompt,files,outTokens(count,8192),0.5);
   else raw=await callOpenAICompatible(prompt,files,outTokens(count,16384),0.5);
   usageBump(1); // count every real API call (incl. each chunk of a big batch)
@@ -2006,6 +2048,42 @@ async function strandStats(subject){
 }
 // Build + cache the knowledge-point tree for a setup (one AI call). Points are grouped
 // under the exam's known strands so mastery (tracked by topic) lines up.
+// --- Deterministic (no-API) validators for the Knowledge map ---
+// Clean the knowledge tree into a foundational→advanced DAG: drop prereq ids that don't exist,
+// self-references, or that point to a LATER point (a forward/cyclic dependency). Returns
+// {points, repaired}. Unit-testable in Node like the other backstops.
+function validateTree(points){
+  if(!Array.isArray(points))return {points:[],repaired:true};
+  const ids=new Set(points.map(p=>p&&p.id).filter(Boolean)),pos={};
+  points.forEach((p,i)=>{if(p&&p.id)pos[p.id]=i;});
+  let repaired=false;
+  points.forEach((p,i)=>{if(!p)return;const pr=Array.isArray(p.prereq)?p.prereq:[];
+    const kept=pr.filter(id=>id!==p.id&&ids.has(id)&&pos[id]<i); // exists, not self, earlier → no cycle/forward dep
+    if(kept.length!==pr.length)repaired=true;p.prereq=kept;});
+  return {points,repaired};
+}
+// Best-effort caution flags for a few well-known primary formulas whose WRONG signature is
+// recognisable. NO rewrite — just surface a "please check" note. Deliberately narrow so
+// false-positives stay near zero; the KaTeX parse-guard + AI verify + parent flag do the rest.
+function formulaCautions(name,formulas){
+  const out=[],nm=String(name||'').toLowerCase();
+  // Normalise LaTeX to a bare token string: run plainMath if available, then drop spaces,
+  // backslashes, braces and $ so "$A=\frac12(b+h)$" and "A = ½(b+h)" both reduce comparably.
+  const norm=f=>{let x=String(f==null?'':f);if(typeof plainMath==='function')x=plainMath(x);return x.toLowerCase().replace(/[\s\\{}$]/g,'');};
+  const F=(formulas||[]).map(norm);
+  const any=re=>F.some(f=>re.test(f));
+  const isTri=/triangle/.test(nm)&&/area/.test(nm);
+  const isCircArea=/circle/.test(nm)&&/area/.test(nm);
+  const isCircum=/(circumf|perimeter)/.test(nm)&&/circle/.test(nm);
+  // Triangle area MULTIPLIES base×height — a "base+height" addition is always wrong (perimeter
+  // adds SIDES, never base+height), so this fires regardless of a ½ being present.
+  if(isTri&&any(/b(ase)?\+h(eight)?/)&&!any(/b(ase)?[×*·x]?h(eight)?/))out.push('Triangle area MULTIPLIES base × height then halves — it should not ADD base and height.');
+  // Circle area needs r² (πr²); a 2πr (linear) formula is the circumference, not the area.
+  if(isCircArea&&any(/2\(?(?:pi|π)?\)?r(?![\^]?2|²)/)&&!any(/r[\^]?2|r²/))out.push('Area of a circle uses r² (πr²); 2πr is the circumference.');
+  // Circumference is 2πr (or πd); an r² formula is the area.
+  if(isCircum&&any(/r[\^]?2|r²/))out.push('A circle’s circumference is 2πr (or πd); r² is the area.');
+  return out;
+}
 async function generateKnowledgeTree(s){
   const groups=examTopics(s.exam,s.subject),exam=EXAMS[s.exam]||EXAMS.general;
   const gline=groups.length?('Group EVERY point under EXACTLY one of these strands — copy the strand text verbatim into "group": '+groups.join(' | ')+'.'):'Choose sensible strand names yourself and put each point’s strand in "group".';
@@ -2013,6 +2091,7 @@ async function generateKnowledgeTree(s){
 List the key KNOWLEDGE POINTS a student must master for this exam/level. A knowledge point is ONE specific, learnable skill or concept (a "can-do"), e.g. "Add fractions with unlike denominators" — NOT a broad topic.
 ${gline}
 Give 3 to 7 points per strand, ordered foundational → advanced. When a point builds directly on an earlier one, put the earlier point ids in "prereq".
+CRITICAL: every "prereq" id MUST be one of the ids you list AND must be a point that appears EARLIER (more foundational) — no forward or circular dependencies. Do NOT include any concept beyond the scope of ${exam.label} at ${s.level}; stay within: ${(exam.blurb||'the level’s curriculum').slice(0,240)}
 Return ONLY JSON (no prose/fences): {"points":[{"id":"kebab-case-id","name":"short can-do, ≤ 8 words","group":"strand","prereq":["id"]}]}`;
   const raw=await callAI(prompt,8192,0.3);usageBump(1);
   let obj;try{let t=String(raw||'').trim().replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();const m=t.match(/\{[\s\S]*\}/);obj=JSON.parse(m?m[0]:t);}catch(e){throw new Error('Could not read the knowledge map the AI returned.');}
@@ -2021,7 +2100,8 @@ Return ONLY JSON (no prose/fences): {"points":[{"id":"kebab-case-id","name":"sho
   raw_pts.forEach(p=>{if(!p||!p.name)return;let id=String(p.id||p.name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48)||('p'+points.length);while(seen.has(id))id+='x';seen.add(id);
     points.push({id,name:String(p.name).slice(0,80),group:String(p.group||groups[0]||'General'),prereq:Array.isArray(p.prereq)?p.prereq.map(String):[],card:null});});
   if(!points.length)throw new Error('The AI returned no knowledge points.');
-  const rec={id:curriculumKey(s),key:curriculumKey(s),country:s.country,subject:s.subject,exam:s.exam,examLabel:exam.label,level:s.level,points,updatedAt:Date.now()};
+  const tv=validateTree(points); // deterministic: drop dangling/forward/self prereqs, break cycles
+  const rec={id:curriculumKey(s),key:curriculumKey(s),country:s.country,subject:s.subject,exam:s.exam,examLabel:exam.label,level:s.level,points:tv.points,needsReview:!!tv.repaired,updatedAt:Date.now()};
   await dbPut('curriculum',rec);scheduleDriveSync();return rec;
 }
 // Generate + cache a concept card for one knowledge point (one AI call, lazily on open).
@@ -2030,12 +2110,21 @@ async function ensureConceptCard(rec,point,s){
   const exam=EXAMS[s.exam]||EXAMS.general;
   const prompt=`Write a short LEARN card for the knowledge point "${point.name}" (${point.group}) for a ${s.level} ${s.subject} student (${exam.label}).
 Return ONLY JSON (no prose/fences): {"keyIdea":"1-2 very simple sentences","formulas":["$LaTeX$ formula"],"example":{"q":"a short worked EXAMPLE question","steps":["step 1","step 2"]},"mistakes":["a common mistake"]}
-Keep it simple and age-appropriate. Use $...$ for maths and \\frac{a}{b} for fractions; use × and ÷ symbols; real line breaks. "formulas" may be [] if none. Under ~90 words total. No quotes/JSON wrapping around the whole thing beyond the object itself.`;
+Keep it simple and age-appropriate. Use $...$ for maths and \\frac{a}{b} for fractions; use × and ÷ symbols; real line breaks. "formulas" may be [] if none. Under ~90 words total. No quotes/JSON wrapping around the whole thing beyond the object itself.
+CRITICAL self-check: SOLVE the worked example yourself first — its final step MUST equal the correct answer to example.q, and the formula(s) you list MUST be exactly the one(s) used in the steps. Introduce NO concept, formula or notation beyond ${s.level} (${exam.label}); stay within: ${(exam.blurb||'the level’s curriculum').slice(0,200)}`;
   const raw=await callAI(prompt,1500,0.3);usageBump(1);
   let c;try{let t=String(raw||'').trim().replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();const m=t.match(/\{[\s\S]*\}/);c=JSON.parse(m?m[0]:t);}catch(e){throw new Error('Could not read the concept card the AI returned.');}
   const card={keyIdea:String(c.keyIdea||''),formulas:Array.isArray(c.formulas)?c.formulas.map(String):[],
     example:(c.example&&typeof c.example==='object')?{q:String(c.example.q||''),steps:Array.isArray(c.example.steps)?c.example.steps.map(String):[]}:null,
     mistakes:Array.isArray(c.mistakes)?c.mistakes.map(String):[]};
+  // Deterministic best-effort cautions (no API): known-wrong formula signatures + self-correcting
+  // wording. Surfaced as a "please double-check" note, never auto-rewritten.
+  try{const cc=formulaCautions(point.name,card.formulas);
+    const txt=[card.keyIdea].concat(card.example?card.example.steps||[]:[]).concat(card.mistakes||[]).join(' ');
+    if(typeof explanationSelfCorrects==='function'&&explanationSelfCorrects(txt))cc.push('This card’s wording looked uncertain — please double-check it.');
+    if(cc.length)card.cautions=cc;
+  }catch(e){}
+  card.model=CFG.model||CFG.provider;
   point.card=card;point.cardAt=Date.now();rec.updatedAt=Date.now();await dbPut('curriculum',rec);scheduleDriveSync();return card;
 }
 async function viewKnowledgeMap(){
@@ -2086,11 +2175,19 @@ async function renderKnowledgeMap(rec,s){
   show(el('div',{},backBar('Knowledge map',()=>viewHome()),
     el('div',{class:'card'},el('h2',{},'🗺️ '+(s.subject||'')+' knowledge map'),
       el('p',{class:'sub'},(s.level||'')+' · '+exam.label+' — '+rec.points.length+' knowledge points across '+gnames.length+' strands. Green = strong, amber = shaky, grey = not tried yet.'),
+      rec.needsReview?el('div',{class:'small',style:'color:var(--warn);margin-top:2px'},'⚠️ Some prerequisite links were auto-repaired — consider ↻ Rebuild.'):'',
       mapSvg?el('div',{style:'margin:8px 0 4px;overflow-x:auto',html:mapSvg}):'',
       el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'},
         el('button',{class:'btn',onclick:()=>practiceWeakSpots()},'🎯 Practise weak spots'),
         el('button',{class:'btn ghost',onclick:()=>rebuildKnowledgeMap(s)},'↻ Rebuild map'))),
     ...cards));
+}
+// Parent-visible "this learn card looks wrong" flag — reuses the flagLog / Corrected-answers
+// dashboard plumbing so a suspect concept card surfaces to a grown-up (LEARN content had no
+// correction path before). Tapping Rebuild map regenerates cards.
+function reportCard(rec,point){
+  try{logFlag({at:todayISO(),profileId:pid(),student:activeProfile().name,topic:point.group||'',q:'📖 Learn card: '+plainMath(String(point.name||'')).slice(0,90),from:'learn-card',to:'flagged',exam:(rec&&rec.examLabel)||'',level:(rec&&rec.level)||''});}catch(e){}
+  toast('Thanks — flagged for a grown-up. Use “↻ Rebuild map” to regenerate it.');
 }
 async function viewConcept(key,pointId){
   stopTimer();
@@ -2100,14 +2197,21 @@ async function viewConcept(key,pointId){
   const back=()=>renderKnowledgeMap(rec,defaultSettingsFor(activeProfile()));
   const nameById={};rec.points.forEach(p=>nameById[p.id]=p.name);
   const body=el('div',{});
+  // KaTeX validity guard: a hallucinated/garbled formula that KaTeX can't parse is shown as a
+  // plain-text caution instead of a red error blob (best-effort; assumes ok if KaTeX absent).
+  const latexValid=f=>{try{if(typeof katex==='undefined'||!katex.renderToString)return true;const spans=String(f||'').match(/\$[^$]+\$/g);if(!spans)return true;/* plain text renders as-is */return spans.every(sp=>{try{katex.renderToString(sp.replace(/^\$|\$$/g,''),{throwOnError:true,displayMode:false});return true;}catch(e){return false;}});}catch(e){return true;}};
   const paint=card=>{
     body.innerHTML='';
     if(!card){body.append(el('div',{class:'card'},el('div',{class:'small muted'},'No learn card yet.')));return;}
     body.append(el('div',{class:'card'},
+      (card.cautions&&card.cautions.length)?el('div',{class:'explain',style:'background:#fef2f2;border-color:#fecaca'},el('div',{class:'h'},'⚠️ Please double-check this card'),el('ul',{style:'margin:6px 0 0;padding-left:18px'},...card.cautions.map(c=>el('li',{style:'margin:3px 0'},c)))):'',
       card.keyIdea?el('div',{class:'explain'},el('div',{class:'h'},'Key idea'),el('div',{html:fmtExplain(card.keyIdea)})):'',
-      (card.formulas&&card.formulas.length)?el('div',{class:'explain',style:'background:var(--feature);border-color:#cfe2ff'},el('div',{class:'h'},'Formulas & key facts'),el('ul',{style:'margin:6px 0 0;padding-left:18px'},...card.formulas.map(f=>el('li',{style:'margin:5px 0',html:esc(f)})))):'',
+      (card.formulas&&card.formulas.length)?el('div',{class:'explain',style:'background:var(--feature);border-color:#cfe2ff'},el('div',{class:'h'},'Formulas & key facts'),el('ul',{style:'margin:6px 0 0;padding-left:18px'},...card.formulas.map(f=>latexValid(f)?el('li',{style:'margin:5px 0',html:esc(f)}):el('li',{style:'margin:5px 0;color:var(--warn)'},'⚠️ '+plainMath(String(f))+' — couldn’t read this formula, please Rebuild')))):'',
       (card.example&&card.example.q)?el('div',{class:'explain'},el('div',{class:'h'},'Worked example'),el('div',{class:'qtext',html:esc(card.example.q)}),el('div',{html:fmtExplain((card.example.steps||[]).map((st,i)=>(i+1)+'. '+st).join('\n'))})):'',
-      (card.mistakes&&card.mistakes.length)?el('div',{class:'explain',style:'background:#fff7ed;border-color:#fed7aa'},el('div',{class:'h'},'Watch out for'),el('ul',{style:'margin:6px 0 0;padding-left:18px'},...card.mistakes.map(m=>el('li',{style:'margin:4px 0',html:esc(m)})))):''));
+      (card.mistakes&&card.mistakes.length)?el('div',{class:'explain',style:'background:#fff7ed;border-color:#fed7aa'},el('div',{class:'h'},'Watch out for'),el('ul',{style:'margin:6px 0 0;padding-left:18px'},...card.mistakes.map(m=>el('li',{style:'margin:4px 0',html:esc(m)})))):'',
+      el('div',{class:'row between',style:'margin-top:12px;align-items:center;gap:8px;flex-wrap:wrap'},
+        el('span',{class:'small muted'},'🤖 AI-generated — double-check anything that looks off.'),
+        el('button',{class:'btn sm ghost',type:'button',onclick:()=>reportCard(rec,point)},'🚩 Looks wrong'))));
     renderMath(body);
   };
   const prereqNames=(point.prereq||[]).map(id=>nameById[id]).filter(Boolean);
@@ -2809,17 +2913,24 @@ async function viewDashboard(){
         el('button',{class:'btn sm',onclick:()=>openStudent(p.id,viewHistory)},'📈 Progress'),
         el('button',{class:'btn sm'+(toReview?'':' ghost'),onclick:()=>openStudent(p.id,viewReview)},'📓 Mistakes'+(toReview?' ('+toReview+')':''))));
   });
-  // Manual grade corrections (this device) — helps a parent spot questions the AI got wrong.
+  // AI answer-check tally (this device) — makes accuracy OBSERVABLE rather than asserted.
+  const qy=qualityRecent(14);
+  const qCard=qy.checked?el('div',{class:'card'},el('h2',{},'🔎 AI answer-check'),
+    el('p',{class:'sub'},qy.checked+' generated question'+(qy.checked===1?'':'s')+' double-checked in the last 14 days — '+qy.fixed+' fixed and '+qy.dropped+' dropped before anyone saw them.'),
+    el('p',{class:'small muted',style:'margin:0'},'AI content can still be wrong. Sanity-check anything that looks off — tap “✓ My answer was actually right” on results or “🚩 Looks wrong” on a learn card to correct it.')):'';
+  // Manual + automatic corrections (this device) — helps a parent spot content the AI got wrong.
   const flags=flagLog();
+  const flagLbl=t=>t==='correct'?'→ ✓ correct':t==='wrong'?'→ ✗ wrong':t==='flagged'?'🚩 flagged':'⚠️ '+String(t||'');
   const flagCard=flags.length?el('div',{class:'card'},
-    el('div',{class:'row between',style:'align-items:center'},el('h2',{style:'margin:0'},'🚩 Corrected answers'),el('button',{class:'btn sm ghost',onclick:()=>{if(confirm('Clear the corrected-answers log?')){localStorage.removeItem('practicelab.flags');viewDashboard();}}},'Clear')),
-    el('p',{class:'sub'},'Where someone overrode the mark (this device). Repeated corrections in a topic can flag AI keying issues — check verification is on in Settings → AI.'),
+    el('div',{class:'row between',style:'align-items:center'},el('h2',{style:'margin:0'},'🚩 Flagged content'),el('button',{class:'btn sm ghost',onclick:()=>{if(confirm('Clear the flagged-content log?')){localStorage.removeItem('practicelab.flags');viewDashboard();}}},'Clear')),
+    el('p',{class:'sub'},'Where someone overrode a mark or flagged a learn card (this device). Repeated flags in a topic can point to AI keying issues — check verification is on in Settings → AI.'),
     ...flags.slice(0,12).map(f=>el('div',{class:'qresult',style:'margin-top:6px'},
-      el('div',{class:'row between'},el('b',{},esc(f.student||'Student')+' · '+esc(f.topic||'')),el('span',{class:'small muted'},(f.to==='correct'?'→ ✓ correct':'→ ✗ wrong')+' · '+f.at)),
+      el('div',{class:'row between'},el('b',{},esc(f.student||'Student')+' · '+esc(f.topic||'')),el('span',{class:'small muted'},flagLbl(f.to)+' · '+f.at)),
       el('div',{class:'small muted',style:'margin-top:2px'},esc((f.q||'').slice(0,110))+((f.q||'').length>=110?'…':''))))):'';
   show(el('div',{},
     el('div',{class:'card'},el('h2',{},'👨‍👩‍👧 Family dashboard'),el('p',{class:'sub'},'Each student’s progress at a glance. Tap Open to practise as them, or dig into Progress / Mistakes.')),
     ...cards,
+    qCard,
     flagCard,
     el('div',{class:'small muted',style:'text-align:center;margin-top:6px'},driveToken?'☁️ Synced with Google Drive':'💡 Connect Google Drive (Settings) on each device to see everyone’s progress here.')));
 }
@@ -3194,7 +3305,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.35';
+const APP_VERSION='v2.36';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
