@@ -1005,30 +1005,33 @@ async function packGroundingText(s,opts){
     return items.slice(0,opts.limit||50).map(it=>it.l).join('\n');
   }catch(e){return '';}
 }
-// A curriculum / syllabus doc the parent uploaded (Reference library, marked kind:'curriculum').
-// Text-only (syncs across devices without the binary), so it can ground the Knowledge map on
-// every device. Prefers a same-subject doc; returns {text,label} or null.
-async function curriculumRefText(s){
+// Curriculum / syllabus docs (Reference library, marked kind:'curriculum'; text-only so they
+// sync + ground on every device). Returns a RANKED list (most exam-relevant first): a doc tagged
+// for THIS exam scores highest, then a general/no-exam doc (like the built-in NZ default), then
+// others; recency tiebreaks. Combining several (v2.44) gives more comprehensive grounding — e.g.
+// a Rangitoto maths map grounds on NZ (content scope) + ICAS (competition style) together.
+async function curriculumRefDocs(s,max){
   try{
     const refs=(await dbAll('refs')).filter(r=>r&&(r.profileId==='all'||r.profileId===pid())&&r.kind==='curriculum'&&r.text&&String(r.text).trim());
-    if(!refs.length)return null;
+    if(!refs.length)return [];
     const subj=String(s.subject||'').toLowerCase(),exam=String(s.exam||'').toLowerCase();
     const pool=refs.filter(r=>String((r.tags||{}).subject||'').toLowerCase()===subj);
     const cand=pool.length?pool:refs;
-    // Prefer a doc tagged for THIS exam (e.g. an imported ICAS syllabus for ICAS practices),
-    // else a general/no-exam doc (like the built-in NZ default), else newest. Recency tiebreaks.
     const score=r=>{const re=String((r.tags||{}).exam||'').toLowerCase();let sc=(r.addedAt||0)/1e15;if(exam&&re===exam)sc+=10;else if(!re)sc+=1;return sc;};
-    const pick=cand.slice().sort((a,b)=>score(b)-score(a))[0];
-    return {text:String(pick.text).slice(0,8000),label:pick.name||'curriculum doc'};
-  }catch(e){return null;}
+    return cand.slice().sort((a,b)=>score(b)-score(a)).slice(0,max||3).map(r=>({text:String(r.text),label:r.name||'curriculum doc'}));
+  }catch(e){return [];}
 }
-// Authoritative grounding for the LEARN layer (knowledge tree + concept cards), in priority
-// order: an uploaded CURRICULUM/syllabus doc → matching real past-paper PACKS → none. Returns
-// {text (prompt-ready, or ''), source (a short provenance label shown to the parent)}. Text-only
-// (keeps JSON mode reliable — unlike web search), so the tree/card parsers stay strict.
+// Authoritative grounding for the LEARN layer (knowledge tree + concept cards): COMBINE the
+// matching curriculum/syllabus docs (exam-relevant first) → else matching real past-paper PACKS
+// → else none. Returns {text (prompt-ready, or ''), source (provenance label shown to the parent)}.
+// Text-only (keeps JSON mode reliable — unlike web search), so the tree/card parsers stay strict.
 async function learnGrounding(s,topics){
-  const cur=await curriculumRefText(s);
-  if(cur)return {text:'AUTHORITATIVE CURRICULUM / SYLLABUS REFERENCE — take the real strands, learning objectives, formulas and notation from this and do NOT introduce anything beyond it:\n"""\n'+cur.text+'\n"""',source:'📄 '+cur.label};
+  const docs=await curriculumRefDocs(s,3);
+  if(docs.length){
+    const parts=[],labels=[];let budget=9000; // cap total injected chars so the prompt stays sane
+    for(const d of docs){if(budget<=0)break;const t=d.text.slice(0,Math.max(1200,budget));parts.push('— '+d.label+' —\n'+t);labels.push(d.label);budget-=t.length;}
+    return {text:'AUTHORITATIVE CURRICULUM / SYLLABUS REFERENCE(S) — take the real strands, objectives, formulas and notation from these and COMBINE their scope; do NOT introduce anything beyond them:\n"""\n'+parts.join('\n\n')+'\n"""',source:'📄 '+labels.join(' + ')};
+  }
   const pk=await packGroundingText(s,{topics:topics||[],limit:40});
   if(pk)return {text:'REAL PAST-PAPER QUESTIONS for this exam + level — mirror their scope, topics, notation and difficulty (do not copy):\n"""\n'+pk+'\n"""',source:'📄 real past papers'};
   return {text:'',source:'🤖 AI knowledge (add a syllabus or past-paper packs to ground this)'};
@@ -1693,7 +1696,7 @@ async function seedLocalPacks(){
 // Built-in DEFAULT curriculum grounding — SHIPS in the app (committed, so it's live on
 // GitHub Pages with zero setup). A concise, self-authored summary (not copied from any
 // source, so no copyright). The Knowledge map grounds on this out of the box; a private
-// curriculum.local.js can ADD richer/official docs (newer → wins by recency in curriculumRefText).
+// curriculum.local.js can ADD richer/official docs (combined by learnGrounding/curriculumRefDocs).
 const DEFAULT_CURRICULUM=[{
   id:'nz-maths-default',name:'NZ Curriculum — Maths (Years 0–10)',subject:'Mathematics',country:'New Zealand',
   text:`NEW ZEALAND MATHEMATICS & STATISTICS — Years 0–10 (curriculum levels 1–5). Strands and progression, for grounding practice questions and learn cards.
@@ -3430,7 +3433,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.43';
+const APP_VERSION='v2.44';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
