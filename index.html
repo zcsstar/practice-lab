@@ -1194,17 +1194,89 @@ async function practiceLikeQuestion(q,base){
   try{const set=await buildPracticeSet(s,[]);if(!set.questions.length)throw new Error('No questions came back — please try again.');startSession(s,set.questions,'practice');viewRun();}
   catch(e){alert('Couldn’t build similar questions:\n\n'+(e.message||e));viewHome();}
 }
-// Reusable "understand + fix" action row for a question shown on results / in the notebook:
-// Explain-it-simpler (with a render host + cache), Practise-similar, and Remove-everywhere.
-function learnActions(q,ctx,base,save,onRemove){
+// Reusable "understand + fix" action row for a question shown on results / in the
+// notebook / in the Study view. Always offers Explain-it-simpler (render host + cache)
+// and Practise-similar; `opts` adds Study / Add-to-notebook / Remove as needed.
+function learnActions(q,ctx,base,save,opts){
+  opts=opts||{};
   const host=el('div',{style:'margin-top:8px'});
   if(q.simpleExplanation)host.append(el('div',{class:'explain',style:'background:#f0fdf4;border-color:#bbf7d0'},el('div',{class:'h'},'🧒 Simpler explanation'),el('div',{html:fmtExplain(q.simpleExplanation)})));
   const simplerBtn=el('button',{class:'btn sm',type:'button',onclick:async()=>{simplerBtn.disabled=true;const box=el('div',{class:'explain',style:'background:#f0fdf4;border-color:#bbf7d0'});host.innerHTML='';host.append(box);await explainSimpler(q,ctx,box,save);simplerBtn.disabled=false;}},'🧒 Explain it simpler');
   const row=el('div',{class:'row',style:'margin-top:10px;gap:8px;flex-wrap:wrap'},
     simplerBtn,
     el('button',{class:'btn sm',type:'button',onclick:()=>practiceLikeQuestion(q,base)},'🔁 Practise similar'));
-  if(onRemove)row.append(el('button',{class:'btn sm ghost',type:'button',onclick:onRemove},'🗑 Remove'));
+  if(opts.study)row.append(el('button',{class:'btn sm',type:'button',onclick:()=>viewStudy(q,ctx,{base,save,back:opts.back})},'📖 Study'));
+  if(opts.addToNotebook)row.append((()=>{const ab=el('button',{class:'btn sm',type:'button',onclick:async()=>{const r=await addToNotebook(q,ctx,'learn');ab.disabled=true;ab.textContent=r==='added'?'✓ Added to notebook':'✓ In notebook';toast(r==='added'?'📖 Added — you can revise it later':'Already in your notebook');}},'➕ Add to notebook');return ab;})());
+  if(opts.onRemove)row.append(el('button',{class:'btn sm ghost',type:'button',onclick:opts.onRemove},'🗑 Remove'));
   return el('div',{},row,host);
+}
+// Focused single-question STUDY view — the "go there specifically to learn" page. Shows
+// the question, figure, worked explanation and read-aloud, plus Explain-simpler /
+// Practise-similar / Add-to-notebook / Remove. Reached from the notebook, past results
+// and the all-questions browser. `q` is any question-like record; `opts`={base,save,back}.
+async function viewStudy(q,ctx,opts){
+  stopTimer();ctx=ctx||{};opts=opts||{};
+  const back=opts.back||(()=>viewHome());
+  const base=opts.base||{subject:ctx.subject,level:ctx.level,exam:ctx.exam,difficulty:ctx.difficulty,country:ctx.country};
+  const h=qhash(String(q.question||''));
+  const inNb=(await dbAll('review')).some(r=>r.profileId===pid()&&qhash(String(r.question||''))===h);
+  const corr=q.type==='multiple_choice'?(String.fromCharCode(65+q.answerIndex)+'. '+((q.options||[])[q.answerIndex]??q.answer)):(q.answer||'');
+  const onRemove=async()=>{if(!confirm('Remove this question everywhere and stop it coming back?'))return;await removeQuestionEverywhere(q.question);toast('Removed.');back();};
+  show(el('div',{},backBar('Study',back),
+    el('div',{class:'card'},
+      el('div',{class:'row between'},
+        el('div',{},q.topic?el('span',{class:'pill'},q.topic):'',inNb?el('span',{class:'pill',style:'margin-left:6px;color:var(--brand)'},'📓 in notebook'):''),
+        el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>speak((q.question||'')+'. '+(q.explanation||''))},'🔊')),
+      el('div',{class:'qtext',style:'font-size:18px;margin:10px 0',html:esc(q.question)}),
+      figureEl(q),
+      corr?el('div',{class:'ans-line'},el('b',{},'Answer: '),el('span',{html:esc(corr)})):'',
+      q.explanation?el('div',{class:'explain'},el('div',{class:'h'},'How to solve it'),el('div',{html:fmtExplain(q.explanation)})):'',
+      learnActions(q,ctx,base,opts.save,{onRemove,addToNotebook:!inNb}))));
+}
+// Browse EVERY question the student has answered, across all practices (Howard's ask to
+// revisit past questions — incl. ones he got right). De-dupes by question, filterable by
+// text / topic / result; each opens the Study view.
+async function viewAllQuestions(){
+  stopTimer();
+  const attempts=(await dbAll('attempts')).filter(a=>a.profileId===pid()).sort((a,b)=>b.startedAt-a.startedAt);
+  const seen=new Map(); // most-recent occurrence of each distinct question wins
+  for(const a of attempts)for(const r of (a.results||[])){const k=qhash(String(r.question||''));if(!k||seen.has(k))continue;seen.set(k,{r,a});}
+  const items=[...seen.values()];
+  if(!items.length)return show(el('div',{},backBar('Past questions',()=>viewHome()),el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'📚'),el('div',{},'No questions yet. Do a practice and they’ll all be here to revisit and study.')))));
+  const topics=[...new Set(items.map(x=>x.r.topic||'General'))].sort();
+  const state={q:'',topic:'',status:''};
+  const listHost=el('div',{});
+  const statusBadge=st=>st==='correct'?el('span',{class:'badge ok'},'✓ right'):st==='review'?el('span',{class:'badge warn'},'self-check'):el('span',{class:'badge bad'},'✗ wrong');
+  function renderList(){
+    listHost.innerHTML='';
+    const qq=state.q.toLowerCase().trim();
+    const filtered=items.filter(({r})=>{
+      if(state.topic&&(r.topic||'General')!==state.topic)return false;
+      if(state.status==='correct'&&r.status!=='correct')return false;
+      if(state.status==='wrong'&&r.status==='correct')return false;
+      if(qq&&!plainMath(String(r.question||'')).toLowerCase().includes(qq))return false;
+      return true;
+    });
+    listHost.append(el('p',{class:'sub',style:'margin:4px 0 8px'},filtered.length+' question'+(filtered.length===1?'':'s')));
+    if(!filtered.length){listHost.append(el('div',{class:'card'},el('div',{class:'muted small'},'No questions match those filters.')));return;}
+    for(const {r,a} of filtered){
+      const ctx={level:a.level,subject:a.subject,exam:(EXAMS[a.exam]?a.exam:'icas'),difficulty:a.difficulty,country:a.country};
+      listHost.append(el('div',{class:'qresult',style:'cursor:pointer',onclick:()=>viewStudy(r,ctx,{base:ctx,back:()=>viewAllQuestions()})},
+        el('div',{class:'row between'},
+          el('div',{style:'flex:1'},el('span',{class:'pill'},r.topic||'General'),el('div',{class:'qtext',style:'font-size:15px;margin:6px 0 0',html:esc(r.question)})),
+          el('div',{style:'flex:none;margin-left:8px;text-align:right'},statusBadge(r.status),el('div',{class:'small muted',style:'margin-top:4px'},a.date)))));
+    }
+    renderMath(listHost);
+  }
+  const search=el('input',{type:'text',placeholder:'🔎 Search questions…',oninput:e=>{state.q=e.target.value;renderList();}});
+  const topicSel=el('select',{onchange:e=>{state.topic=e.target.value;renderList();}},el('option',{value:''},'All topics'),...topics.map(t=>el('option',{value:t},t)));
+  const statusSel=el('select',{onchange:e=>{state.status=e.target.value;renderList();}},el('option',{value:''},'All results'),el('option',{value:'correct'},'✓ Got right'),el('option',{value:'wrong'},'✗ Wrong / self-check'));
+  show(el('div',{},backBar('Past questions',()=>viewHome()),
+    el('div',{class:'card'},el('h2',{},'📚 Past questions'),
+      el('p',{class:'sub'},'Every question you’ve done — tap any to study it: get a simpler explanation, practise similar ones, or save it to revise.'),
+      el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'},search,topicSel,statusSel)),
+    listHost));
+  renderList();
 }
 
 /* ============================================================ Marking ============================================================ */
@@ -1368,6 +1440,7 @@ async function viewHome(){
   ]);
   const secProgress=sectionCard('Track progress','See how you’re going and earn rewards.',[
     menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
+    attempts.length?menuItem('📚','Past questions','Revisit any question — study it or practise similar',()=>viewAllQuestions()):null,
     menuItem('🧭','Skills map','Which exam topics you’ve covered — and what to try next',()=>viewSkills()),
     menuItem('🎴','My cards',caughtN?caughtN+' of '+POKEDEX.length+' caught — open packs by practising':'Finish a practice to earn your first card!',()=>viewCards()),
     isParent()?menuItem('👨‍👩‍👧','All students','Compare progress across the family',()=>viewDashboard()):null,
@@ -1753,7 +1826,24 @@ async function submitSession(){
   // notebook (due now). REVIEW re-tests don't file new items — the submitSession
   // wrapper (below) updates the existing item's mastery + spaced-repetition due date.
   if(S.mode!=='review'){
-    for(const r of results){if(r.broken)continue;if(r.status==='wrong'||r.status==='review'||r.flagged){await dbPut('review',{id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),dueAt:Date.now(),attemptId:S.id,exam:S.settings.exam,subject:S.settings.subject,level:S.settings.level,topic:r.q.topic,reason:r.flagged?'flagged':(r.status==='review'?'review':'wrong'),timesSeen:1,timesCorrect:0,mastered:false,question:r.q.question,svg:r.q.svg,image:r.q.image,type:r.q.type,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,hint:r.q.hint,whyWrong:r.q.whyWrong});}}
+    // De-dupe on filing: one notebook entry PER QUESTION (profile+qhash). If the same
+    // question is missed again it refreshes the existing entry (bump timesSeen, re-open
+    // for revision) instead of creating a duplicate — fixes the notebook filling with
+    // repeats of the same question.
+    const existing={};for(const x of (await dbAll('review')).filter(x=>x.profileId===pid()))existing[qhash(String(x.question||''))]=x;
+    for(const r of results){
+      if(r.broken)continue;
+      if(!(r.status==='wrong'||r.status==='review'||r.flagged))continue;
+      const h=qhash(String(r.q.question||'')),prev=existing[h],reason=r.flagged?'flagged':(r.status==='review'?'review':'wrong');
+      if(prev){
+        prev.timesSeen=(prev.timesSeen||0)+1;prev.dueAt=Date.now();prev.reason=reason;
+        if(r.status==='wrong'||r.status==='review'){prev.timesCorrect=0;prev.mastered=false;} // missed again → re-open
+        await dbPut('review',prev);
+      }else{
+        const rec={id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),dueAt:Date.now(),attemptId:S.id,exam:S.settings.exam,subject:S.settings.subject,level:S.settings.level,topic:r.q.topic,reason,timesSeen:1,timesCorrect:0,mastered:false,question:r.q.question,svg:r.q.svg,image:r.q.image,type:r.q.type,options:r.q.options,answerIndex:r.q.answerIndex,answer:r.q.answer,acceptedAnswers:r.q.acceptedAnswers,explanation:r.q.explanation,marks:r.q.marks,hint:r.q.hint,whyWrong:r.q.whyWrong};
+        await dbPut('review',rec);existing[h]=rec;
+      }
+    }
   }
   // Rewards (practice mode): XP from correct answers × difficulty (quality), candy
   // for completing (effort — even low accuracy earns some), and a Poké-Pack card if
@@ -1897,7 +1987,9 @@ function viewResults(a){
     const base={subject:a.subject,level:a.level,exam:(EXAMS[a.exam]?a.exam:'icas'),difficulty:a.difficulty,country:a.country};
     const save=async txt=>{r.simpleExplanation=txt;try{await dbPut('attempts',a);}catch(e){}};
     const onRemove=async()=>{if(!confirm('Remove this question so it never comes back for '+(a.student||activeProfile().name)+'?\n\nIt’s deleted from the bank and mistakes notebook and blocked on all your devices.'))return;await removeQuestionEverywhere(r.question);toast('Removed — it won’t come back.');};
-    const learn=(r.broken||r.status==='wrong'||r.status==='review')?learnActions(r,ctx,base,save,onRemove):el('div',{class:'row',style:'margin-top:10px;gap:8px;flex-wrap:wrap'},el('button',{class:'btn sm',type:'button',onclick:()=>practiceLikeQuestion(r,base)},'🔁 Practise similar'),el('button',{class:'btn sm ghost',type:'button',onclick:onRemove},'🗑 Remove'));
+    // Wrong/self-check/broken are already in the notebook → Explain/Practise/Remove.
+    // Correct ones (Howard: "got it right but didn't get it") → also offer Add-to-notebook.
+    const learn=(r.broken||r.status==='wrong'||r.status==='review')?learnActions(r,ctx,base,save,{onRemove}):learnActions(r,ctx,base,save,{onRemove,addToNotebook:true});
     list.append(el('div',{class:'qresult '+cls},
       el('div',{class:'row between'},el('div',{},el('span',{class:'pill'},'Q'+(i+1)),el('span',{class:'pill'},r.topic),r.flagged?el('span',{class:'pill',style:'color:#d97706'},'🚩 flagged'):''),badge),
       el('div',{class:'qtext',style:'font-size:16px;margin:8px 0 6px',html:esc(r.question)}),
@@ -2329,6 +2421,43 @@ async function acceptTrade(id){
 
 /* ----- MISTAKES NOTEBOOK ----- */
 // Start a re-test session from a list of review items (oldest/least-mastered first, capped).
+// Collapse duplicate mistakes-notebook entries for the SAME question (profile+qhash)
+// into one — keeps the freshest un-mastered record, sums timesSeen, drops the rest.
+// Idempotent; heals legacy data and cross-device sync duplicates.
+async function mergeReviewDuplicates(profileId){
+  const pfid=profileId||pid();
+  const byKey={};for(const r of (await dbAll('review')).filter(r=>r.profileId===pfid)){const k=qhash(String(r.question||''));(byKey[k]=byKey[k]||[]).push(r);}
+  let removed=0;
+  for(const k in byKey){const g=byKey[k];if(g.length<2)continue;
+    g.sort((a,b)=>((a.mastered?1:0)-(b.mastered?1:0))||((b.createdAt||0)-(a.createdAt||0))); // un-mastered + newest first
+    const keep=g[0];keep.timesSeen=g.reduce((s,x)=>s+(x.timesSeen||0),0);
+    for(const x of g.slice(1)){await dbDel('review',x.id);removed++;}
+    await dbPut('review',keep);
+  }
+  if(removed)scheduleDriveSync();
+  return removed;
+}
+// Manually add a question to the mistakes notebook — e.g. a PAST question the student
+// got RIGHT but wants to understand better (Howard's ask). De-dupes by qhash; files a
+// neutral 'learn' item by default so it enters spaced revision WITHOUT being mislabelled
+// a mistake. Clears any "removed" block so an explicitly-added question actually shows.
+async function addToNotebook(q,ctx,reason){
+  reason=reason||'learn';ctx=ctx||{};
+  const h=qhash(String(q.question||''));if(!h)return 'skip';
+  if(CFG.blocked&&CFG.blocked[blockId(h)]){delete CFG.blocked[blockId(h)];saveCfg();}
+  const existing=(await dbAll('review')).find(r=>r.profileId===pid()&&qhash(String(r.question||''))===h);
+  if(existing){
+    existing.timesSeen=(existing.timesSeen||0)+1;
+    if(existing.mastered){existing.mastered=false;existing.timesCorrect=0;}
+    existing.dueAt=Date.now();
+    await dbPut('review',existing);scheduleDriveSync();return 'updated';
+  }
+  await dbPut('review',{id:uid(),profileId:pid(),createdAt:Date.now(),date:todayISO(),dueAt:Date.now(),
+    exam:ctx.exam||q.exam,subject:ctx.subject||q.subject,level:ctx.level||q.level,topic:q.topic||'General',reason,
+    timesSeen:1,timesCorrect:0,mastered:false,question:q.question,svg:q.svg,image:q.image,type:q.type,options:q.options,
+    answerIndex:q.answerIndex,answer:q.answer,acceptedAnswers:q.acceptedAnswers,explanation:q.explanation,marks:q.marks||1,hint:q.hint,whyWrong:q.whyWrong});
+  scheduleDriveSync();return 'added';
+}
 function startReview(items){
   const pick=items.filter(it=>!isBlockedQ(it)&&!questionBroken(it)).slice(0,Math.min(15,items.length)); // don't re-test removed/broken items
   if(!pick.length)return toast('Nothing to practise here.');
@@ -2336,9 +2465,10 @@ function startReview(items){
   startSession({country:'',subject:'Review',exam:pick[0].exam||'general',examLabel:'Mistakes notebook re-test',level:'Mixed',topics:[],difficulty:3,style:'mixed',timeLimitMin:0},qs,'review');
   viewRun();
 }
-const reasonTag={wrong:'✗ got wrong',review:'self-check',flagged:'🚩 flagged'};
+const reasonTag={wrong:'✗ got wrong',review:'self-check',flagged:'🚩 flagged',learn:'📖 to learn'};
 async function viewReview(){
   stopTimer();
+  await mergeReviewDuplicates(); // heal any duplicate entries before showing the notebook
   const all=(await dbAll('review')).filter(r=>r.profileId===pid());
   const active=all.filter(r=>!r.mastered).sort((a,b)=>((reviewDue(b)?1:0)-(reviewDue(a)?1:0))||((a.dueAt||0)-(b.dueAt||0))||(a.timesCorrect-b.timesCorrect)||(a.createdAt-b.createdAt));
   const dueItems=active.filter(reviewDue);
@@ -2355,16 +2485,18 @@ async function viewReview(){
       const base={subject:it.subject||dbase.subject,level:it.level||dbase.level,exam:(EXAMS[it.exam]?it.exam:dbase.exam),difficulty:dbase.difficulty,country:dbase.country};
       const save=async txt=>{it.simpleExplanation=txt;try{await dbPut('review',it);}catch(e){}};
       const onRemove=async()=>{if(!confirm('Remove this question from the notebook and stop it coming back on all your devices?'))return;await removeQuestionEverywhere(it.question);toast('Removed.');viewReview();};
+      const studyBtn=el('button',{class:'btn sm',type:'button',style:'flex:none;margin-left:8px',onclick:(e)=>{e.preventDefault();e.stopPropagation();viewStudy(it,ctx,{base,save,back:()=>viewReview()});}},'📖 Study');
       return el('details',{class:'qresult',style:'cursor:pointer'},
         el('summary',{style:'list-style:none'},el('div',{class:'row between'},
           el('div',{class:'qtext',style:'font-size:15px;margin:0;flex:1',html:esc(it.question)}),
+          studyBtn,
           el('span',{class:'pill',style:'flex:none;margin-left:8px'},(it.timesCorrect||0)+'/2'))),
         figureEl(it),
         el('div',{class:'ans-line'},el('b',{},'Correct answer: '),el('span',{html:esc(corr)})),
         el('div',{class:'small muted',style:'margin-top:4px'},(reasonTag[it.reason]||'to revise')+' · seen '+(it.timesSeen||0)+'× · '+(it.timesCorrect||0)+'/2 correct to master'),
         el('div',{class:'explain'},el('div',{class:'row between'},el('div',{class:'h'},'How to solve it'),el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:(e)=>{e.preventDefault();speak((it.question||'')+'. '+it.explanation);}},'🔊')),el('div',{html:fmtExplain(it.explanation)})),
         el('div',{style:'margin-top:6px'},'💬 Struggling with this one?'),
-        learnActions(it,ctx,base,save,onRemove));
+        learnActions(it,ctx,base,save,{onRemove}));
     });
     return el('div',{class:'card'},
       el('div',{class:'row between'},el('h2',{style:'margin:0'},topic),el('button',{class:'btn sm primary',onclick:()=>startReview(items)},'Re-test ('+items.length+')')),
@@ -2800,6 +2932,7 @@ async function mergeRemote(remote){
   // Past-paper packs (shared, real questions): merge by id; a newer updatedAt wins — but skip
   // anything tombstoned unless the remote copy is a NEWER re-import (updatedAt beats the delete).
   const lpk=new Map((await dbAll('packs')).map(p=>[p.id,p]));for(const p of(remote.packs||[])){const td=tomb[p.id];if(td&&td>=(p.updatedAt||0))continue;const cur=lpk.get(p.id);if(!cur||(p.updatedAt||0)>(cur.updatedAt||0))await dbPut('packs',p);}
+  try{for(const p of CFG.profiles)await mergeReviewDuplicates(p.id);}catch(e){} // merging remote review items can reintroduce same-question dupes across devices
   await reconcileProfiles();
 }
 
@@ -2896,7 +3029,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.31';
+const APP_VERSION='v2.32';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

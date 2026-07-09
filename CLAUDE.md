@@ -211,8 +211,10 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   (max-wins in `mergeRemote`, which also drops any now-blocked bank/review item), so a
   Drive merge can't resurrect it.
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
-  Bank/Dashboard/Skills/Guide`. `show(node)` swaps `#app` and re-runs KaTeX. No router;
-  functions call each other. `viewBank` = question-bank hub; `viewDashboard` =
+  Bank/Dashboard/Skills/Guide/Study/AllQuestions`. `show(node)` swaps `#app` and re-runs
+  KaTeX. No router; functions call each other. `viewBank` = question-bank hub;
+  `viewStudy` = focused single-question learning page; `viewAllQuestions` = searchable
+  browser of every past question; `viewDashboard` =
   parent-only all-students progress overview; `viewSkills` = exam-topic coverage map;
   `viewGuide` = "How it works" guide (header ❓ + auto-shows on first run via the
   `practicelab.guideSeen` flag). **`viewHome` groups the menu into labelled section
@@ -242,6 +244,23 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     drill grounded on THAT specific question via a new `buildPrompt` **`exemplar`** field
     ("same skill, new numbers/context") — treated as `wantsFresh` (never banked). Small
     text calls go through the `callAI(prompt,maxTokens,temp)` provider-dispatch helper.
+  - **De-dupe (v2.32)** — the notebook was filling with repeats of the SAME question (one
+    `review` row per wrong encounter). Filing in `submitSession` now upserts by
+    `profileId+qhash` (bump `timesSeen`, re-open for revision) instead of inserting;
+    `mergeReviewDuplicates(profileId)` collapses existing dupes (keeps the freshest
+    un-mastered row, sums `timesSeen`) and runs on `viewReview` open + after every Drive
+    merge (cross-device same-question dupes).
+  - **Study view + add-to-notebook + past-questions browser (v2.32)** —
+    `viewStudy(q,ctx,opts)` is a focused single-question page (question, figure, worked
+    explanation, read-aloud + the `learnActions` row); reached from a **📖 Study** button
+    on each notebook row, from the all-questions browser, and via `learnActions`'
+    `opts.study`. `addToNotebook(q,ctx,reason)` files a question the student got RIGHT but
+    wants to understand (Howard) as a neutral **`learn`** item (`reasonTag.learn`
+    "📖 to learn" — revised like a mistake but not mislabelled one; clears any block).
+    Surfaced as **➕ Add to notebook** via `learnActions` `opts.addToNotebook` on CORRECT
+    results and in the Study view. `viewAllQuestions()` (home Track-progress "📚 Past
+    questions") lists EVERY answered question (de-duped by qhash, most-recent wins),
+    filterable by text/topic/result, each row opening `viewStudy`.
 - **Progress & stats** (`viewHistory`, home "📈 Progress & stats") — analytics
   dashboard: at-a-glance tiles (questions/accuracy/time/streak), a score-trend
   line and per-day activity bars (`chartLine`/`chartBars` — tiny inline-SVG
@@ -518,7 +537,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.31**). Claude suggests the next number on
+  minor on each release (currently at **v2.32**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach
