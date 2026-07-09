@@ -242,9 +242,20 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     (only counted when the filtered set is actually served, not the all-dropped fallback).
   - All deterministic pieces (`validateTree`/`formulaCautions`) unit-tested in
     [accuracy.test.js](accuracy.test.js); the diff was reviewed by an adversarial code-review
-    workflow and all confirmed findings fixed. **Still Tier-1** — Tier-2 (ground the LEARN layer
-    on packs/curriculum docs) and Tier-3 (concept-card AI verify, cross-provider adjudication,
-    parent approval queue) are the follow-ups.
+    workflow and all confirmed findings fixed.
+  - **Tier-2 grounding (v2.37) — anchor the LEARN layer in authoritative sources:**
+    `learnGrounding(s,topics)` returns `{text,source}` in priority order: an uploaded
+    **curriculum/syllabus doc** (`curriculumRefText` — a ref marked `kind:'curriculum'` in the
+    Reference library; TEXT-only so it syncs and grounds on every device, unlike paper images) →
+    matching **past-paper packs** (`packGroundingText`, now **topic-relevance-ranked** — shuffle-
+    then-stable-sort so a "fractions" card grounds on fraction questions yet keeps run-to-run
+    variety) → none. `generateKnowledgeTree`/`ensureConceptCard` inject `g.text` and stamp
+    `rec.source`/`card.source`, shown as a **"Grounded on: …"** provenance line on the map + cards.
+    Text-only grounding keeps JSON mode reliable (no web-search for the structured LEARN calls).
+    `packGroundingText(s,opts)` gained `{topics,limit,includeAnswers}`; the topic ranking also
+    sharpens QUESTION grounding for topic-scoped drills. **Still Tier-3** (concept-card AI verify,
+    cross-provider adjudication, parent approval queue) remains the follow-up. Caveat (pre-existing
+    refs first-wins merge): set the Curriculum toggle on the device that imported the doc.
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
   Bank/Dashboard/Skills/Guide/Study/AllQuestions`. `show(node)` swaps `#app` and re-runs
   KaTeX. No router; functions call each other. `viewBank` = question-bank hub;
@@ -603,7 +614,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.36**). Claude suggests the next number on
+  minor on each release (currently at **v2.37**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

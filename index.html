@@ -970,17 +970,60 @@ function outTokens(count,cap){return Math.min(cap,Math.max(16384,4096+(count||10
 // thin, use the packs"). Shared across the family; matched by subject + year level.
 function packSubj(s){s=String(s||'').toLowerCase();return /math/.test(s)?'math':/sci/.test(s)?'science':/eng|writ|spell|read/.test(s)?'english':s.trim();}
 function packLvl(s){const m=String(s||'').match(/\d+/);return m?+m[0]:null;}
-async function packGroundingText(s){
+// Grounding text from matching past-paper packs. opts.topics → relevance-rank the pack
+// questions by topic/keyword overlap (so a "fractions" drill grounds on fraction questions,
+// not the whole paper — v2.37); opts.limit caps lines; opts.includeAnswers appends each
+// question's known-correct answer (used to CALIBRATE, not for the style-only default).
+async function packGroundingText(s,opts){
+  opts=opts||{};
   try{
     const packs=await dbAll('packs');if(!packs.length)return '';
     const subj=packSubj(s.subject),lvl=packLvl(s.level);
     const match=packs.filter(p=>packSubj(p.subject)===subj&&(lvl==null||packLvl(p.level)==null||packLvl(p.level)===lvl));
-    const lines=[];
-    match.forEach(p=>(p.questions||[]).forEach(q=>{if(!q.question)return;let l='• '+plainMath(String(q.question)).slice(0,240);if(q.type==='multiple_choice'&&Array.isArray(q.options))l+=' (options: '+q.options.map(o=>plainMath(String(o))).join(' / ')+')';lines.push(l);}));
-    if(!lines.length)return '';
-    for(let i=lines.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=lines[i];lines[i]=lines[j];lines[j]=t;} // vary which examples ground each batch
-    return lines.slice(0,50).join('\n');
+    const items=[];
+    match.forEach(p=>(p.questions||[]).forEach(q=>{if(!q.question)return;
+      const qt=plainMath(String(q.question));
+      let l='• '+qt.slice(0,240);
+      if(q.type==='multiple_choice'&&Array.isArray(q.options))l+=' (options: '+q.options.map(o=>plainMath(String(o))).join(' / ')+')';
+      if(opts.includeAnswers){const a=(q.type==='multiple_choice'&&Array.isArray(q.options)&&typeof q.answerIndex==='number')?q.options[q.answerIndex]:q.answer;if(a!=null&&String(a).trim()!=='')l+=' [answer: '+plainMath(String(a))+']';}
+      items.push({l,topic:String(q.topic||'').toLowerCase(),text:qt.toLowerCase()});
+    }));
+    if(!items.length)return '';
+    const topics=(opts.topics||s.topics||[]).map(t=>String(t).toLowerCase()).filter(Boolean);
+    const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=a[i];a[i]=a[j];a[j]=t;}return a;};
+    if(topics.length){
+      const kw=topics.join(' ').split(/[^a-z0-9]+/).filter(w=>w.length>3);
+      const scoreOf=it=>{let sc=0;topics.forEach(t=>{if(it.topic&&(it.topic.includes(t)||t.includes(it.topic)))sc+=3;});kw.forEach(w=>{if(it.topic.includes(w))sc+=2;else if(it.text.includes(w))sc+=1;});return sc;};
+      items.forEach(it=>it.sc=scoreOf(it));
+      shuffle(items); // shuffle FIRST so the stable sort keeps run-to-run variety WITHIN a score tier
+      if(items.some(it=>it.sc>0))items.sort((a,b)=>b.sc-a.sc); // relevant first; equal-relevance stays varied
+    }else shuffle(items);
+    return items.slice(0,opts.limit||50).map(it=>it.l).join('\n');
   }catch(e){return '';}
+}
+// A curriculum / syllabus doc the parent uploaded (Reference library, marked kind:'curriculum').
+// Text-only (syncs across devices without the binary), so it can ground the Knowledge map on
+// every device. Prefers a same-subject doc; returns {text,label} or null.
+async function curriculumRefText(s){
+  try{
+    const refs=(await dbAll('refs')).filter(r=>r&&(r.profileId==='all'||r.profileId===pid())&&r.kind==='curriculum'&&r.text&&String(r.text).trim());
+    if(!refs.length)return null;
+    const subj=String(s.subject||'').toLowerCase();
+    const cand=refs.filter(r=>String((r.tags||{}).subject||'').toLowerCase()===subj);
+    const pick=(cand.length?cand:refs).sort((a,b)=>(b.addedAt||0)-(a.addedAt||0))[0];
+    return {text:String(pick.text).slice(0,8000),label:pick.name||'curriculum doc'};
+  }catch(e){return null;}
+}
+// Authoritative grounding for the LEARN layer (knowledge tree + concept cards), in priority
+// order: an uploaded CURRICULUM/syllabus doc → matching real past-paper PACKS → none. Returns
+// {text (prompt-ready, or ''), source (a short provenance label shown to the parent)}. Text-only
+// (keeps JSON mode reliable — unlike web search), so the tree/card parsers stay strict.
+async function learnGrounding(s,topics){
+  const cur=await curriculumRefText(s);
+  if(cur)return {text:'AUTHORITATIVE CURRICULUM / SYLLABUS REFERENCE — take the real strands, learning objectives, formulas and notation from this and do NOT introduce anything beyond it:\n"""\n'+cur.text+'\n"""',source:'📄 '+cur.label};
+  const pk=await packGroundingText(s,{topics:topics||[],limit:40});
+  if(pk)return {text:'REAL PAST-PAPER QUESTIONS for this exam + level — mirror their scope, topics, notation and difficulty (do not copy):\n"""\n'+pk+'\n"""',source:'📄 real past papers'};
+  return {text:'',source:'🤖 AI knowledge (add a syllabus or past-paper packs to ground this)'};
 }
 // Tolerant parse of the verifier's {"checks":[...]} reply (no PLParse — different shape).
 function parseChecks(raw){
@@ -1686,17 +1729,19 @@ async function viewRefs(){
     const examSel=selOf(EXAMS[t.exam]?t.exam:'icas',Object.entries(EXAMS).map(([k,v])=>[k,v.label]),()=>{});
     const lvlIn=el('input',{type:'text',value:t.level||'',placeholder:'e.g. Year 5 (Paper C)'});
     const yrIn=el('input',{type:'text',value:t.year||'',placeholder:'e.g. 2019'});
-    let shared=r.profileId==='all';
-    const save=async()=>{r.tags={country:t.country||'New Zealand',exam:examSel.value,subject:subSel.value,level:lvlIn.value.trim(),year:yrIn.value.trim()};r.profileId=shared?'all':pid();await dbPut('refs',r);scheduleDriveSync();toast('Saved tags ✓');viewRefs();};
+    let shared=r.profileId==='all',isCurr=r.kind==='curriculum';
+    const save=async()=>{r.tags={country:t.country||'New Zealand',exam:examSel.value,subject:subSel.value,level:lvlIn.value.trim(),year:yrIn.value.trim()};r.profileId=shared?'all':pid();r.kind=isCurr?'curriculum':undefined;await dbPut('refs',r);scheduleDriveSync();toast('Saved ✓');viewRefs();};
     list.append(el('div',{class:'refitem',style:'display:block'},
       el('div',{class:'row between'},
-        el('div',{class:'row',style:'gap:10px;align-items:center;min-width:0'},el('span',{style:'font-size:22px;flex:none'},r.mime==='application/pdf'?'📕':r.mime.startsWith('image/')?'🖼️':'📃'),el('div',{style:'min-width:0'},el('div',{class:'nm'},r.name),el('div',{class:'dt'},tagline+' — '+kind))),
-        el('div',{class:'row',style:'gap:6px;flex:none;align-items:center'},r.profileId==='all'?el('span',{class:'pill'},'all kids'):'',el('button',{class:'btn sm danger',onclick:async()=>{if(confirm('Remove '+r.name+'?')){await dbDel('refs',r.id);CFG.refsDeleted=CFG.refsDeleted||{};CFG.refsDeleted[r.id]=Date.now();saveCfg();scheduleDriveSync();viewRefs();}}},'🗑'))),
+        el('div',{class:'row',style:'gap:10px;align-items:center;min-width:0'},el('span',{style:'font-size:22px;flex:none'},r.kind==='curriculum'?'📘':r.mime==='application/pdf'?'📕':r.mime.startsWith('image/')?'🖼️':'📃'),el('div',{style:'min-width:0'},el('div',{class:'nm'},r.name),el('div',{class:'dt'},tagline+' — '+kind))),
+        el('div',{class:'row',style:'gap:6px;flex:none;align-items:center'},r.kind==='curriculum'?el('span',{class:'pill',style:'color:var(--brand)'},'📘 syllabus'):'',r.profileId==='all'?el('span',{class:'pill'},'all kids'):'',el('button',{class:'btn sm danger',onclick:async()=>{if(confirm('Remove '+r.name+'?')){await dbDel('refs',r.id);CFG.refsDeleted=CFG.refsDeleted||{};CFG.refsDeleted[r.id]=Date.now();saveCfg();scheduleDriveSync();viewRefs();}}},'🗑'))),
       el('details',{class:'adv',style:'margin-top:8px'},el('summary',{},'Edit tags'),
         el('div',{class:'grid cols2'},field('Subject','',subSel),field('Exam','',examSel)),
         el('div',{class:'grid cols2'},field('Level / paper','',lvlIn),field('Year','',yrIn)),
         toggle('Shared with all students',shared,v=>{shared=v;}),
-        el('button',{class:'btn primary',style:'margin-top:8px',onclick:save},'Save tags'))));
+        toggle('Curriculum / syllabus doc (grounds the Knowledge map)',isCurr,v=>{isCurr=v;}),
+        (isCurr||r.kind==='curriculum')&&!(r.text&&String(r.text).trim())?el('div',{class:'small',style:'color:var(--warn);margin-top:4px'},'⚠️ No readable text was extracted from this file — a syllabus doc must be a text/searchable-PDF to ground the map.'):'',
+        el('button',{class:'btn primary',style:'margin-top:8px',onclick:save},'Save'))));
   });
   const fileInput=el('input',{type:'file',multiple:'',accept:'.pdf,.txt,.md,.csv,image/*',style:'display:none',onchange:async e=>{
     const files=[...e.target.files];if(!files.length)return;
@@ -1709,7 +1754,7 @@ async function viewRefs(){
     backBar('Reference library',()=>viewHome()),
     el('div',{class:'card'},
       el('h2',{},'📚 Reference library'),
-      el('p',{class:'sub'},'Import real past papers (e.g. your ICAS PDFs). Each is tagged by exam/subject/level/year and shared across all students. When you pre-generate a bank for a matching practice, the AI grounds the questions in that paper’s authentic style — one call, then reused for free.'),
+      el('p',{class:'sub'},'Import real past papers (e.g. your ICAS PDFs). Each is tagged by exam/subject/level/year and shared across all students. When you pre-generate a bank for a matching practice, the AI grounds the questions in that paper’s authentic style — one call, then reused for free. Tip: mark a syllabus/curriculum doc as “Curriculum” (in its Edit tags) to ground the Knowledge map’s strands, formulas and cards on the real objectives.'),
       el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>fileInput.click()},'⬆️ Import past papers'),fileInput),
       el('div',{style:'margin-top:14px'},list),
       el('p',{class:'small muted',style:'margin-top:8px'},'Stored privately in this browser (synced to your Google Drive if enabled). Filenames like “ICAS Maths Paper C 2019.pdf” auto-tag correctly. Import just the papers you use — not the whole 1.3 GB archive.')
@@ -2087,11 +2132,12 @@ function formulaCautions(name,formulas){
 async function generateKnowledgeTree(s){
   const groups=examTopics(s.exam,s.subject),exam=EXAMS[s.exam]||EXAMS.general;
   const gline=groups.length?('Group EVERY point under EXACTLY one of these strands — copy the strand text verbatim into "group": '+groups.join(' | ')+'.'):'Choose sensible strand names yourself and put each point’s strand in "group".';
+  const g=await learnGrounding(s); // ground on a curriculum doc / real packs when available
   const prompt=`You are a curriculum expert for ${s.country} ${exam.label} ${s.subject} at ${s.level}.
 List the key KNOWLEDGE POINTS a student must master for this exam/level. A knowledge point is ONE specific, learnable skill or concept (a "can-do"), e.g. "Add fractions with unlike denominators" — NOT a broad topic.
 ${gline}
 Give 3 to 7 points per strand, ordered foundational → advanced. When a point builds directly on an earlier one, put the earlier point ids in "prereq".
-CRITICAL: every "prereq" id MUST be one of the ids you list AND must be a point that appears EARLIER (more foundational) — no forward or circular dependencies. Do NOT include any concept beyond the scope of ${exam.label} at ${s.level}; stay within: ${(exam.blurb||'the level’s curriculum').slice(0,240)}
+CRITICAL: every "prereq" id MUST be one of the ids you list AND must be a point that appears EARLIER (more foundational) — no forward or circular dependencies. Do NOT include any concept beyond the scope of ${exam.label} at ${s.level}; stay within: ${(exam.blurb||'the level’s curriculum').slice(0,240)}${g.text?('\n\n'+g.text):''}
 Return ONLY JSON (no prose/fences): {"points":[{"id":"kebab-case-id","name":"short can-do, ≤ 8 words","group":"strand","prereq":["id"]}]}`;
   const raw=await callAI(prompt,8192,0.3);usageBump(1);
   let obj;try{let t=String(raw||'').trim().replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();const m=t.match(/\{[\s\S]*\}/);obj=JSON.parse(m?m[0]:t);}catch(e){throw new Error('Could not read the knowledge map the AI returned.');}
@@ -2101,17 +2147,18 @@ Return ONLY JSON (no prose/fences): {"points":[{"id":"kebab-case-id","name":"sho
     points.push({id,name:String(p.name).slice(0,80),group:String(p.group||groups[0]||'General'),prereq:Array.isArray(p.prereq)?p.prereq.map(String):[],card:null});});
   if(!points.length)throw new Error('The AI returned no knowledge points.');
   const tv=validateTree(points); // deterministic: drop dangling/forward/self prereqs, break cycles
-  const rec={id:curriculumKey(s),key:curriculumKey(s),country:s.country,subject:s.subject,exam:s.exam,examLabel:exam.label,level:s.level,points:tv.points,needsReview:!!tv.repaired,updatedAt:Date.now()};
+  const rec={id:curriculumKey(s),key:curriculumKey(s),country:s.country,subject:s.subject,exam:s.exam,examLabel:exam.label,level:s.level,points:tv.points,needsReview:!!tv.repaired,source:g.source,updatedAt:Date.now()};
   await dbPut('curriculum',rec);scheduleDriveSync();return rec;
 }
 // Generate + cache a concept card for one knowledge point (one AI call, lazily on open).
 async function ensureConceptCard(rec,point,s){
   if(point.card)return point.card;
   const exam=EXAMS[s.exam]||EXAMS.general;
+  const g=await learnGrounding(s,[point.group]); // ground on curriculum doc / packs for THIS strand
   const prompt=`Write a short LEARN card for the knowledge point "${point.name}" (${point.group}) for a ${s.level} ${s.subject} student (${exam.label}).
 Return ONLY JSON (no prose/fences): {"keyIdea":"1-2 very simple sentences","formulas":["$LaTeX$ formula"],"example":{"q":"a short worked EXAMPLE question","steps":["step 1","step 2"]},"mistakes":["a common mistake"]}
 Keep it simple and age-appropriate. Use $...$ for maths and \\frac{a}{b} for fractions; use × and ÷ symbols; real line breaks. "formulas" may be [] if none. Under ~90 words total. No quotes/JSON wrapping around the whole thing beyond the object itself.
-CRITICAL self-check: SOLVE the worked example yourself first — its final step MUST equal the correct answer to example.q, and the formula(s) you list MUST be exactly the one(s) used in the steps. Introduce NO concept, formula or notation beyond ${s.level} (${exam.label}); stay within: ${(exam.blurb||'the level’s curriculum').slice(0,200)}`;
+CRITICAL self-check: SOLVE the worked example yourself first — its final step MUST equal the correct answer to example.q, and the formula(s) you list MUST be exactly the one(s) used in the steps. Introduce NO concept, formula or notation beyond ${s.level} (${exam.label}); stay within: ${(exam.blurb||'the level’s curriculum').slice(0,200)}${g.text?('\n\nGround the formula, method and difficulty in this authentic material:\n'+g.text):''}`;
   const raw=await callAI(prompt,1500,0.3);usageBump(1);
   let c;try{let t=String(raw||'').trim().replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();const m=t.match(/\{[\s\S]*\}/);c=JSON.parse(m?m[0]:t);}catch(e){throw new Error('Could not read the concept card the AI returned.');}
   const card={keyIdea:String(c.keyIdea||''),formulas:Array.isArray(c.formulas)?c.formulas.map(String):[],
@@ -2124,7 +2171,7 @@ CRITICAL self-check: SOLVE the worked example yourself first — its final step 
     if(typeof explanationSelfCorrects==='function'&&explanationSelfCorrects(txt))cc.push('This card’s wording looked uncertain — please double-check it.');
     if(cc.length)card.cautions=cc;
   }catch(e){}
-  card.model=CFG.model||CFG.provider;
+  card.model=CFG.model||CFG.provider;card.source=g.source;
   point.card=card;point.cardAt=Date.now();rec.updatedAt=Date.now();await dbPut('curriculum',rec);scheduleDriveSync();return card;
 }
 async function viewKnowledgeMap(){
@@ -2175,6 +2222,7 @@ async function renderKnowledgeMap(rec,s){
   show(el('div',{},backBar('Knowledge map',()=>viewHome()),
     el('div',{class:'card'},el('h2',{},'🗺️ '+(s.subject||'')+' knowledge map'),
       el('p',{class:'sub'},(s.level||'')+' · '+exam.label+' — '+rec.points.length+' knowledge points across '+gnames.length+' strands. Green = strong, amber = shaky, grey = not tried yet.'),
+      rec.source?el('div',{class:'small muted',style:'margin-top:2px'},'Grounded on: '+rec.source):'',
       rec.needsReview?el('div',{class:'small',style:'color:var(--warn);margin-top:2px'},'⚠️ Some prerequisite links were auto-repaired — consider ↻ Rebuild.'):'',
       mapSvg?el('div',{style:'margin:8px 0 4px;overflow-x:auto',html:mapSvg}):'',
       el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'},
@@ -2210,7 +2258,7 @@ async function viewConcept(key,pointId){
       (card.example&&card.example.q)?el('div',{class:'explain'},el('div',{class:'h'},'Worked example'),el('div',{class:'qtext',html:esc(card.example.q)}),el('div',{html:fmtExplain((card.example.steps||[]).map((st,i)=>(i+1)+'. '+st).join('\n'))})):'',
       (card.mistakes&&card.mistakes.length)?el('div',{class:'explain',style:'background:#fff7ed;border-color:#fed7aa'},el('div',{class:'h'},'Watch out for'),el('ul',{style:'margin:6px 0 0;padding-left:18px'},...card.mistakes.map(m=>el('li',{style:'margin:4px 0',html:esc(m)})))):'',
       el('div',{class:'row between',style:'margin-top:12px;align-items:center;gap:8px;flex-wrap:wrap'},
-        el('span',{class:'small muted'},'🤖 AI-generated — double-check anything that looks off.'),
+        el('span',{class:'small muted'},(card.source?'Grounded on: '+card.source+' · ':'')+'🤖 AI-generated — double-check anything that looks off.'),
         el('button',{class:'btn sm ghost',type:'button',onclick:()=>reportCard(rec,point)},'🚩 Looks wrong'))));
     renderMath(body);
   };
@@ -3305,7 +3353,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.36';
+const APP_VERSION='v2.37';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
