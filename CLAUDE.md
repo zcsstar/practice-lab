@@ -256,6 +256,14 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     sharpens QUESTION grounding for topic-scoped drills. **Still Tier-3** (concept-card AI verify,
     cross-provider adjudication, parent approval queue) remains the follow-up. Caveat (pre-existing
     refs first-wins merge): set the Curriculum toggle on the device that imported the doc.
+  - **Built-in curriculum source links (v2.38):** `CURRICULUM_SOURCES` is a curated list of
+    OFFICIAL syllabus / exam-skills URLs (NZ Curriculum Maths on Tāhūrangi, the NZ Curriculum
+    portal, ICAS maths + all-subjects on icasassessments.com, NCEA Maths on NZQA), rendered by
+    `curriculumSourcesCard()` in the Reference library with `Open ↗` links (new tab, noopener) +
+    import guidance. LINKS ONLY — never scraped content, so copyright frameworks (ICAS) stay
+    off-repo; the parent opens → downloads → imports → marks Curriculum. An ungrounded map shows a
+    "🔗 Add a curriculum source" button → `viewRefs`. (Runtime auto-fetch of these pages isn't
+    possible — CORS + the static/file:// constraint — hence the open-download-import flow.)
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
   Bank/Dashboard/Skills/Guide/Study/AllQuestions`. `show(node)` swaps `#app` and re-runs
   KaTeX. No router; functions call each other. `viewBank` = question-bank hub;
@@ -614,7 +622,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.37**). Claude suggests the next number on
+  minor on each release (currently at **v2.38**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

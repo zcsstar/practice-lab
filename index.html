@@ -1716,6 +1716,24 @@ function viewProfiles(){
 }
 
 /* ----- REFERENCE LIBRARY ----- */
+// Curated OFFICIAL curriculum / exam-skills sources (links only — never scraped content, so
+// copyright frameworks like ICAS stay off-repo). The parent opens one, downloads the PDF/page,
+// imports it above, and marks it "Curriculum" to ground the Knowledge map on the real objectives.
+const CURRICULUM_SOURCES=[
+  {title:'NZ Curriculum — Mathematics & Statistics (Years 0–10)',org:'Ministry of Education · Tāhūrangi',url:'https://newzealandcurriculum.tahurangi.education.govt.nz/nzc---mathematics-and-statistics-years-0-8/5637238338.p',note:'The official NZ maths curriculum statement (PDF in the page’s File Downloads). Best syllabus doc to ground an ICAS/general maths map.'},
+  {title:'NZ Curriculum portal (all learning areas)',org:'Ministry of Education · Tāhūrangi',url:'https://newzealandcurriculum.tahurangi.education.govt.nz/',note:'Home for every subject + year level — English, Science, etc.'},
+  {title:'ICAS Mathematics — skills assessed by year',org:'ICAS Assessments (Janison)',url:'https://www.icasassessments.com/products-icas/subjects/mathematics/',note:'What each ICAS maths paper (A–F …) tests. © ICAS — link only; use it to tag/scope, don’t paste their framework.'},
+  {title:'ICAS — all subjects',org:'ICAS Assessments (Janison)',url:'https://www.icasassessments.com/products-icas/subjects/',note:'English, Science, Digital Technologies, Writing, Spelling.'},
+  {title:'NCEA Mathematics & Statistics standards',org:'NZQA',url:'https://www2.nzqa.govt.nz/ncea/subjects/select-subject/mathematics-and-statistics/',note:'Achievement standards (Levels 1–3) for the NCEA exam preset.'},
+];
+function curriculumSourcesCard(){
+  return el('div',{class:'card'},
+    el('div',{class:'row between',style:'align-items:center'},el('h2',{style:'margin:0'},'🔗 Official curriculum sources'),el('span',{class:'pill'},'free')),
+    el('p',{class:'sub',style:'margin:6px 0 10px'},'Authoritative syllabus / exam-skills pages. Open one, download the PDF (or copy the text into a .txt), Import it above, then in its Edit tags toggle “Curriculum” and Rebuild the Knowledge map — it then grounds on the real objectives, not just AI memory.'),
+    ...CURRICULUM_SOURCES.map(s=>el('div',{class:'row between',style:'gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)'},
+      el('div',{style:'flex:1;min-width:0'},el('div',{style:'font-weight:600'},s.title),el('div',{class:'small muted',style:'margin-top:2px'},s.org+' — '+s.note)),
+      el('a',{class:'btn sm',style:'flex:none',href:s.url,target:'_blank',rel:'noopener noreferrer'},'Open ↗'))));
+}
 async function viewRefs(){
   stopTimer();
   const refs=(await dbAll('refs')).filter(r=>r.profileId===pid()||r.profileId==='all').sort((a,b)=>b.addedAt-a.addedAt);
@@ -1758,7 +1776,8 @@ async function viewRefs(){
       el('div',{class:'row'},el('button',{class:'btn primary',onclick:()=>fileInput.click()},'⬆️ Import past papers'),fileInput),
       el('div',{style:'margin-top:14px'},list),
       el('p',{class:'small muted',style:'margin-top:8px'},'Stored privately in this browser (synced to your Google Drive if enabled). Filenames like “ICAS Maths Paper C 2019.pdf” auto-tag correctly. Import just the papers you use — not the whole 1.3 GB archive.')
-    )
+    ),
+    curriculumSourcesCard()
   ));
 }
 
@@ -2227,6 +2246,7 @@ async function renderKnowledgeMap(rec,s){
       mapSvg?el('div',{style:'margin:8px 0 4px;overflow-x:auto',html:mapSvg}):'',
       el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'},
         el('button',{class:'btn',onclick:()=>practiceWeakSpots()},'🎯 Practise weak spots'),
+        (rec.source&&/🤖/.test(rec.source))?el('button',{class:'btn',onclick:()=>viewRefs()},'🔗 Add a curriculum source'):'',
         el('button',{class:'btn ghost',onclick:()=>rebuildKnowledgeMap(s)},'↻ Rebuild map'))),
     ...cards));
 }
@@ -3353,7 +3373,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.37';
+const APP_VERSION='v2.38';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
