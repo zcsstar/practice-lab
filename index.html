@@ -495,10 +495,11 @@ function activeProfile(){return CFG.profiles.find(p=>p.id===CFG.activeProfileId)
 function pid(){return activeProfile().id;}
 
 /* ---------- IndexedDB ---------- */
-const DB_NAME='practicelab',DB_VER=7;let _db=null;
-function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;for(const s of ['attempts','review','refs','bank','cards','trainer','trades','packs'])if(!db.objectStoreNames.contains(s))db.createObjectStore(s,{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
+const DB_NAME='practicelab',DB_VER=8;let _db=null;
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;for(const s of ['attempts','review','refs','bank','cards','trainer','trades','packs','curriculum'])if(!db.objectStoreNames.contains(s))db.createObjectStore(s,{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
 function tx(store,mode='readonly'){return _db.transaction(store,mode).objectStore(store);}
 function dbAll(store){return new Promise((res,rej)=>{const out=[];const c=tx(store).openCursor();c.onsuccess=e=>{const cur=e.target.result;if(cur){out.push(cur.value);cur.continue();}else res(out);};c.onerror=e=>rej(e.target.error);});}
+function dbGet(store,id){return new Promise((res,rej)=>{const r=tx(store).get(id);r.onsuccess=()=>res(r.result||null);r.onerror=e=>rej(e.target.error);});}
 function dbPut(store,val){return new Promise((res,rej)=>{const r=tx(store,'readwrite').put(val);r.onsuccess=()=>res();r.onerror=e=>rej(e.target.error);});}
 function dbDel(store,id){return new Promise((res,rej)=>{const r=tx(store,'readwrite').delete(id);r.onsuccess=()=>res();r.onerror=e=>rej(e.target.error);});}
 
@@ -1461,6 +1462,7 @@ async function viewHome(){
     menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
     attempts.length?menuItem('📚','Past questions','Revisit any question — study it or practise similar',()=>viewAllQuestions()):null,
     menuItem('🧭','Skills map','Which exam topics you’ve covered — and what to try next',()=>viewSkills()),
+    menuItem('🗺️','Knowledge map','Learn each skill — key idea, formulas, worked example — then practise',()=>viewKnowledgeMap()),
     menuItem('🎴','My cards',caughtN?caughtN+' of '+POKEDEX.length+' caught — open packs by practising':'Finish a practice to earn your first card!',()=>viewCards()),
     isParent()?menuItem('👨‍👩‍👧','All students','Compare progress across the family',()=>viewDashboard()):null,
   ]);
@@ -1988,6 +1990,148 @@ async function viewSkills(){
       el('p',{class:'small muted',style:'margin-bottom:8px'},practised+' of '+topics.length+' topics practised'),
       practised?el('button',{class:'btn primary block',style:'margin-bottom:10px',onclick:()=>practiceWeakSpots()},'🎯 Practise my weak spots'):'',
       ...topics.map(row))));
+}
+
+/* ============================================================ Knowledge map + concept cards (AI-generated, cached, synced) ============================================================
+   The "Learn" layer: a curriculum-aligned knowledge-point tree per exam+subject+level,
+   grouped by strand and coloured by the student's mastery, where each point opens a
+   concept card (key idea + formulas + worked example + common mistakes) and a focused
+   drill. Content is generated ONCE by the AI, cached in the shared `curriculum` store,
+   and synced. Mastery is computed live per student from their attempts. */
+function curriculumKey(s){return [s.country,s.subject,s.exam,s.level].map(x=>String(x==null?'':x).toLowerCase().trim()).join('|');}
+async function strandStats(subject){
+  const stat={};
+  (await dbAll('attempts')).filter(a=>a.profileId===pid()&&a.subject===subject).forEach(a=>(a.results||[]).forEach(r=>{const t=r.topic||'General';(stat[t]=stat[t]||{n:0,c:0}).n++;if(r.status==='correct')stat[t].c++;}));
+  return stat;
+}
+// Build + cache the knowledge-point tree for a setup (one AI call). Points are grouped
+// under the exam's known strands so mastery (tracked by topic) lines up.
+async function generateKnowledgeTree(s){
+  const groups=examTopics(s.exam,s.subject),exam=EXAMS[s.exam]||EXAMS.general;
+  const gline=groups.length?('Group EVERY point under EXACTLY one of these strands — copy the strand text verbatim into "group": '+groups.join(' | ')+'.'):'Choose sensible strand names yourself and put each point’s strand in "group".';
+  const prompt=`You are a curriculum expert for ${s.country} ${exam.label} ${s.subject} at ${s.level}.
+List the key KNOWLEDGE POINTS a student must master for this exam/level. A knowledge point is ONE specific, learnable skill or concept (a "can-do"), e.g. "Add fractions with unlike denominators" — NOT a broad topic.
+${gline}
+Give 3 to 7 points per strand, ordered foundational → advanced. When a point builds directly on an earlier one, put the earlier point ids in "prereq".
+Return ONLY JSON (no prose/fences): {"points":[{"id":"kebab-case-id","name":"short can-do, ≤ 8 words","group":"strand","prereq":["id"]}]}`;
+  const raw=await callAI(prompt,8192,0.3);usageBump(1);
+  let obj;try{let t=String(raw||'').trim().replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();const m=t.match(/\{[\s\S]*\}/);obj=JSON.parse(m?m[0]:t);}catch(e){throw new Error('Could not read the knowledge map the AI returned.');}
+  const raw_pts=(obj&&Array.isArray(obj.points))?obj.points:[];
+  const seen=new Set(),points=[];
+  raw_pts.forEach(p=>{if(!p||!p.name)return;let id=String(p.id||p.name).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48)||('p'+points.length);while(seen.has(id))id+='x';seen.add(id);
+    points.push({id,name:String(p.name).slice(0,80),group:String(p.group||groups[0]||'General'),prereq:Array.isArray(p.prereq)?p.prereq.map(String):[],card:null});});
+  if(!points.length)throw new Error('The AI returned no knowledge points.');
+  const rec={id:curriculumKey(s),key:curriculumKey(s),country:s.country,subject:s.subject,exam:s.exam,examLabel:exam.label,level:s.level,points,updatedAt:Date.now()};
+  await dbPut('curriculum',rec);scheduleDriveSync();return rec;
+}
+// Generate + cache a concept card for one knowledge point (one AI call, lazily on open).
+async function ensureConceptCard(rec,point,s){
+  if(point.card)return point.card;
+  const exam=EXAMS[s.exam]||EXAMS.general;
+  const prompt=`Write a short LEARN card for the knowledge point "${point.name}" (${point.group}) for a ${s.level} ${s.subject} student (${exam.label}).
+Return ONLY JSON (no prose/fences): {"keyIdea":"1-2 very simple sentences","formulas":["$LaTeX$ formula"],"example":{"q":"a short worked EXAMPLE question","steps":["step 1","step 2"]},"mistakes":["a common mistake"]}
+Keep it simple and age-appropriate. Use $...$ for maths and \\frac{a}{b} for fractions; use × and ÷ symbols; real line breaks. "formulas" may be [] if none. Under ~90 words total. No quotes/JSON wrapping around the whole thing beyond the object itself.`;
+  const raw=await callAI(prompt,1500,0.3);usageBump(1);
+  let c;try{let t=String(raw||'').trim().replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();const m=t.match(/\{[\s\S]*\}/);c=JSON.parse(m?m[0]:t);}catch(e){throw new Error('Could not read the concept card the AI returned.');}
+  const card={keyIdea:String(c.keyIdea||''),formulas:Array.isArray(c.formulas)?c.formulas.map(String):[],
+    example:(c.example&&typeof c.example==='object')?{q:String(c.example.q||''),steps:Array.isArray(c.example.steps)?c.example.steps.map(String):[]}:null,
+    mistakes:Array.isArray(c.mistakes)?c.mistakes.map(String):[]};
+  point.card=card;point.cardAt=Date.now();rec.updatedAt=Date.now();await dbPut('curriculum',rec);scheduleDriveSync();return card;
+}
+async function viewKnowledgeMap(){
+  stopTimer();
+  const s=defaultSettingsFor(activeProfile()),exam=EXAMS[s.exam]||EXAMS.general;
+  const rec=await dbGet('curriculum',curriculumKey(s));
+  if(rec&&rec.points&&rec.points.length)return renderKnowledgeMap(rec,s);
+  show(el('div',{},backBar('Knowledge map',()=>viewHome()),
+    el('div',{class:'card'},el('h2',{},'🗺️ Knowledge map'),
+      el('p',{class:'sub'},'A map of everything '+(s.level||'')+' '+(s.subject||'')+' ('+exam.label+') covers — grouped by strand, each knowledge point with a learn card (key idea + formulas + worked example) and a focused drill.'),
+      el('p',{class:'small muted',style:'margin-bottom:12px'},'Built once by AI, then saved and shared to your devices.'),
+      el('button',{class:'btn primary block lg',onclick:()=>buildKnowledgeMap(s)},'✨ Build my knowledge map'))));
+}
+async function buildKnowledgeMap(s){
+  if(!CFG.apiKey)return toast('Add an AI key in Settings first.');
+  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building your knowledge map…'),el('div',{class:'muted small',style:'margin-top:6px'},(s.level||'')+' · '+(s.subject||''))))));
+  try{const rec=await generateKnowledgeTree(s);renderKnowledgeMap(rec,s);}
+  catch(e){alert('Couldn’t build the knowledge map:\n\n'+(e.message||e));viewHome();}
+}
+async function rebuildKnowledgeMap(s){if(!confirm('Rebuild this knowledge map with AI? Saved concept cards for this level will be replaced.'))return;buildKnowledgeMap(s);}
+async function renderKnowledgeMap(rec,s){
+  const stats=await strandStats(s.subject),exam=EXAMS[s.exam]||EXAMS.general;
+  const groups={};rec.points.forEach(p=>{(groups[p.group]=groups[p.group]||[]).push(p);});
+  const order=examTopics(s.exam,s.subject);
+  const gnames=Object.keys(groups).sort((a,b)=>{const ia=order.indexOf(a),ib=order.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+  const nameById={};rec.points.forEach(p=>nameById[p.id]=p.name);
+  const pctOf=g=>{const o=stats[g]||{n:0,c:0};return o.n?Math.round(o.c/o.n*100):null;};
+  // 思维导图 overview (visual): root → strands, coloured by mastery.
+  let mapSvg='';
+  try{const spec={type:'mindmap',root:(s.subject||exam.label||'Topics'),branches:gnames.map(g=>{const p=pctOf(g);return {label:g,color:(p==null?'#c7c7cc':accColor(p)),count:groups[g].length};})};mapSvg=(typeof PLDiagram!=='undefined')?sanitizeSvg(PLDiagram.render(spec)):'';}catch(e){}
+  const cards=gnames.map(g=>{
+    const pct=pctOf(g);
+    const pointRows=groups[g].map(p=>{
+      const prereqs=(p.prereq||[]).map(id=>nameById[id]).filter(Boolean);
+      return el('div',{class:'row between',style:'gap:8px;padding:9px 0;border-bottom:1px solid var(--line);align-items:flex-start'},
+        el('div',{style:'flex:1;min-width:0'},
+          el('div',{style:'font-weight:600'},p.name,p.card?el('span',{class:'pill',style:'margin-left:6px'},'📖'):''),
+          prereqs.length?el('div',{class:'small muted',style:'margin-top:3px'},'needs first: '+prereqs.join(', ')):''),
+        el('div',{class:'row',style:'flex:none;gap:6px'},
+          el('button',{class:'btn sm',onclick:()=>viewConcept(rec.key,p.id)},'📖 Learn'),
+          el('button',{class:'btn sm',onclick:()=>practiceKnowledgePoint(p,s)},'✏️ Practise')));
+    });
+    return el('div',{class:'card'},
+      el('div',{class:'row between'},el('h2',{style:'margin:0'},g),pct==null?el('span',{class:'pill'},'new'):el('b',{style:'color:'+accColor(pct)},pct+'%')),
+      pct==null?el('p',{class:'small muted',style:'margin:6px 0 2px'},'Not practised yet'):el('div',{class:'gbar',style:'margin:8px 0 2px'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:'+accColor(pct)})),
+      ...pointRows);
+  });
+  show(el('div',{},backBar('Knowledge map',()=>viewHome()),
+    el('div',{class:'card'},el('h2',{},'🗺️ '+(s.subject||'')+' knowledge map'),
+      el('p',{class:'sub'},(s.level||'')+' · '+exam.label+' — '+rec.points.length+' knowledge points across '+gnames.length+' strands. Green = strong, amber = shaky, grey = not tried yet.'),
+      mapSvg?el('div',{style:'margin:8px 0 4px;overflow-x:auto',html:mapSvg}):'',
+      el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'},
+        el('button',{class:'btn',onclick:()=>practiceWeakSpots()},'🎯 Practise weak spots'),
+        el('button',{class:'btn ghost',onclick:()=>rebuildKnowledgeMap(s)},'↻ Rebuild map'))),
+    ...cards));
+}
+async function viewConcept(key,pointId){
+  stopTimer();
+  const rec=await dbGet('curriculum',key);if(!rec)return viewKnowledgeMap();
+  const s={country:rec.country,subject:rec.subject,exam:rec.exam,level:rec.level};
+  const point=rec.points.find(p=>p.id===pointId);if(!point)return renderKnowledgeMap(rec,defaultSettingsFor(activeProfile()));
+  const back=()=>renderKnowledgeMap(rec,defaultSettingsFor(activeProfile()));
+  const nameById={};rec.points.forEach(p=>nameById[p.id]=p.name);
+  const body=el('div',{});
+  const paint=card=>{
+    body.innerHTML='';
+    if(!card){body.append(el('div',{class:'card'},el('div',{class:'small muted'},'No learn card yet.')));return;}
+    body.append(el('div',{class:'card'},
+      card.keyIdea?el('div',{class:'explain'},el('div',{class:'h'},'Key idea'),el('div',{html:fmtExplain(card.keyIdea)})):'',
+      (card.formulas&&card.formulas.length)?el('div',{class:'explain',style:'background:var(--feature);border-color:#cfe2ff'},el('div',{class:'h'},'Formulas & key facts'),el('ul',{style:'margin:6px 0 0;padding-left:18px'},...card.formulas.map(f=>el('li',{style:'margin:5px 0',html:esc(f)})))):'',
+      (card.example&&card.example.q)?el('div',{class:'explain'},el('div',{class:'h'},'Worked example'),el('div',{class:'qtext',html:esc(card.example.q)}),el('div',{html:fmtExplain((card.example.steps||[]).map((st,i)=>(i+1)+'. '+st).join('\n'))})):'',
+      (card.mistakes&&card.mistakes.length)?el('div',{class:'explain',style:'background:#fff7ed;border-color:#fed7aa'},el('div',{class:'h'},'Watch out for'),el('ul',{style:'margin:6px 0 0;padding-left:18px'},...card.mistakes.map(m=>el('li',{style:'margin:4px 0',html:esc(m)})))):''));
+    renderMath(body);
+  };
+  const prereqNames=(point.prereq||[]).map(id=>nameById[id]).filter(Boolean);
+  show(el('div',{},backBar('Learn',back),
+    el('div',{class:'card'},el('span',{class:'pill'},point.group),el('h2',{style:'margin:6px 0 0'},point.name),
+      prereqNames.length?el('div',{class:'small muted',style:'margin-top:6px'},'Builds on: '+prereqNames.join(', ')):'',
+      el('div',{class:'row',style:'gap:8px;margin-top:12px;flex-wrap:wrap'},
+        el('button',{class:'btn primary',onclick:()=>practiceKnowledgePoint(point,s)},'✏️ Practise this'),
+        el('button',{class:'iconbtn',type:'button',title:'Read aloud',onclick:()=>{if(point.card)speak(point.name+'. '+point.card.keyIdea);}},'🔊'))),
+    body));
+  if(point.card)return paint(point.card);
+  if(!CFG.apiKey){body.append(el('div',{class:'card'},el('div',{class:'small muted'},'Add an AI key in Settings to generate the learn card.')));return;}
+  body.append(el('div',{class:'card'},el('div',{class:'loader',style:'padding:18px'},el('div',{class:'spinner'}),el('div',{class:'small muted'},'Preparing this card…'))));
+  try{paint(await ensureConceptCard(rec,point,s));}
+  catch(e){body.innerHTML='';body.append(el('div',{class:'card'},el('div',{class:'small muted'},'Couldn’t prepare this card: '+(e.message||e))));}
+}
+// Focused drill on ONE knowledge point (fresh generation targeting the exact skill).
+async function practiceKnowledgePoint(point,s){
+  const base=defaultSettingsFor(activeProfile());
+  const examId=(s&&s.exam&&EXAMS[s.exam])?s.exam:base.exam,exam=EXAMS[examId]||EXAMS.icas;
+  const setup={country:(s&&s.country)||base.country,subject:(s&&s.subject)||base.subject,exam:examId,level:(s&&s.level)||base.level,topics:[point.group],count:6,difficulty:base.difficulty||3,style:base.style||exam.style||'mixed',context:CFG.examContext[examId]||'',webSearch:CFG.webSearch,notes:'Focus every question specifically on this skill: '+point.name,examLabel:exam.label};
+  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building a drill…'),el('div',{class:'muted small',style:'margin-top:6px'},point.name)))));
+  try{const set=await buildPracticeSet(setup,[]);if(!set.questions.length)throw new Error('No questions came back — please try again.');startSession(setup,set.questions,'practice');viewRun();}
+  catch(e){alert('Couldn’t build that drill:\n\n'+(e.message||e));viewKnowledgeMap();}
 }
 function viewResults(a){
   stopTimer();
@@ -2899,7 +3043,7 @@ async function driveSyncNow(){if(!driveToken)return;try{const fileId=await drive
 // extracted text + tags travel; the PDF/image stays on the device that imported
 // it (where grounding/pre-generation happens). Keeps the sync blob light.
 const refsLite=(await dbAll('refs')).map(({dataB64,...r})=>r);
-const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),packsDeleted:CFG.packsDeleted||{},refsDeleted:CFG.refsDeleted||{},cleared:CFG.cleared||{},blocked:CFG.blocked||{},profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),curriculum:await dbAll('curriculum'),packsDeleted:CFG.packsDeleted||{},refsDeleted:CFG.refsDeleted||{},cleared:CFG.cleared||{},blocked:CFG.blocked||{},profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
   // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
   if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
@@ -2951,6 +3095,8 @@ async function mergeRemote(remote){
   // Past-paper packs (shared, real questions): merge by id; a newer updatedAt wins — but skip
   // anything tombstoned unless the remote copy is a NEWER re-import (updatedAt beats the delete).
   const lpk=new Map((await dbAll('packs')).map(p=>[p.id,p]));for(const p of(remote.packs||[])){const td=tomb[p.id];if(td&&td>=(p.updatedAt||0))continue;const cur=lpk.get(p.id);if(!cur||(p.updatedAt||0)>(cur.updatedAt||0))await dbPut('packs',p);}
+  // Knowledge-map curriculum (shared, AI-generated): merge by id, newer updatedAt wins (keeps the copy with more concept cards filled in).
+  const lcm=new Map((await dbAll('curriculum')).map(c=>[c.id,c]));for(const c of(remote.curriculum||[])){const cur=lcm.get(c.id);if(!cur||(c.updatedAt||0)>(cur.updatedAt||0))await dbPut('curriculum',c);}
   try{for(const p of CFG.profiles)await mergeReviewDuplicates(p.id);}catch(e){} // merging remote review items can reintroduce same-question dupes across devices
   await reconcileProfiles();
 }
@@ -3048,7 +3194,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.34';
+const APP_VERSION='v2.35';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

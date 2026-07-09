@@ -68,6 +68,13 @@ ok(svgOk(D.render({ type: 'food_chain', steps: ['grass', 'rabbit', 'fox'] })), '
 ok(D.render({ type: 'timeline', events: [] }) === '', 'timeline with no events → empty');
 ok(D.render({ type: 'flow', steps: [] }) === '', 'flow with no steps → empty');
 
+// mindmap: root node + a pill per branch + a connector path per branch; empty when none
+ok((D.render({ type: 'mindmap', root: 'Y6 Maths', branches: [{ label: 'Fractions', color: '#34c759', count: 5 }, { label: 'Geometry' }, { label: 'Number' }] }).match(/<rect/g) || []).length >= 4, 'mindmap draws a pill per branch + root');
+ok((D.render({ type: 'mindmap', root: 'X', branches: [{ label: 'a' }, { label: 'b' }] }).match(/<path/g) || []).length === 2, 'mindmap draws a connector per branch');
+ok(D.render({ type: 'mindmap', root: 'Y6', branches: [{ label: 'Fractions' }] }).includes('Fractions'), 'mindmap shows branch labels');
+ok(svgOk(D.render({ type: 'knowledgemap', root: 'X', branches: [{ label: 'a' }] })), 'alias "knowledgemap" → mindmap');
+ok(D.render({ type: 'mindmap', branches: [] }) === '', 'mindmap with no branches → empty');
+
 // alias resolution + whitespace/underscore tolerance
 ok(svgOk(D.render({ type: 'number_line', min: 0, max: 5 })), 'alias "number_line" works');
 ok(svgOk(D.render({ type: 'Bar Chart', bars: [3, 5] })), 'alias "Bar Chart" (spaces) works');

@@ -34,14 +34,19 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `packsDeleted`/`refsDeleted` (tombstones), `cleared` (`"store:profileId"→ts`
   for Clear-bank/Clear-history) and `blocked` (`"profileId|qhash"→ts` for the
   "remove this question everywhere" block-list) — see Drive sync.
-- **IndexedDB** (`practicelab`, v3), four stores:
+- **IndexedDB** (`practicelab`, **v8**), stores:
   - `attempts` — every completed practice (full question + result snapshot)
   - `review` — wrong/unsure questions for spaced revision (`mastered` after 2
     correct re-answers; carry a `dueAt` for spaced repetition — see Mistakes notebook)
   - `refs` — uploaded reference papers (base64 + extracted text + tags)
   - `bank` — pre-generated question surplus, keyed by setup (see AI layer); cuts
     API calls by reusing one generation across many practices
-  - All records are tagged with `profileId` and filtered by the active profile.
+  - `cards`/`trainer`/`trades` — Poké-Pack collection, XP/candy ledger, trading post
+  - `packs` — SHARED transcribed real past-paper packs (see Past papers)
+  - `curriculum` — SHARED AI-generated knowledge-point trees + concept cards, keyed
+    by `country|subject|exam|level` (see Knowledge map)
+  - Per-student stores are tagged with `profileId`; `packs`/`curriculum` are shared.
+    `dbGet(store,id)` fetches one record by key.
 - **Profiles** — `CFG.profiles[]` + `activeProfileId`. Header chip switches
   student; each has isolated attempts/review. Each profile may carry
   `defaults` (saved practice settings); `viewSetup(mode,targetId)` pre-fills from
@@ -261,6 +266,23 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     results and in the Study view. `viewAllQuestions()` (home Track-progress "📚 Past
     questions") lists EVERY answered question (de-duped by qhash, most-recent wins),
     filterable by text/topic/result, each row opening `viewStudy`.
+- **Knowledge map + concept cards (v2.35, home "🗺️ Knowledge map")** — the "learn,
+  don't just drill" layer. A curriculum-aligned **knowledge-point tree** per
+  `country|subject|exam|level`, AI-generated ONCE and cached in the shared, synced
+  `curriculum` store (`generateKnowledgeTree` — points grouped under the exam's known
+  strands so mastery lines up; each point has `id`/`name`/`group`/`prereq`/`card`).
+  `viewKnowledgeMap` renders a 思维导图 overview (a new `diagram.js` **`mindmap`** type:
+  root → strands, coloured by mastery) + per-strand cards with mastery bars (from
+  `strandStats`, computed live per student) and each knowledge point's prerequisites +
+  **📖 Learn** / **✏️ Practise** buttons. `viewConcept` shows the point's concept card
+  (key idea + formulas + worked example + common mistakes), generated lazily on first
+  open (`ensureConceptCard`) and cached on the point. `practiceKnowledgePoint` builds a
+  fresh drill scoped to that exact skill (via `notes`, so it's not banked). Curriculum
+  syncs via Drive (merge by id, newest `updatedAt` wins — keeps the copy with more cards
+  filled). **`el()` escaping gotcha applies:** strand/point NAMES are `el()` text
+  children → pass them raw (never `esc()`, which double-encodes `&`→`&amp;`); `esc()` is
+  only for the `html:` option (question/formula spans). Complements the coarser
+  `viewSkills` coverage map.
 - **Progress & stats** (`viewHistory`, home "📈 Progress & stats") — analytics
   dashboard: at-a-glance tiles (questions/accuracy/time/streak), a score-trend
   line and per-day activity bars (`chartLine`/`chartBars` — tiny inline-SVG
@@ -325,8 +347,10 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   **balance** (equality / simple algebra), **timeline** (a time arrow with dated
   events alternating above/below — "history of …" / order-of-events) and **flow**
   (process boxes joined by arrows with optional `branches` for by-products/inputs —
-  sugar refining, ethanol production, food chains, life cycles). Aliases tolerated
-  (e.g. `map`→routemap, `process`/`foodchain`→flow). Pure string output
+  sugar refining, ethanol production, food chains, life cycles) and **mindmap**
+  (v2.35 — root → branches with per-branch colour + count, for the Knowledge map's
+  思维导图 overview). Aliases tolerated
+  (e.g. `map`→routemap, `process`/`foodchain`→flow, `knowledgemap`/`conceptmap`→mindmap). Pure string output
   (no DOM) → Node-testable + works on file://. **Integration is near-zero-blast:**
   `parseQuestions` renders `q.diagram` (object) via `PLDiagram` into the existing
   `svg` field (so every downstream path is unchanged); a raw inline-`svg` string
@@ -549,7 +573,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.34**). Claude suggests the next number on
+  minor on each release (currently at **v2.35**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

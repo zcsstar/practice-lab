@@ -380,8 +380,39 @@
     return wrap(w, h, inner, s.title);
   }
 
+  // mindmap / knowledge map: a root concept on the left with branches (strands) fanning
+  // out to the right, each an optional mastery colour + count. A visual 思维导图 overview.
+  // {type:'mindmap', root:'Year 6 Maths', branches:[{label:'Fractions', color:'#34c759', count:5}, ...]}
+  function mindmap(s) {
+    var root = String(s.root || s.center || s.title || 'Topic');
+    var br = (s.branches || s.nodes || s.children || []).filter(function (b) { return b && b.label != null; }).slice(0, 12);
+    if (!br.length) return '';
+    var w = 480, rowH = 42, pad = 16;
+    var h = Math.max(140, br.length * rowH + pad * 2);
+    var rootX = 14, rootW = 150, rootRX = rootX + rootW, cy = h / 2;
+    var bx = 210, bw = w - bx - 14, startY = (h - br.length * rowH) / 2;
+    var inner = '';
+    br.forEach(function (b, i) {                          // connectors first (behind the nodes)
+      var by = startY + i * rowH + rowH / 2, mx = (rootRX + bx) / 2;
+      inner += '<path d="M' + f1(rootRX) + ',' + f1(cy) + ' C' + f1(mx) + ',' + f1(cy) + ' ' + f1(mx) + ',' + f1(by) + ' ' + f1(bx) + ',' + f1(by) + '" fill="none" stroke="' + (b.color || LINE) + '" stroke-width="2.5" opacity="0.55"/>';
+    });
+    inner += '<rect x="' + rootX + '" y="' + f1(cy - 26) + '" width="' + rootW + '" height="52" rx="12" fill="#007aff"/>';
+    wrapWords(root, 18).slice(0, 2).forEach(function (ln, li, arr) { inner += T(rootX + rootW / 2, cy + 5 - (arr.length - 1) * 7 + li * 14, ln, { size: 12, weight: '700', fill: '#fff' }); });
+    br.forEach(function (b, i) {
+      var by = startY + i * rowH + rowH / 2, ph = 32, c = b.color || MUTE, label = String(b.label);
+      inner += '<rect x="' + bx + '" y="' + f1(by - ph / 2) + '" width="' + bw + '" height="' + ph + '" rx="9" fill="#fff" stroke="' + c + '" stroke-width="2"/>';
+      inner += '<circle cx="' + (bx + 15) + '" cy="' + f1(by) + '" r="5" fill="' + c + '"/>';
+      var maxc = Math.floor((bw - 46) / 6.6);
+      if (label.length > maxc) label = label.slice(0, Math.max(1, maxc - 1)) + '…';
+      inner += T(bx + 28, by + 4, label, { size: 12, weight: '600', anchor: 'start' });
+      if (b.count != null) inner += T(bx + bw - 10, by + 4, String(b.count), { size: 11, fill: MUTE, anchor: 'end' });
+    });
+    return wrap(w, h, inner, null);
+  }
+
   var R = {
     pie: pie, piechart: pie, fractioncircle: pie, circlegraph: pie,
+    mindmap: mindmap, conceptmap: mindmap, knowledgemap: mindmap, mindmup: mindmap,
     timeline: timeline, time: timeline, history: timeline,
     flow: flow, flowchart: flow, process: flow, sequence: flow, foodchain: flow, chain: flow, pathway: flow,
     routemap: routemap, route: routemap, journeymap: routemap, map: routemap,
