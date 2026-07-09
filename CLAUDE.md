@@ -635,12 +635,19 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.41**). Claude suggests the next number on
+  minor on each release (currently at **v2.42**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach
   the desktop from this environment). Packs/refs are gitignored (copyright); committed
   files are `index.html` + sibling scripts + docs.
+  - **Deploy = GitHub Pages (branch `main`, `/`).** A committed **`.nojekyll`** (v2.42) makes
+    Pages serve files STATICALLY — do NOT remove it; without it Pages runs legacy Jekyll, which
+    is pointless here and once failed a build ("Page build failed" → the site got stuck on an old
+    version). After a push, a Pages build runs (~30–60s) then the Fastly CDN caches ~10 min, so a
+    new version can take a few minutes to appear even on a hard refresh. Check deploy state with
+    `gh api repos/zcsstar/practice-lab/pages/builds/latest` and the live version with
+    `curl -s https://zcsstar.github.io/practice-lab/index.html | grep APP_VERSION`.
 
 ## Verifying changes
 1. **Parser tests:** `node parse.test.js` (covers the `parse.js` module: clean,
