@@ -1012,9 +1012,13 @@ async function curriculumRefText(s){
   try{
     const refs=(await dbAll('refs')).filter(r=>r&&(r.profileId==='all'||r.profileId===pid())&&r.kind==='curriculum'&&r.text&&String(r.text).trim());
     if(!refs.length)return null;
-    const subj=String(s.subject||'').toLowerCase();
-    const cand=refs.filter(r=>String((r.tags||{}).subject||'').toLowerCase()===subj);
-    const pick=(cand.length?cand:refs).sort((a,b)=>(b.addedAt||0)-(a.addedAt||0))[0];
+    const subj=String(s.subject||'').toLowerCase(),exam=String(s.exam||'').toLowerCase();
+    const pool=refs.filter(r=>String((r.tags||{}).subject||'').toLowerCase()===subj);
+    const cand=pool.length?pool:refs;
+    // Prefer a doc tagged for THIS exam (e.g. an imported ICAS syllabus for ICAS practices),
+    // else a general/no-exam doc (like the built-in NZ default), else newest. Recency tiebreaks.
+    const score=r=>{const re=String((r.tags||{}).exam||'').toLowerCase();let sc=(r.addedAt||0)/1e15;if(exam&&re===exam)sc+=10;else if(!re)sc+=1;return sc;};
+    const pick=cand.slice().sort((a,b)=>score(b)-score(a))[0];
     return {text:String(pick.text).slice(0,8000),label:pick.name||'curriculum doc'};
   }catch(e){return null;}
 }
@@ -3426,7 +3430,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.40';
+const APP_VERSION='v2.41';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

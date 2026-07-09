@@ -271,9 +271,10 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     `curriculum.local.js`** (`window.PL_CURRICULUM`, copy of the committed
     [curriculum.local.example.js](curriculum.local.example.js), loaded via a `<script src>` that
     404s harmlessly when absent — same accepted pattern as `papers.local.js`). Each becomes a shared
-    `refs` record `kind:'curriculum'`; the map grounds on the newest matching-subject one
-    (`curriculumRefText` sorts by `addedAt`), so a local/official doc overrides the built-in by
-    recency. Idempotent (dedupe by `id`), skips `refsDeleted`-tombstoned ids, and Drive-syncs
+    `refs` record `kind:'curriculum'`; the map grounds via `curriculumRefText`, which (v2.41) is
+    **exam-aware** — it prefers a doc tagged for the practice's exam (e.g. an imported ICAS syllabus
+    grounds ICAS practices), then a general/no-exam doc (the built-in NZ default), then newest. So
+    an imported ICAS doc targets ICAS while the built-in default still covers Rangitoto/NCEA/general. Idempotent (dedupe by `id`), skips `refsDeleted`-tombstoned ids, and Drive-syncs
     (text-only) to the family's other devices. Copyright-sensitive text (ICAS) stays in the private
     `curriculum.local.js` only.
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
@@ -634,7 +635,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.40**). Claude suggests the next number on
+  minor on each release (currently at **v2.41**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach
