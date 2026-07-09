@@ -264,15 +264,18 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     off-repo; the parent opens → downloads → imports → marks Curriculum. An ungrounded map shows a
     "🔗 Add a curriculum source" button → `viewRefs`. (Runtime auto-fetch of these pages isn't
     possible — CORS + the static/file:// constraint — hence the open-download-import flow.)
-  - **Auto-import curriculum (v2.39):** `seedLocalCurriculum()` (boot, next to `seedLocalPacks`)
-    reads `window.PL_CURRICULUM` from a **gitignored `curriculum.local.js`** (copy of the committed
+  - **Auto-import curriculum (v2.39–v2.40):** `seedLocalCurriculum()` (boot, next to
+    `seedLocalPacks`) seeds the Knowledge map's grounding with ZERO manual import. It seeds the
+    **committed built-in `DEFAULT_CURRICULUM`** (v2.40 — a self-authored NZ Maths Years 0–10 summary,
+    no copyright, so it's LIVE on GitHub Pages for everyone) PLUS any **gitignored
+    `curriculum.local.js`** (`window.PL_CURRICULUM`, copy of the committed
     [curriculum.local.example.js](curriculum.local.example.js), loaded via a `<script src>` that
-    404s harmlessly when absent) and seeds each `{id,name,subject,exam?,level?,text}` as a shared
-    `refs` record `kind:'curriculum'` — so the Knowledge map grounds on real syllabus TEXT with
-    ZERO manual import, and it Drive-syncs to the family's other devices. Idempotent (dedupes by
-    `id`), and skips `refsDeleted`-tombstoned ids so a deliberate delete sticks. TEXT-only + private
-    file → no copyright content in the repo. The example ships a summarised NZ Maths (Years 0–10)
-    curriculum the parent can replace with the official PDF text.
+    404s harmlessly when absent — same accepted pattern as `papers.local.js`). Each becomes a shared
+    `refs` record `kind:'curriculum'`; the map grounds on the newest matching-subject one
+    (`curriculumRefText` sorts by `addedAt`), so a local/official doc overrides the built-in by
+    recency. Idempotent (dedupe by `id`), skips `refsDeleted`-tombstoned ids, and Drive-syncs
+    (text-only) to the family's other devices. Copyright-sensitive text (ICAS) stays in the private
+    `curriculum.local.js` only.
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
   Bank/Dashboard/Skills/Guide/Study/AllQuestions`. `show(node)` swaps `#app` and re-runs
   KaTeX. No router; functions call each other. `viewBank` = question-bank hub;
@@ -631,7 +634,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.39**). Claude suggests the next number on
+  minor on each release (currently at **v2.40**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

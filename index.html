@@ -1686,14 +1686,41 @@ async function seedLocalPacks(){
     for(const p of arr){if(!p||!Array.isArray(p.questions))continue;const id=p.id||packSlug(p);if(!have.has(id)){p.id=id;p.updatedAt=p.updatedAt||Date.now();await dbPut('packs',p);}}
   }catch(e){console.warn('seedLocalPacks',e);}
 }
-// Seed CURRICULUM/syllabus reference docs from a bundled curriculum.local.js
-// (window.PL_CURRICULUM = [{id,name,subject,exam?,level?,text}]) on boot — a private,
-// gitignored file (copy from curriculum.local.example.js). Each becomes a shared refs
-// record tagged kind:'curriculum', so the Knowledge map auto-grounds on real syllabus
-// TEXT with zero manual import. Skips ids already present or deleted (refsDeleted tombstone).
+// Built-in DEFAULT curriculum grounding — SHIPS in the app (committed, so it's live on
+// GitHub Pages with zero setup). A concise, self-authored summary (not copied from any
+// source, so no copyright). The Knowledge map grounds on this out of the box; a private
+// curriculum.local.js can ADD richer/official docs (newer → wins by recency in curriculumRefText).
+const DEFAULT_CURRICULUM=[{
+  id:'nz-maths-default',name:'NZ Curriculum — Maths (Years 0–10)',subject:'Mathematics',country:'New Zealand',
+  text:`NEW ZEALAND MATHEMATICS & STATISTICS — Years 0–10 (curriculum levels 1–5). Strands and progression, for grounding practice questions and learn cards.
+
+STRANDS
+1. Number & Algebra — number knowledge & strategies; place value; whole numbers, fractions, decimals, percentages, integers; the four operations; ratio, rate & proportion; patterns & relationships; expressions & equations (early algebra).
+2. Measurement & Geometry — length, area, volume/capacity, mass, temperature, time and money; metric units & conversions; perimeter/area/volume; 2D & 3D shapes; angles; symmetry; position, coordinates, transformations (reflection, rotation, translation), scale.
+3. Statistics & Probability — posing questions & collecting data; displaying data (tables, pictographs, bar/column graphs, dot plots, line graphs); interpreting & comparing data; mean, median, mode, range; chance & probability (likelihood, simple experiments, theoretical vs experimental).
+
+PROGRESSION (approximate)
+- Years 0–3 (L1–2): count/read/write/order whole numbers to ~1000; addition & subtraction basic facts; skip-counting & early multiplication; simple fractions (½, ¼); measure & compare with informal then standard units; tell time (hours, half/quarter hours); name & sort 2D/3D shapes; collect & display simple data; likely/unlikely.
+- Years 4–6 (L2–3): place value to millions and 3 decimal places; +, −, ×, ÷ with whole numbers; equivalent fractions, decimals & simple percentages; multiplicative & proportional thinking; perimeter & area of rectangles; measure angles; lines of symmetry; grid coordinates; bar graphs, dot plots, pictographs & tables; simple probabilities as fractions.
+- Years 7–8 (L4): integers (incl. negatives); fractions/decimals/percentages & conversions; ratio, rate & proportion; linear patterns & one/two-step equations; area of triangles/parallelograms/trapezia & volume of cuboids; angle rules; enlargement & scale; compare data with mean/median/mode/range; probability of single events.
+- Years 9–10 (L5): rational numbers, powers & square roots; algebraic manipulation, linear equations & graphs; Pythagoras' theorem; area, surface area & volume of prisms and cylinders; similarity & scale factor; bivariate & time-series data; theoretical vs experimental probability.
+
+KEY FORMULAS (primary → lower secondary)
+- Perimeter = total distance around a shape.
+- Area: rectangle = length × width; triangle = ½ × base × height; parallelogram = base × height; trapezium = ½ × (a + b) × height; circle area = π × r²; circle circumference = 2 × π × r (= π × diameter).
+- Volume: cuboid = length × width × height.
+- Average (mean) = sum of values ÷ number of values.
+- Percentage of an amount = (percent ÷ 100) × amount.
+- Pythagoras: a² + b² = c² (right-angled triangles).`
+}];
+// Seed CURRICULUM/syllabus reference docs on boot: the built-in DEFAULT_CURRICULUM PLUS any
+// private curriculum.local.js (window.PL_CURRICULUM = [{id,name,subject,exam?,level?,text}]).
+// Each becomes a shared refs record tagged kind:'curriculum', so the Knowledge map auto-grounds
+// on real syllabus TEXT with zero manual import (and it Drive-syncs to other devices). Skips ids
+// already present or deleted (refsDeleted tombstone), so a deliberate delete sticks.
 async function seedLocalCurriculum(){
   try{
-    const arr=(typeof window!=='undefined'&&window.PL_CURRICULUM)||[];if(!arr.length)return;
+    const arr=DEFAULT_CURRICULUM.concat((typeof window!=='undefined'&&window.PL_CURRICULUM)||[]);if(!arr.length)return;
     const have=new Set((await dbAll('refs')).map(r=>r.id));CFG.refsDeleted=CFG.refsDeleted||{};
     let n=0;
     for(const c of arr){
@@ -3399,7 +3426,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.39';
+const APP_VERSION='v2.40';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

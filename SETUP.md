@@ -239,8 +239,10 @@ increasing difficulty, no calculator.”*
 ## Knowledge map — ground it on the real curriculum (OPTIONAL)
 
 The **Knowledge map** (Home → **Knowledge map**) teaches each skill with a concept
-card + formulas. By default it’s built from the AI’s own knowledge; you can ground
-it on the **real curriculum** two ways:
+card + formulas. **Out of the box it’s already grounded** on a built-in **NZ Maths
+(Years 0–10)** curriculum summary that ships with the app — you’ll see
+*“Grounded on: NZ Curriculum — Maths…”* on the map. To ground it on the **official
+/ fuller** curriculum (or other subjects), two ways:
 
 1. **Import a syllabus doc** — Reference library → **🔗 Official curriculum sources**
    → Open one (e.g. NZ Curriculum Maths, NZQA, ICAS) → download the PDF → **Import**
