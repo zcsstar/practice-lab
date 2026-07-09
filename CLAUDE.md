@@ -307,7 +307,11 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   into readable HTML blocks, protecting `$…$` spans (incl. escaped `\$` for money
   like `$\$5$`) so KaTeX still renders them. Prompt tells the model to write money
   as `$\$x$`. Questions may carry a diagram, rendered in runner + results (capped
-  to `.figure` max-width 420px, centred).
+  to `.figure` max-width 420px, centred). **v2.33:** after protecting math spans it
+  normalises LITERAL `\n`/`\t` escape artifacts (some models return steps as `"…\n2. …"`
+  rather than real breaks) into real whitespace so numbered steps split; `explainSimpler`
+  also unwraps a quoted/JSON blob (`JSON.parse`) and its prompt asks for real line breaks
+  and plain `×`/`÷` (not `$\times$`).
 - **Diagrams ([diagram.js](diagram.js), `PLDiagram.render(spec)`)** — models are
   unreliable at hand-drawing SVG (pie arcs especially), so the prompt asks for a
   STRUCTURED `diagram` spec `{type,...}` and this module draws correct, tested SVG.
@@ -483,11 +487,14 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   grant and writes the key into `CFG` (persists per device, so no re-typing).
   Requires the login gate on. `isParent()` gates the key UI; non-parents see a
   locked card. Plaintext key never lives in the repo.
-- **Design / theme** — iOS-style: SF system font (`-apple-system…`), iOS system
-  colours (canvas `#f2f2f7`, blue `#007aff`, green/red/orange semantics), flat
-  primary buttons, iOS toggle switches (`input[type=checkbox].sw`). No serif.
-  References: `design/DESIGN-GUIDELINES.md` (superseded by iOS look) and
-  `design/gsap-skills.md`.
+- **Design / theme** — iOS-style: **Inter** webfont app-wide via the `--font` CSS var
+  (Google Fonts `<link>` in `<head>`; system font `-apple-system…` is the offline /
+  `file://` fallback). **`.katex{font-family:var(--font)}`** (no `!important`) renders
+  maths NUMBERS in Inter too so they match the text, while KaTeX keeps its own
+  italic-variable / symbol / delimiter fonts (√, big brackets). iOS system colours
+  (canvas `#f2f2f7`, blue `#007aff`, green/red/orange semantics), flat primary buttons,
+  iOS toggle switches (`input[type=checkbox].sw`). No serif. References:
+  `design/DESIGN-GUIDELINES.md` (superseded by iOS look) and `design/gsap-skills.md`.
 - **Animation (GSAP)** — loaded from CDN. `animateIn(scope)` (called by `show()`)
   fades/rises cards on every view; results screen counts up the score and
   staggers question cards; the runner cross-fades on question swap. Transform/
@@ -537,7 +544,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.32**). Claude suggests the next number on
+  minor on each release (currently at **v2.33**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

@@ -9,6 +9,12 @@
 <title>Practice Lab</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>" />
 
+<!-- Inter webfont: one consistent font across the whole app, incl. numbers/maths.
+     Falls back to the system font offline / on a local file:// open. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
 <!-- KaTeX for maths rendering -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous" />
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
@@ -29,16 +35,22 @@
     --warn:#ff9500; --warnbg:#fff2e0;
     --radius:12px; --radius-ctrl:10px; --shadow:0 8px 24px -14px rgba(0,0,0,.20);
     --maxw:760px;
+    /* One font for the whole app; system font is the offline / file:// fallback. */
+    --font:'Inter',-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-family:var(--font);
     color:var(--ink);
     background:#f2f2f7;
     font-size:15px;line-height:1.45;
     min-height:100vh;-webkit-text-size-adjust:100%;
   }
+  /* Render KaTeX maths in the same font so NUMBERS match the rest of the app. Only the
+     base family is overridden (no !important), so KaTeX keeps its italic-variable and
+     symbol/delimiter fonts (√, big brackets) while digits & operators use Inter. */
+  .katex{font-family:var(--font)}
   .title h1{font-weight:700;letter-spacing:-.4px}
   .card h2{font-weight:700;letter-spacing:-.3px}
   /* iOS-style switches */
@@ -303,6 +315,10 @@ function fmtExplain(text){
   if(!raw)return '';
   const math=[];
   raw=raw.replace(/\$\$[\s\S]*?\$\$|\$(?:\\.|[^$\n])*?\$/g,m=>{math.push(m);return `${math.length-1}`;});
+  // Some models emit literal escape sequences ("\n", "\t") instead of real breaks — turn
+  // them into real whitespace so numbered steps split correctly. Math spans are protected
+  // above, so LaTeX backslashes (\frac, \times) are left untouched.
+  raw=raw.replace(/\\r\\n|\\n|\\r/g,'\n').replace(/\\t/g,' ');
   // put each numbered step / "Step N" onto its own line
   raw=raw.replace(/[ \t]+(?=\d+\.\s+(?:\*\*|[A-Z]))/g,'\n');
   raw=raw.replace(/[ \t]+(?=(?:Step|Part)\s+\d+\s*[:.\)])/gi,'\n');
@@ -1167,14 +1183,17 @@ async function explainSimpler(q,ctx,host,save){
   host.innerHTML='';host.append(el('div',{class:'small muted'},'✨ Thinking of a simpler way to explain this…'));
   const opts=(q.type==='multiple_choice'&&Array.isArray(q.options))?('\nOptions:\n'+q.options.map((o,i)=>String.fromCharCode(65+i)+'. '+plainMath(String(o))).join('\n')):'';
   const prompt=`A ${ctx.level||''} student found the explanation for this ${ctx.subject||''} question hard to understand. Re-explain how to reach the answer in the SIMPLEST possible way for that child.
-RULES: very short sentences; everyday words a young student knows; ONE idea per step; use a concrete real-life example or picture-in-words / analogy if it helps; number the steps ("1. ", "2. "); keep any maths inside $...$ and write fractions as \\frac{a}{b}; no jargon; finish by clearly stating the answer. Keep it under ~90 words. Be warm and encouraging.
+RULES: very short sentences; everyday words a young student knows; ONE idea per step. Put EACH numbered step on its OWN line, starting "1. ", "2. ", … , with a REAL line break between them — do NOT write the two characters backslash-n. Use plain symbols for arithmetic: × for multiply and ÷ for divide (e.g. "15 × 20 = 300"); ONLY use $...$ for fractions or powers (write fractions as \\frac{a}{b}). Use a concrete real-life example or analogy if it helps. No jargon. Finish by clearly stating the answer. Keep it under ~90 words. Be warm and encouraging.
 QUESTION: ${plainMath(q.question)}${opts}
 CORRECT ANSWER: ${correctAnswerText(q)}
 ORIGINAL EXPLANATION: ${plainMath(q.explanation||'')}
-Return ONLY the new explanation (no preamble, no JSON, no code fences).`;
+Return ONLY the explanation text itself — plain text with REAL line breaks. Do NOT wrap it in quotes, JSON, or code fences.`;
   try{
     let raw=await callAI(prompt,1200,0.3);usageBump(1);
     let txt=String(raw||'').trim().replace(/^```[a-z]*\s*/i,'').replace(/```\s*$/,'').trim();
+    // Some models still return the text as a quoted / JSON string with escaped newlines —
+    // unwrap it (JSON.parse also turns \n into real breaks); fmtExplain handles any leftover.
+    if(/^".*"$/s.test(txt)){try{const p=JSON.parse(txt);if(typeof p==='string')txt=p.trim();}catch(e){txt=txt.replace(/^"|"$/g,'').trim();}}
     if(!txt){host.innerHTML='';host.append(el('div',{class:'small muted'},'Couldn’t simplify that one — please try again.'));return;}
     host.innerHTML='';host.append(el('div',{class:'h'},'🧒 Simpler explanation'),el('div',{html:fmtExplain(txt)}));
     renderMath(host);
@@ -3029,7 +3048,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.32';
+const APP_VERSION='v2.33';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
