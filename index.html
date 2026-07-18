@@ -3405,6 +3405,26 @@ async function bankDeposit(term){return moneyMutate(t=>{if(t.vault.bank)return {
 async function bankCollect(early){return moneyMutate(t=>{const b=t.vault.bank;if(!b)return {ok:false};const matured=Date.now()>=b.maturesAt;const payout=(matured&&!early)?bankPayout(b.principal,b.rate):b.principal;t.candyEarned=(t.candyEarned||0)+payout;t.vault.bank=null;return {ok:true,payout,matured,interest:payout-b.principal};});}
 async function fundBuy(amount){return moneyMutate(t=>{fundEnsureDaily(t);if((t.candy||0)<amount)return {ok:false,msg:'Not enough candy to invest that much.'};const price=fundPrice(t);t.candySpent=(t.candySpent||0)+amount;t.vault.fund.units=(t.vault.fund.units||0)+amount/price;bumpStat(t,'invested');return {ok:true,amount};});}
 async function fundSellAll(){return moneyMutate(t=>{fundEnsureDaily(t);const f=t.vault.fund;const val=fundValue(f.units,fundPrice(t));if(val<=0)return {ok:false};f.units=0;t.candyEarned=(t.candyEarned||0)+val;return {ok:true,val};});}
+// 🔴 Single-card BET (the spicy rung): all your candy on ONE card, so it swings MUCH harder than the
+// diversified fund — the counterpoint that teaches concentration risk / "don't put all eggs in one basket".
+const STOCK_START=100;
+function stockStep(prev,r){return Math.max(8,Math.round((prev||STOCK_START)*(1+r)));} // lower floor → it can really crash
+function stockPrice(t){const s=vaultOf(t).stock;return (s&&s.history&&s.history.length)?s.history[s.history.length-1].price:STOCK_START;}
+function stockEnsureDaily(t){const s=vaultOf(t).stock;if(!s)return false;const today=todayISO();
+  if(!s.history||!s.history.length){s.history=[{d:today,price:STOCK_START}];return true;}
+  let last=s.history[s.history.length-1],changed=false,guard=0;
+  // WIDE swings (−18% … +22%) PLUS a tilt if this card's type is hot/cold that day → concentrated risk.
+  while(last.d<today&&guard<7){const nd=nextDayISO(last.d),mkt=todayMarket(nd),ty=(typeof pokeTypes==='function')?pokeTypes(s.dexId):['normal'];
+    const tilt=ty.indexOf(mkt.hot)>=0?0.06:ty.indexOf(mkt.cold)>=0?-0.06:0;
+    s.history.push({d:nd,price:stockStep(last.price,Math.random()*0.40-0.18+tilt)});last=s.history[s.history.length-1];changed=true;guard++;}
+  if(last.d<today){s.history[s.history.length-1].d=today;changed=true;}
+  while(s.history.length>40)s.history.shift();
+  return changed;}
+async function pickStock(dexId){await moneyMutate(t=>{const v=vaultOf(t),same=v.stock&&v.stock.dexId===dexId,p=POKE_BY_ID[dexId];
+  if(v.stock&&(v.stock.units||0)>0&&!same)return; // must sell current shares before switching
+  if(!same)v.stock={dexId,name:p?p.name:'Card',units:0,history:[{d:todayISO(),price:STOCK_START}]};});}
+async function stockBuy(amount){return moneyMutate(t=>{const s=vaultOf(t).stock;if(!s)return {ok:false,msg:'Pick a card to bet on first.'};stockEnsureDaily(t);if((t.candy||0)<amount)return {ok:false,msg:'Not enough candy for that bet.'};const price=stockPrice(t);t.candySpent=(t.candySpent||0)+amount;s.units=(s.units||0)+amount/price;bumpStat(t,'stockBet');return {ok:true,amount};});}
+async function stockSellAll(){return moneyMutate(t=>{const s=vaultOf(t).stock;if(!s)return {ok:false};stockEnsureDaily(t);const val=fundValue(s.units,stockPrice(t));if(val<=0)return {ok:false};s.units=0;t.candyEarned=(t.candyEarned||0)+val;return {ok:true,val};});}
 async function setGoalCard(dexId){await moneyMutate(t=>{t.vault.goalDex=dexId;});}
 async function buyGoalCard(){const t=await trainerGet();vaultOf(t);const dex=t.vault.goalDex;const p=dex&&POKE_BY_ID[dex];if(!p)return;const cost=shopPrice(dex);if((t.candy||0)<cost)return toast('Keep saving! You need 🍬 '+cost+'.');await trainerSpend(cost);await cardGiveTo(pid(),{dexId:dex,tier:p.t,level:1,shiny:false});await moneyMutate(tt=>{tt.vault.goalDex=null;bumpStat(tt,'goalsBought');});toast('🎉 You saved up and bought '+p.name+'!');}
 // ----- Give / charity + Smart-Shopper badges (v2.52) -----
@@ -3426,6 +3446,7 @@ const BADGES=[
   {emoji:'🔨',name:'Auctioneer',desc:'Sold a card at auction',got:st=>(st.auctionsSold||0)>0},
   {emoji:'🧮',name:'Maths Whiz',desc:'Aced 5 shopkeeper challenges',got:st=>(st.mathWins||0)>=5},
   {emoji:'🎁',name:'Generous',desc:'Gave a card to family',got:st=>(st.gifts||0)>0},
+  {emoji:'🎲',name:'High Roller',desc:'Bet on a single Star Card',got:st=>(st.stockBet||0)>0},
   {emoji:'💰',name:'Profit Trader',desc:'Made a profit trading',got:(st,x)=>(x.netTrade||0)>0}
 ];
 function earnedBadges(vault,extra){const st=(vault&&vault.stats)||{};extra=extra||{};return BADGES.map(b=>({emoji:b.emoji,name:b.name,desc:b.desc,got:!!b.got(st,extra)}));}
@@ -3498,7 +3519,7 @@ function moneyQuizCard(){
 let moneyPickGoal=false;
 async function viewMoney(){
   stopTimer();
-  await moneyMutate(t=>{fundEnsureDaily(t);}); // move the market once per day
+  await moneyMutate(t=>{fundEnsureDaily(t);stockEnsureDaily(t);}); // move the market & star card once per day
   const t=await trainerGet(),v=vaultOf(t);
   const wallet=t.candy||0,bank=v.bank,f=v.fund,price=fundPrice(t),fval=fundValue(f.units,price);
   const net=wallet+(bank?bank.principal:0)+fval;
@@ -3511,7 +3532,7 @@ async function viewMoney(){
   cards.push(el('details',{class:'card'},el('summary',{style:'font-weight:700;cursor:pointer;font-size:16px'},'🎓 Money School — saving & investing'),
     lesson('🟢 Safe vs 🟡 risky','The bank ALWAYS pays you back with interest — safe but small. The fund can grow bigger, but it goes up AND down. More reward usually means more risk.'),
     lesson('⏳ Be patient','Don’t panic-sell on a down day. Over a longer time the fund usually recovers and grows. Time in the market beats guessing the perfect day.'),
-    lesson('🧺 Don’t bet it all on one','The fund spreads your candy across many things (that’s “diversifying”), so it’s calmer than betting everything on a single card.'),
+    lesson('🧺 Don’t bet it all on one','The fund spreads your candy across many things (“diversifying”), so it’s calmer. The 🔴 Star Card bet is the opposite — everything on ONE card, so it swings hard. Fun, but risky!'),
     lesson('💸 Only invest spare candy','Keep some to enjoy now, save some in the bank for sure, and invest only what you won’t need soon.')));
   // 🎯 Savings goal
   const dex=v.goalDex,gp=dex&&POKE_BY_ID[dex];
@@ -3555,6 +3576,25 @@ async function viewMoney(){
       ...[10,25,50].map(a=>el('button',{class:'btn sm'+(wallet>=a?'':' ghost'),onclick:async()=>{const r=await fundBuy(a);if(!r.ok)return toast(r.msg);toast('🟡 Invested 🍬 '+r.amount+'!');viewMoney();}},'Invest 🍬 '+a)),
       f.units>0?el('button',{class:'btn sm ghost',onclick:async()=>{const r=await fundSellAll();if(r.ok)toast('Sold for 🍬 '+r.val+'.');viewMoney();}},'Sell all → 🍬 '+fval):''));
   cards.push(fundCard);
+  // 🔴 Single-card BET (concentration risk — the spicy rung)
+  const stk=v.stock,sPrice=stockPrice(t),sVal=fundValue(stk&&stk.units,sPrice);
+  const stockCard=el('div',{class:'card'});
+  stockCard.append(el('div',{class:'row between'},el('h2',{style:'margin:0'},'🔴 Star Card bet'),el('span',{class:'pill',style:'color:#ff3b30'},'high risk · high reward')));
+  if(stk&&(stk.units>0||(stk.history&&stk.history.length>1))){
+    const sh=stk.history,sl=sh[sh.length-1],sp=sh.length>1?sh[sh.length-2]:null,sPct=sp?Math.round((sl.price-sp.price)/sp.price*100):0;
+    const sPr=sh.map(h=>h.price),smn=Math.min.apply(null,sPr),smx=Math.max.apply(null,sPr);
+    stockCard.append(el('div',{class:'row between',style:'margin-top:6px;align-items:baseline'},el('div',{},el('b',{},'🎴 '+stk.name),el('b',{style:'font-size:18px;margin-left:8px'},'🍬 '+sl.price),el('span',{class:'small muted'},' / share')),el('b',{style:'color:'+(sPct>=0?'#34c759':'#ff3b30')},(sPct>=0?'▲ +':'▼ ')+sPct+'% today')),
+      chartLine(sPr.map(p=>({value:smx>smn?(p-smn)/(smx-smn)*100:50}))),
+      stk.units>0?el('div',{class:'small',style:'margin-top:6px;font-weight:700'},'You hold '+stk.units.toFixed(2)+' shares = 🍬 '+sVal):'',
+      el('p',{class:'small muted',style:'margin:8px 0'},'One card swings way MORE than the fund — it can zoom up or crash down. That’s “concentration risk”: all your eggs in one basket. Thrilling, but risky!'),
+      el('div',{class:'row',style:'gap:8px;flex-wrap:wrap'},
+        ...[10,25,50].map(a=>el('button',{class:'btn sm'+(wallet>=a?'':' ghost'),onclick:async()=>{const r=await stockBuy(a);if(!r.ok)return toast(r.msg);toast('🔴 Bet 🍬 '+r.amount+' on '+stk.name+'!');viewMoney();}},'Bet 🍬 '+a)),
+        stk.units>0?el('button',{class:'btn sm ghost',onclick:async()=>{const r=await stockSellAll();if(r.ok)toast('Cashed out for 🍬 '+r.val+'.');viewMoney();}},'Sell all → 🍬 '+sVal):el('button',{class:'btn sm ghost',onclick:async()=>{await moneyMutate(tt=>{vaultOf(tt).stock=null;});viewMoney();}},'Pick a different card')));
+  }else{
+    stockCard.append(el('p',{class:'sub',style:'margin:8px 0'},'Bet all your candy on ONE card instead of the whole fund. Bigger swings — you could win big or lose big. Pick your star:'),
+      el('div',{class:'dexgrid'},...POKEDEX.slice().sort((a,b)=>(b.t-a.t)||(a.id-b.id)).slice(0,12).map(p=>el('div',{class:'dexcell own',style:'border-color:'+RARITY[p.t].color,onclick:async()=>{await pickStock(p.id);viewMoney();}},pokeImg(p.id,false,50),el('div',{class:'dn'},p.name)))));
+  }
+  cards.push(stockCard);
   // 🧮 Deal-math challenge
   cards.push(moneyQuizCard());
   // 🏅 Smart-Shopper badges
@@ -4202,7 +4242,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.52';
+const APP_VERSION='v2.53';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

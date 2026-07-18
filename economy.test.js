@@ -33,19 +33,19 @@ new Function('POKE_BY_ID', 'pokeTypes', 'todayISO',
     'tradeCards', 'sumValue', 'tradeValue', 'bundlePrice', 'charmPrice', 'dealRating',
     'dayHash', 'todayMarket', 'marketMult', 'marketValue', 'tradeMarketValue', 'askMarketValue', 'npcAcceptProb',
     'haggleReply', 'auctionBidStep', 'earnedBadges', 'tradeNetFor',
-    'bankPayout', 'fundStep', 'fundValue', 'shopPrice', 'candyInPractices', 'moneyMathQuestion'].map(extract).join('\n') +
+    'bankPayout', 'fundStep', 'stockStep', 'fundValue', 'shopPrice', 'candyInPractices', 'moneyMathQuestion'].map(extract).join('\n') +
   '\nthis.normCard=normCard;this.normTrainer=normTrainer;this.mergeCardRec=mergeCardRec;this.mergeTrainerVals=mergeTrainerVals;' +
   'this.cardValue=cardValue;this.wantValue=wantValue;this.tradeCards=tradeCards;this.sumValue=sumValue;this.tradeValue=tradeValue;' +
   'this.bundlePrice=bundlePrice;this.charmPrice=charmPrice;this.dealRating=dealRating;this.npcAcceptProb=npcAcceptProb;' +
   'this.dayHash=dayHash;this.todayMarket=todayMarket;this.marketMult=marketMult;this.marketValue=marketValue;this.tradeMarketValue=tradeMarketValue;this.askMarketValue=askMarketValue;' +
   'this.haggleReply=haggleReply;this.auctionBidStep=auctionBidStep;this.earnedBadges=earnedBadges;this.tradeNetFor=tradeNetFor;' +
-  'this.bankPayout=bankPayout;this.fundStep=fundStep;this.fundValue=fundValue;this.shopPrice=shopPrice;this.candyInPractices=candyInPractices;' +
+  'this.bankPayout=bankPayout;this.fundStep=fundStep;this.stockStep=stockStep;this.fundValue=fundValue;this.shopPrice=shopPrice;this.candyInPractices=candyInPractices;' +
   'this.moneyMathQuestion=moneyMathQuestion;').call(ctx, POKE_BY_ID, pokeTypes, todayISO);
 const { normCard, normTrainer, mergeCardRec, mergeTrainerVals, cardValue, wantValue,
   tradeCards, sumValue, tradeValue, bundlePrice, charmPrice, dealRating, npcAcceptProb,
   todayMarket, marketMult, marketValue, tradeMarketValue, askMarketValue,
   haggleReply, auctionBidStep, earnedBadges, tradeNetFor,
-  bankPayout, fundStep, fundValue, shopPrice, candyInPractices, moneyMathQuestion } = ctx;
+  bankPayout, fundStep, stockStep, fundValue, shopPrice, candyInPractices, moneyMathQuestion } = ctx;
 
 let pass = 0, fail = 0;
 const eq = (desc, got, exp) => { const g = JSON.stringify(got), e = JSON.stringify(exp); if (g === e) pass++; else { fail++; console.log(`  ✗ ${desc}\n      expected ${e}\n      got      ${g}`); } };
@@ -143,6 +143,10 @@ eq('bankPayout 10 @ +10% = 11', bankPayout(10, 0.1), 11);
 eq('fundStep up day (+10%)', fundStep(100, 0.1), 110);
 eq('fundStep down day (−8%)', fundStep(100, -0.08), 92);
 eq('fundStep floored at 20 on a crash', fundStep(100, -0.95), 20);
+// Star Card (single-card bet, v2.53): wider swings + a LOWER crash floor than the diversified fund.
+eq('stockStep big up day (+22%)', stockStep(100, 0.22), 122);
+eq('stockStep big down day (−18%)', stockStep(100, -0.18), 82);
+eq('stockStep can crash further than the fund (floor 8, not 20)', stockStep(100, -0.99), 8);
 eq('fundValue = units × price (rounded)', fundValue(2.5, 118), 295);
 eq('shopPrice rare card t4 (steeper markup → 175)', shopPrice(6), 175);
 eq('shopPrice legendary t5 (steepest markup → 385)', shopPrice(150), 385);
