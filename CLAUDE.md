@@ -555,6 +555,65 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `candyEarned`/`candySpent`, both MAX-merged (`mergeCardRec`/`mergeTrainerVals`). Concurrent
   OFFLINE edits on two devices still take the higher total (inherent additive limit), but a
   taken trade / trained card / converted duplicate no longer reappears.
+  - **Simulated trade market — NPC traders (v2.46)** — a kid posts offers faster than family
+    members take them, so the post can feel dead. NPC "traders" (`NPC_TRADERS`) occasionally
+    accept a student's OPEN offers so the market stays lively, and a trader only VISITS when the
+    kid **finishes a practice** (primary trigger, in `submitSession`: `visitProb`=0.4→0.7 by
+    accuracy) — turning market activity into a reason to practise more. `runNpcMarket(profileId,
+    {max})` takes up to `max` of the student's fair open offers (oldest first), daily-capped
+    (`NPC_DAILY_CAP`=3, device-local `practicelab.npc` counter). Fairness/pricing:
+    `cardValue`/`wantValue` (rarity `TIER_VALUE` × level/shiny) feed `npcAcceptProb` — a GOOD deal
+    for the taker (offered worth ≥ ask) is taken ~92%, a greedy ask ~6% (gently teaches fair
+    pricing). `npcFulfill` pays the seller the `want` (candy or the requested card) and the offered
+    (escrowed) card leaves play; the trade becomes a normal `done` record (`takenBy:'npc'`,
+    `npc:true`) that syncs like any other. Results screen shows a "🔔 A trader visited" card
+    (`attempt.npcTrades`); `viewTrades` also runs a cooldown-gated `npcMaybeVisit()` on open (≤ once
+    / 20 min) and shows a "🧾 Recent deals" activity list. Pure pricing helpers unit-tested in
+    [economy.test.js](economy.test.js).
+  - **Market Coach — teach values + how markets work (v2.47)** — makes the trade flow an
+    interactive money lesson. **Bundles are now first-class:** a trade can offer ONE card (`t.card`)
+    or a BUNDLE (`t.cards[]`, up to `BUNDLE_MAX`=3); `tradeCards(t)` unifies both and is used
+    everywhere (post/accept/cancel/npcFulfill/render) — `t.card` kept as `cards[0]` for
+    backward-compat with pre-v2.47 records. `viewTradeNew` rewritten: multi-select grid (each card
+    shows its 🍬 `cardValue`), a **bundle tip** with a bulk discount (`bundlePrice` ≈6–20% off,
+    teaching "buy more, save more"), a **fair-price coach** ("~🍬X is fair"), value-scaled candy
+    options **rounded to clean tens**, a **live deal meter** (`dealRating` — 🎁 generous / ⚖️ fair /
+    🙈 too steep, aligned with `npcAcceptProb` so advice matches the market), and a **charm-pricing
+    (价格心理) toggle** (`charmPrice`: 60→59 — "ending in 9 FEELS cheaper; don't be fooled either").
+    Each offer in `viewTrades` shows its deal-quality chip; a collapsible **🎓 Market School**
+    `<details>` card teaches value / fair pricing / the 9-trick / bundles / upsell / supply-demand /
+    win-win. `npcAcceptProb` now values a bundle by `tradeValue` (summed). New pure helpers
+    (`tradeCards`/`sumValue`/`tradeValue`/`bundlePrice`/`charmPrice`/`dealRating`) unit-tested in
+    [economy.test.js](economy.test.js).
+  - **Money Lab — saving, term deposits & investing (v2.48, My cards → 💰 Money, `viewMoney`)** — a
+    SAVE→GROW financial-literacy layer on the candy economy, teaching the risk/reward ladder. **🎯
+    Savings goal:** pin a dream card (`setGoalCard`), progress bar vs `shopPrice` (tier value +50%
+    markup) using total net worth (wallet+bank+fund), "≈ N practices away" (`candyInPractices`), and
+    a **buy** when affordable (`buyGoalCard`, spend→`cardGiveTo`) — delayed gratification. **🟢 Candy
+    Bank (term deposit):** one active deposit; `BANK_TERMS` (1d +5% / 3d +12% / 7d +25%), locked,
+    GUARANTEED `bankPayout`; collecting early forfeits interest (`bankCollect(early)`) — patience &
+    %. **🟡 Candy Fund (investing):** `fundBuy`/`fundSellAll` units at a daily price that moves
+    −6%…+14% (`fundStep`, expected +~4%/day so it trends up but with real DOWN days), advanced once
+    per calendar day (`fundEnsureDaily`, catch-up capped at 7 days then snap), with a live
+    `chartLine` history + today's %; teaches volatility, patience ("time in the market"),
+    diversification and "only invest spare candy" — deliberately HIGHER expected return than the
+    safe bank so the trade-off is felt. **Sync:** wallet candy stays the monotonic
+    `candyEarned`/`candySpent` ledger (a deposit is a SPEND, a withdrawal an EARN → always correct
+    cross-device); the `vault` (bank/fund/goal) on the trainer doc syncs newest-wins by `vaultAt`
+    (`mergeRemote`). `moneyMutate` does candy+vault atomically. Pure helpers (`bankPayout`/`fundStep`/
+    `fundValue`/`shopPrice`/`candyInPractices`) unit-tested in [economy.test.js](economy.test.js).
+  - **Deal-math + pricier dream cards (v2.49)** — the market feeds the app's core (learning).
+    **🧮 Shopkeeper's Challenge** (Money Lab): `moneyMathQuestion()` generates a shop-style money
+    problem (% of an amount, interest, sale/discount price, unit price, profit) with 4 clean integer
+    options (answer + plausible distractors, always well-formed — fuzz-tested); `moneyQuizCard`
+    renders it, a correct answer pays +🍬2 up to `MATH_BONUS_CAP`=12/day (`mathBonusToday`, so it's a
+    nudge not a farm), and shows the concept. **Unit-price** teaching added to the bundle coach
+    ("🍬X each"). **Dream-card prices raised** via a per-tier `SHOP_MARKUP` (t1≈20 … t4≈175 …
+    **t5≈385**, rounded to 🍬5) so a legendary is a real ~55-practice save. Pure helpers unit-tested
+    in [economy.test.js](economy.test.js).
+    **STILL TO BUILD (staged next):** dynamic supply/demand market prices (+ a spicy "single hot
+    card" investing rung), haggling/counter-offers, auctions, a profit/loss ledger + "good deal?"
+    reflection, give/charity, and a parent money-skills report + Smart-Shopper badges.
 - **Battle vs PC ([battle.js](battle.js), `viewBattle`)** — practice-GATED: each
   practice grants `⚡ energy` (`battleAddEnergy`, +1, +1 at ≥80%, cap 12, stored on
   the trainer doc); a battle costs 1. `viewBattle` is a **team builder**: pick up
@@ -676,7 +735,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.45**). Claude suggests the next number on
+  minor on each release (currently at **v2.49**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach
