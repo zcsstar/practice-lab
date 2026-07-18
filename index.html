@@ -2828,13 +2828,13 @@ async function viewTrades(){
     el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('h2',{},'🔁 Trading Post'),
       el('p',{class:'sub',style:'margin:0'},'Offer one of your Pokémon (or a bundle!) and say what you want. Anyone in the family can take the deal later — you don’t both need to be here! You have 🍬 '+(tr.candy||0)+' candy.'),
       el('p',{class:'small muted',style:'margin:6px 0 0'},'💡 A candy deal costs the taker candy (no card leaves their collection); a card deal swaps card-for-card. Traders also pass through the market and may take fair offers — the more you practise, the more they visit.')),
+    marketSchool,
     el('div',{class:'card'},
       el('div',{class:'row between'},el('h2',{style:'margin:0'},'📊 Today’s Market'),el('span',{class:'small muted'},'supply & demand')),
       el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'},
         el('span',{class:'tchip',style:'background:'+(TYPE_COLOR[mkt.hot]||'#999')},'🔥 '+mkt.hot+' +25%'),
         el('span',{class:'tchip',style:'background:'+(TYPE_COLOR[mkt.cold]||'#999')},'❄️ '+mkt.cold+' −20%')),
       el('p',{class:'small muted',style:'margin-top:8px'},'Demand changes prices! SELL your '+mkt.hot+' cards while they’re hot, and it’s a cheap day to pick up '+mkt.cold+' cards. It all changes tomorrow.')),
-    marketSchool,
     el('div',{class:'row',style:'gap:8px;margin-bottom:6px'},
       el('button',{class:'btn primary',style:'flex:1',onclick:()=>viewTradeNew()},'➕ New offer'),
       el('button',{class:'btn',style:'flex:1',onclick:()=>{haggleState=null;startHaggle();}},'💬 Haggle')),
@@ -4242,7 +4242,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.53';
+const APP_VERSION='v2.54';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
