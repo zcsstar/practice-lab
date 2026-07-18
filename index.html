@@ -690,6 +690,8 @@ REQUIREMENTS:
 - HINT: include a short "hint" (one sentence) pointing to the FIRST step or key idea WITHOUT giving away the answer — a nudge for a stuck student.
 - WHY-WRONG (multiple_choice only): include "whyWrong" — an array of 4 short strings aligned to "options". For each WRONG option give the likely mistake/misconception that leads a student to pick it (≤ ~12 words, kid-friendly); for the CORRECT option use "". Learning from distractors matters.
 - CRITICAL — answer accuracy: actually SOLVE each question and double-check the arithmetic. The "answer"/"answerIndex" MUST be the correct result AND must equal the final result your explanation arrives at. For multiple_choice, the option at "answerIndex" must be exactly that correct result (and "answer" must be that option's text). If your worked explanation ends at a value, the key MUST point to the option showing that value — never a different one.
+- CRITICAL — exactly ONE correct option (no ambiguity): before finalising a multiple_choice question, check that NO OTHER option could ALSO be a valid answer under the wording. For logic / ordering / arrangement / "who is in the middle / who is next to" puzzles, ENUMERATE every arrangement that satisfies ALL the clues — if more than one arrangement fits (so two different options could each be right), the question is AMBIGUOUS: add another clue to pin down a UNIQUE answer, or discard it. Never justify a key with "the only way" unless you have genuinely checked every case.
+- CRITICAL — diagrams must match the key: when a question refers to a "diagram", the answer MUST be derivable purely from the figure values you supply. After writing the diagram spec, re-read it as the student will SEE it and confirm the keyed answer matches what the figure actually shows (e.g. a pictogram row drawn with 1 icon at 3-per shows 3, not 9).
 - numeric/short: give "answer" (exact) plus "acceptedAnswers" (equivalent correct forms, e.g. ["0.5","1/2"]).
 - "marks": whole number; harder questions worth more.
 - DIAGRAMS — when a picture genuinely helps (fractions, shapes/geometry, data, time, number sense), add a "diagram" field: a STRUCTURED object {"type":...,...} that the app renders correctly. Do NOT hand-draw SVG for these. Choose the matching type:
@@ -699,7 +701,7 @@ REQUIREMENTS:
   • fractionbar: {"type":"fractionbar","rows":[{"parts":4,"shaded":3,"label":"3/4"}]} (each bar splits into equal parts with some shaded)
   • shape: {"type":"shape","kind":"rectangle|square|triangle|right-triangle|parallelogram|trapezoid|circle|polygon","shaded":true,"sides":6,"labels":{"width":"8 cm","height":"5 cm","base":"..","top":"..","side":"..","radius":"..","diameter":"..","hyp":".."}}
   • clock: {"type":"clock","h":3,"m":15}
-  • pictogram: {"type":"pictogram","icon":"⭐","per":2,"rows":[{"label":"Y5","value":6}]}
+  • pictogram: {"type":"pictogram","icon":"⭐","per":2,"rows":[{"label":"Y5","value":6}]} — "value" is the ACTUAL TOTAL for that row (e.g. 6 students); the app AUTOMATICALLY draws value ÷ per icons (here 3 stars). Make every "value" a whole multiple of "per", put the REAL TOTAL in "value" (never the icon count), and make sure the answer key equals the value shown.
   • array: {"type":"array","rows":3,"cols":4,"shaded":5} (rows×cols grid — multiplication / area / fraction-of-a-set)
   • coordinate: {"type":"coordinate","min":0,"max":10,"points":[{"x":2,"y":3,"label":"P"}],"path":true}
   • angle: {"type":"angle","degrees":120}
@@ -959,8 +961,39 @@ function mcConcludesOffList(q){
   }
   return false;
 }
+// A multiple-choice question whose KEY contradicts its own data figure (pictogram/bar/tally):
+// the reported bug was a pictogram drawn with 1 banana-icon (=3) but keyed to 9. The kid reads
+// the figure CORRECTLY, picks 3, and is marked wrong. Deterministic (no API): decode the exact
+// per-row values the figure DRAWS (PLDiagram.figureRows mirrors the renderer), find the ONE row
+// the question reads, and flag when the key disagrees with that row while the figure's value is
+// itself a selectable option. DELIBERATELY conservative to never false-drop a difference / sum /
+// fraction question (whose key legitimately isn't a single row value):
+//  • only fires when the question reads exactly ONE labelled row and has no compare/aggregate word,
+//  • only when the figure's value for that row IS one of the options (so it's a provable mis-key),
+//  • all options must be plain numbers.
+function figureContradictsKey(q){
+  try{
+    if(!q||q.type!=='multiple_choice'||!Array.isArray(q.options)||q.options.length<2)return false;
+    if(!q.diagram||typeof q.diagram!=='object')return false;
+    if(typeof PLDiagram==='undefined'||!PLDiagram.figureRows)return false;
+    const rows=PLDiagram.figureRows(q.diagram);if(!rows||!rows.length)return false;
+    const optVals=q.options.map(o=>{const t=plValTokens(String(o)).tokens;return t.length?t[0].val:null;});
+    if(optVals.some(v=>v==null||!isFinite(v)))return false;      // every option must be numeric
+    const keyed=optVals[q.answerIndex];if(keyed==null)return false;
+    const qt=plainMath(String(q.question||'')).toLowerCase();
+    // compare / aggregate / part-of-whole wording → the key isn't meant to equal one row's value
+    if(/\b(more|fewer|less|difference|differ|total|altogether|all together|combined|sum|average|mean|median|range|fraction|percent|ratio|probability|not choose|didn'?t|except|twice|half of|as many)\b|%/.test(qt))return false;
+    // the row the question is asking about: exactly one alphabetic row label appears in the text
+    const hits=rows.filter(r=>{const lb=String(r.label||'').trim().toLowerCase();return lb.length>1&&/[a-z]/.test(lb)&&qt.indexOf(lb)>=0;});
+    if(hits.length!==1)return false;
+    const target=hits[0].value;if(target==null||!isFinite(target))return false;
+    const near=(a,b)=>Math.abs(a-b)<1e-6;
+    // figure shows `target`; the key points elsewhere AND `target` is a real option → provable mis-key
+    return !near(keyed,target)&&optVals.some(v=>near(v,target));
+  }catch(e){return false;}
+}
 // True when a question is broken/unanswerable and should be dropped or not counted.
-function questionBroken(q){return !!q&&(explanationSelfCorrects(q.explanation)||mcConcludesOffList(q));}
+function questionBroken(q){return !!q&&(explanationSelfCorrects(q.explanation)||mcConcludesOffList(q)||figureContradictsKey(q));}
 // Combined per-question fixups applied at parse time AND on every serve path.
 function fixQuestion(q){return repointFromExplanation(repointFromWhyWrong(dedupeOptions(repairQ(q))));}
 // Output-token budget needed for a batch. Each question (with a short
@@ -1053,9 +1086,15 @@ async function verifyQuestions(s,qs){
   // the checker can solve figure-based questions (pictographs, bar/table reads,
   // number lines) against the actual figure — catching answers that don't match
   // the picture (e.g. "April − March" when both show the same count).
-  const items=qs.map((q,i)=>{const it={i,type:q.type,question:q.question,options:(q.type==='multiple_choice'?q.options:undefined),markedIndex:(q.type==='multiple_choice'?q.answerIndex:undefined),markedAnswer:q.answer};if(q.explanation)it.explanation=String(q.explanation).slice(0,400);if(q.diagram&&typeof q.diagram==='object')it.figure=q.diagram;return it;});
+  const items=qs.map((q,i)=>{const it={i,type:q.type,question:q.question,options:(q.type==='multiple_choice'?q.options:undefined),markedIndex:(q.type==='multiple_choice'?q.answerIndex:undefined),markedAnswer:q.answer};if(q.explanation)it.explanation=String(q.explanation).slice(0,400);if(q.diagram&&typeof q.diagram==='object'){it.figure=q.diagram;
+    // Decode the per-row values the figure ACTUALLY draws (pictograms compute icons = value÷per,
+    // so a spec value=3,per=3 shows 3 — NOT 9). Passing these stops the checker echoing a
+    // generator that confused icon-count with value; it can then drop a key the picture doesn't show.
+    try{if(typeof PLDiagram!=='undefined'&&PLDiagram.figureRows){const fr=PLDiagram.figureRows(q.diagram);if(fr)it.figureRows=fr.map(r=>({label:r.label,value:r.value}));}}catch(e){}}
+    return it;});
   const vp=`You are a meticulous ${s.level||''} ${s.subject||''} exam answer-checker. For EACH question below, work out the answer YOURSELF, then judge the marked answer.
 When a question has a "figure" field, that JSON IS the exact data shown to the student (chart/table/number-line values); solve the question strictly from those values, and if they don't support any option, verdict "drop".
+When a question has a "figureRows" field, those {label,value} pairs are the EXACT per-row totals drawn in the figure (for a pictogram the value is already icons × per — e.g. a "Banana" row with 1 icon at 3-per shows 3). Solve the question using ONLY these values; if the marked option is not what the figure shows for the row being asked about, verdict "fix" (to the option that matches the figure) or "drop".
 ALWAYS report the answer YOU computed independently: "solvedIndex" (the 0-based option index you worked out, for multiple_choice) or "solved" (your computed value, for numeric/short) — even when the marked answer looks correct.
 Return ONLY JSON (no prose, no code fences): {"checks":[{"i":<index>,"verdict":"ok"|"fix"|"drop","solvedIndex":<0-based index you computed, multiple_choice>,"solved":"<value you computed, numeric/short>","correctIndex":<0-based option index, ONLY if multiple_choice and verdict is "fix">}]}
 - "ok": the marked answer is correct and the question has a single, unambiguous answer.
@@ -1520,7 +1559,7 @@ function viewGuide(){
       step(1,'⚙️','Set up (parent)','Add your AI key in Settings, pick each child’s exam and year level, and import past-paper packs under Exam content. The app then auto-grounds each child’s questions on the right level.'),
       step(2,'🚀','Practise','Tap Start a practice for fresh exam-style questions, or 🎯 Practise weak spots to target what’s hard. Saved questions in the bank make most practices free (no AI used).'),
       step(3,'📓','Learn from mistakes','On the results screen, read “How to solve it” and “why the other answers are wrong”. Wrong or flagged questions go to your Mistakes notebook and come back for review on a spaced schedule.'),
-      step(4,'⏱️','Track & rehearse','The Skills map shows which topics you’ve covered; difficulty adjusts as you improve; and a Timed exam on a real paper rehearses the actual sitting.')),
+      step(4,'⏱️','Track & rehearse','The Knowledge map shows your topic coverage and lets you learn each skill (with a Formula sheet); difficulty adjusts as you improve; and a Timed exam on a real paper rehearses the actual sitting.')),
     el('div',{class:'card'},el('h2',{},'💡 Tips'),
       tip('🔥','Build a daily streak and hit the daily goal.'),
       tip('🎴','Finishing practices earns collectible cards — then battle with them.'),
@@ -1557,8 +1596,8 @@ async function viewHome(){
   const secProgress=sectionCard('Track progress','See how you’re going and earn rewards.',[
     menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
     attempts.length?menuItem('📚','Past questions','Revisit any question — study it or practise similar',()=>viewAllQuestions()):null,
-    menuItem('🧭','Skills map','Which exam topics you’ve covered — and what to try next',()=>viewSkills()),
-    menuItem('🗺️','Knowledge map','Learn each skill — key idea, formulas, worked example — then practise',()=>viewKnowledgeMap()),
+    menuItem('🗺️','Knowledge map','Topic coverage + learn each skill (key idea, formulas, worked example) — then practise',()=>viewKnowledgeMap()),
+    menuItem('📐','Formula sheet','Key formulas for your level — with pictures & simple explanations',()=>viewFormulaSheet()),
     menuItem('🎴','My cards',caughtN?caughtN+' of '+POKEDEX.length+' caught — open packs by practising':'Finish a practice to earn your first card!',()=>viewCards()),
     isParent()?menuItem('👨‍👩‍👧','All students','Compare progress across the family',()=>viewDashboard()):null,
   ]);
@@ -2132,29 +2171,28 @@ function printWorksheet(questions,title){
   w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+e2(title||'Worksheet')+'</title><style>'+css+'</style></head><body><h1>'+e2(title||'Practice worksheet')+'</h1>'+qh+'<h2>Answer key</h2>'+ak+'<scr'+'ipt>setTimeout(function(){window.print();},350);</scr'+'ipt></body></html>');
   w.document.close();
 }
-// Skills-coverage map: every topic the exam tests, with this student's accuracy
-// and which ones are still "new" (not tried) — turns practice into blueprint coverage.
-async function viewSkills(){
-  stopTimer();
-  const ds=defaultSettingsFor(activeProfile());const subject=ds.subject||'Mathematics',examId=ds.exam||'icas';
-  const attempts=(await dbAll('attempts')).filter(a=>a.profileId===pid()&&a.subject===subject);
-  const stat={};attempts.forEach(a=>(a.results||[]).forEach(r=>{const t=r.topic||'General';(stat[t]=stat[t]||{n:0,c:0}).n++;if(r.status==='correct')stat[t].c++;}));
+// Topic-coverage card (formerly the standalone "Skills map"): every topic the exam tests, with
+// this student's accuracy and which are still "new" (not tried). Now FOLDED into the Knowledge map
+// (the mindmap already colours strands by this same mastery) — used as the Knowledge map's zero-setup
+// fallback when no curriculum tree is built yet. Returns a card element (does not call show()).
+async function coverageListCard(s){
+  const subject=s.subject||'Mathematics',examId=EXAMS[s.exam]?s.exam:'icas';
+  const stat=await strandStats(subject);
   const known=examTopics(examId,subject);const topics=known.length?known.slice():Object.keys(stat);
   Object.keys(stat).forEach(t=>{if(!topics.includes(t))topics.push(t);}); // include practised topics outside the known list
   const practised=topics.filter(t=>stat[t]&&stat[t].n>0).length;
   const row=t=>{const o=stat[t]||{n:0,c:0};const pct=o.n?Math.round(o.c/o.n*100):0;
     return el('div',{class:'row between',style:'gap:10px;padding:8px 0;border-bottom:1px solid var(--line);align-items:center'},
-      el('div',{style:'flex:1;min-width:0'},el('div',{},t),o.n?el('div',{class:'gbar',style:'margin-top:5px'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:'+accColor(pct)})):el('div',{class:'small muted',style:'margin-top:3px'},'not tried yet · '+o.n)),
+      el('div',{style:'flex:1;min-width:0'},el('div',{},t),o.n?el('div',{class:'gbar',style:'margin-top:5px'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:'+accColor(pct)})):el('div',{class:'small muted',style:'margin-top:3px'},'not tried yet')),
       o.n?el('b',{style:'flex:none;width:44px;text-align:right;color:'+accColor(pct)},pct+'%'):el('span',{class:'pill',style:'flex:none'},'new'),
       el('button',{class:'btn sm',style:'flex:none',onclick:()=>practiceTopic(t)},o.n?'Practise':'Try'));
   };
-  show(el('div',{},backBar('Skills map',()=>viewHome()),
-    el('div',{class:'card'},el('h2',{},'🧭 '+esc(subject)+' skills map'),
-      el('p',{class:'sub'},'Every topic this exam tests. Practise the ones you haven’t covered to be exam-ready.'),
-      el('div',{class:'gbar',style:'margin:8px 0'},el('div',{class:'gbar-fill',style:'width:'+Math.round(practised/Math.max(1,topics.length)*100)+'%;background:var(--brand)'})),
-      el('p',{class:'small muted',style:'margin-bottom:8px'},practised+' of '+topics.length+' topics practised'),
-      practised?el('button',{class:'btn primary block',style:'margin-bottom:10px',onclick:()=>practiceWeakSpots()},'🎯 Practise my weak spots'):'',
-      ...topics.map(row))));
+  return el('div',{class:'card'},el('h2',{},'🧭 Topic coverage'),
+    el('p',{class:'sub'},'Every topic this exam tests. Practise the ones you haven’t covered to be exam-ready.'),
+    el('div',{class:'gbar',style:'margin:8px 0'},el('div',{class:'gbar-fill',style:'width:'+Math.round(practised/Math.max(1,topics.length)*100)+'%;background:var(--brand)'})),
+    el('p',{class:'small muted',style:'margin-bottom:8px'},practised+' of '+topics.length+' topics practised'),
+    practised?el('button',{class:'btn primary block',style:'margin-bottom:10px',onclick:()=>practiceWeakSpots()},'🎯 Practise my weak spots'):'',
+    ...topics.map(row));
 }
 
 /* ============================================================ Knowledge map + concept cards (AI-generated, cached, synced) ============================================================
@@ -2205,6 +2243,16 @@ function formulaCautions(name,formulas){
   if(isCircArea&&any(/2\(?(?:pi|π)?\)?r(?![\^]?2|²)/)&&!any(/r[\^]?2|r²/))out.push('Area of a circle uses r² (πr²); 2πr is the circumference.');
   // Circumference is 2πr (or πd); an r² formula is the area.
   if(isCircum&&any(/r[\^]?2|r²/))out.push('A circle’s circumference is 2πr (or πd); r² is the area.');
+  const mult=/[×*·x]/;
+  // Parallelogram area is base × height (multiply); an addition is wrong (same slip as the triangle one).
+  const isPara=/parallelogram/.test(nm)&&/area/.test(nm);
+  if(isPara&&any(/b(ase)?\+h(eight)?/)&&!any(/b(ase)?[×*·x]?h(eight)?/))out.push('Area of a parallelogram is base × height (multiply) — not base + height.');
+  // Rectangle / square area MULTIPLIES its two side lengths; adding them gives (half) the perimeter.
+  const isRectArea=/(rectangle|rectangular|square)/.test(nm)&&/area/.test(nm);
+  if(isRectArea&&any(/(length|width|side)\+(length|width|side)|\bl\+w\b|\bw\+l\b|\bs\+s\b/)&&!F.some(f=>mult.test(f)))out.push('Area of a rectangle/square MULTIPLIES the side lengths — adding the sides gives the perimeter, not the area.');
+  // Rectangle/square perimeter ADDS the sides (2×(l+w)); a length × width product is the AREA.
+  const isRectPerim=/(rectangle|square)/.test(nm)&&/perimeter/.test(nm);
+  if(isRectPerim&&any(/(length|l)[×*·x](width|w)|(width|w)[×*·x](length|l)|\bl[×*·x]w\b|\bw[×*·x]l\b/))out.push('Perimeter ADDS the sides (2 × (length + width)); length × width is the AREA.');
   return out;
 }
 async function generateKnowledgeTree(s){
@@ -2257,11 +2305,14 @@ async function viewKnowledgeMap(){
   const s=defaultSettingsFor(activeProfile()),exam=EXAMS[s.exam]||EXAMS.general;
   const rec=await dbGet('curriculum',curriculumKey(s));
   if(rec&&rec.points&&rec.points.length)return renderKnowledgeMap(rec,s);
+  // No AI tree yet → still show the zero-setup TOPIC COVERAGE (formerly the Skills map) plus the build CTA.
+  const coverage=await coverageListCard(s);
   show(el('div',{},backBar('Knowledge map',()=>viewHome()),
     el('div',{class:'card'},el('h2',{},'🗺️ Knowledge map'),
       el('p',{class:'sub'},'A map of everything '+(s.level||'')+' '+(s.subject||'')+' ('+exam.label+') covers — grouped by strand, each knowledge point with a learn card (key idea + formulas + worked example) and a focused drill.'),
-      el('p',{class:'small muted',style:'margin-bottom:12px'},'Built once by AI, then saved and shared to your devices.'),
-      el('button',{class:'btn primary block lg',onclick:()=>buildKnowledgeMap(s)},'✨ Build my knowledge map'))));
+      el('p',{class:'small muted',style:'margin-bottom:12px'},'Built once by AI, then saved and shared to your devices. Your topic coverage below works right away.'),
+      el('button',{class:'btn primary block lg',onclick:()=>buildKnowledgeMap(s)},'✨ Build my knowledge map')),
+    coverage));
 }
 async function buildKnowledgeMap(s){
   if(!CFG.apiKey)return toast('Add an AI key in Settings first.');
@@ -2280,6 +2331,10 @@ async function renderKnowledgeMap(rec,s){
   // 思维导图 overview (visual): root → strands, coloured by mastery.
   let mapSvg='';
   try{const spec={type:'mindmap',root:(s.subject||exam.label||'Topics'),branches:gnames.map(g=>{const p=pctOf(g);return {label:g,color:(p==null?'#c7c7cc':accColor(p)),count:groups[g].length};})};mapSvg=(typeof PLDiagram!=='undefined')?sanitizeSvg(PLDiagram.render(spec)):'';}catch(e){}
+  // Coverage meter (folded in from the old Skills map): how many strands have been practised.
+  const practisedStrands=gnames.filter(g=>{const o=stats[g];return o&&o.n>0;}).length;
+  // Topics practised OUTSIDE the tree's strands (the Skills map's unique off-syllabus surface).
+  const offList=Object.keys(stats).filter(t=>!gnames.includes(t)&&stats[t]&&stats[t].n>0);
   const cards=gnames.map(g=>{
     const pct=pctOf(g);
     const pointRows=groups[g].map(p=>{
@@ -2303,11 +2358,22 @@ async function renderKnowledgeMap(rec,s){
       rec.source?el('div',{class:'small muted',style:'margin-top:2px'},'Grounded on: '+rec.source):'',
       rec.needsReview?el('div',{class:'small',style:'color:var(--warn);margin-top:2px'},'⚠️ Some prerequisite links were auto-repaired — consider ↻ Rebuild.'):'',
       mapSvg?el('div',{style:'margin:8px 0 4px;overflow-x:auto',html:mapSvg}):'',
+      el('div',{class:'gbar',style:'margin:8px 0 3px'},el('div',{class:'gbar-fill',style:'width:'+Math.round(practisedStrands/Math.max(1,gnames.length)*100)+'%;background:var(--brand)'})),
+      el('p',{class:'small muted',style:'margin-bottom:6px'},practisedStrands+' of '+gnames.length+' strands practised'),
       el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'},
         el('button',{class:'btn',onclick:()=>practiceWeakSpots()},'🎯 Practise weak spots'),
+        el('button',{class:'btn',onclick:()=>viewFormulaSheet()},'📐 Formula sheet'),
         (rec.source&&/🤖/.test(rec.source))?el('button',{class:'btn',onclick:()=>viewRefs()},'🔗 Add a curriculum source'):'',
         el('button',{class:'btn ghost',onclick:()=>rebuildKnowledgeMap(s)},'↻ Rebuild map'))),
-    ...cards));
+    ...cards,
+    offList.length?el('div',{class:'card'},el('h2',{style:'margin:0 0 4px'},'Other topics you’ve practised'),
+      el('p',{class:'sub'},'Practised but outside this exam’s strands.'),
+      ...offList.map(t=>{const o=stats[t],pct=o.n?Math.round(o.c/o.n*100):0;
+        return el('div',{class:'row between',style:'gap:10px;padding:8px 0;border-bottom:1px solid var(--line);align-items:center'},
+          el('div',{style:'flex:1;min-width:0'},el('div',{},t),el('div',{class:'gbar',style:'margin-top:5px'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:'+accColor(pct)}))),
+          el('b',{style:'flex:none;width:44px;text-align:right;color:'+accColor(pct)},pct+'%'),
+          el('button',{class:'btn sm',style:'flex:none',onclick:()=>practiceTopic(t)},'Practise'));
+      })):''));
 }
 // Parent-visible "this learn card looks wrong" flag — reuses the flagLog / Corrected-answers
 // dashboard plumbing so a suspect concept card surfaces to a grown-up (LEARN content had no
@@ -2363,6 +2429,154 @@ async function practiceKnowledgePoint(point,s){
   show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building a drill…'),el('div',{class:'muted small',style:'margin-top:6px'},point.name)))));
   try{const set=await buildPracticeSet(setup,[]);if(!set.questions.length)throw new Error('No questions came back — please try again.');startSession(setup,set.questions,'practice');viewRun();}
   catch(e){alert('Couldn’t build that drill:\n\n'+(e.message||e));viewKnowledgeMap();}
+}
+
+/* ============================================================ Formula sheet (图形解释 — key formulas with labelled diagrams) ============================================================
+   A printable "key formulas for your level" page. Two layers:
+   (1) CURATED, illustrated maths formulas — each with a LABELLED shape drawn by the tested
+       PLDiagram engine (so the figure is CORRECT, never AI-hallucinated) + a plain-language
+       "why it works". These are the primary→lower-secondary formulas from DEFAULT_CURRICULUM,
+       so they're accurate by construction. Filtered to the student's year level.
+   (2) The AI concept-card formulas already generated for the Knowledge map, flattened per strand
+       (reuses the same cache + safety layer: latexValid guard, formulaCautions, provenance, report).
+   Reuses ensureConceptCard for any missing cards — no new store, no new AI path. */
+// Year number for level filtering: prefer an explicit "Year N", else the first number (so
+// "Level 1 (Year 11)" → 11, "Year 6 (Paper D)" → 6). null when unknown → show everything.
+function levelYear(level){const m=String(level||'').match(/year\s*(\d+)/i);if(m)return +m[1];const d=String(level||'').match(/\d+/);return d?+d[0]:null;}
+// Curated, illustrated maths formulas. `latex` renders via KaTeX; `plain` is for print/read-aloud;
+// `why` is the 精准易懂 explanation; `diagram` is a labelled PLDiagram shape (or null when 2D can't show it).
+const FORMULA_GRAPHICS=[
+  {id:'rect-area',minYear:4,title:'Area of a rectangle',latex:'A = l \\times w',plain:'Area = length × width',
+   why:'Count the unit squares inside: l rows with w squares in each. Multiply the two side lengths.',
+   diagram:{type:'shape',kind:'rectangle',shaded:true,labels:{width:'l',height:'w'}}},
+  {id:'square-area',minYear:4,title:'Area of a square',latex:'A = s^2',plain:'Area = side × side (side²)',
+   why:'A square is a rectangle with all sides equal, so area = side × side.',
+   diagram:{type:'shape',kind:'square',shaded:true,labels:{width:'s',height:'s'}}},
+  {id:'rect-perim',minYear:4,title:'Perimeter of a rectangle',latex:'P = 2\\times(l + w)',plain:'Perimeter = 2 × (length + width)',
+   why:'Perimeter is the distance all the way around: two lengths + two widths = 2 × (l + w).',
+   diagram:{type:'shape',kind:'rectangle',labels:{width:'l',height:'w'}}},
+  {id:'tri-area',minYear:5,title:'Area of a triangle',latex:'A = \\tfrac{1}{2}\\times b \\times h',plain:'Area = ½ × base × height',
+   why:'A triangle is exactly HALF of a rectangle with the same base and height — find b × h, then halve it.',
+   diagram:{type:'shape',kind:'triangle',shaded:true,labels:{base:'b',height:'h'}}},
+  {id:'tri-angles',minYear:5,title:'Angles in a triangle',latex:'a + b + c = 180^\\circ',plain:'The three angles inside a triangle add up to 180°',
+   why:'Tear off the three corners of any triangle and they fit together on a straight line (180°).',
+   diagram:{type:'shape',kind:'triangle',labels:{}}},
+  {id:'para-area',minYear:7,title:'Area of a parallelogram',latex:'A = b \\times h',plain:'Area = base × height',
+   why:'Slide the slanted end across to make a rectangle of the same base and height, so area = base × height.',
+   diagram:{type:'shape',kind:'parallelogram',shaded:true,labels:{base:'b',height:'h'}}},
+  {id:'trap-area',minYear:7,title:'Area of a trapezium',latex:'A = \\tfrac{1}{2}(a + b)\\times h',plain:'Area = ½ × (a + b) × height',
+   why:'Average the two parallel sides ((a + b) ÷ 2), then multiply by the height between them.',
+   diagram:{type:'shape',kind:'trapezoid',shaded:true,labels:{top:'a',bottom:'b',height:'h'}}},
+  {id:'circle-area',minYear:7,title:'Area of a circle',latex:'A = \\pi r^2',plain:'Area = π × r²',
+   why:'r² is the square built on the radius; π (≈ 3.14) is how many of those squares fill the circle.',
+   diagram:{type:'shape',kind:'circle',shaded:true,labels:{radius:'r'}}},
+  {id:'circle-circ',minYear:7,title:'Circumference of a circle',latex:'C = 2\\pi r = \\pi d',plain:'Circumference = 2 × π × r = π × diameter',
+   why:'The distance around is a little over 3 diameters — exactly π diameters, or 2πr.',
+   diagram:{type:'shape',kind:'circle',labels:{diameter:'d'}}},
+  {id:'cuboid-vol',minYear:6,title:'Volume of a cuboid',latex:'V = l \\times w \\times h',plain:'Volume = length × width × height',
+   why:'Fill the box with unit cubes: length × width covers the base, then × height for each layer.',
+   diagram:null},
+  {id:'pythagoras',minYear:9,title:'Pythagoras’ theorem',latex:'a^2 + b^2 = c^2',plain:'a² + b² = c² (right-angled triangle)',
+   why:'In a right-angled triangle the square on the longest side (c) equals the other two squares added.',
+   diagram:{type:'shape',kind:'right-triangle',labels:{base:'a',height:'b',hyp:'c'}}}
+];
+// Fresh, non-banked drill that forces every question to USE a given formula.
+async function practiceFormula(entry){
+  const base=defaultSettingsFor(activeProfile()),exam=EXAMS[base.exam]||EXAMS.icas;
+  const setup={...base,topics:[],count:6,context:CFG.examContext[base.exam]||'',webSearch:CFG.webSearch,
+    notes:'Every question MUST require using this formula: '+entry.title+' ('+entry.plain+'). Vary the numbers and context each time.',examLabel:exam.label};
+  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building a drill…'),el('div',{class:'muted small',style:'margin-top:6px'},entry.title)))));
+  try{const set=await buildPracticeSet(setup,[]);if(!set.questions.length)throw new Error('No questions came back — please try again.');startSession(setup,set.questions,'practice');viewRun();}
+  catch(e){alert('Couldn’t build that drill:\n\n'+(e.message||e));viewFormulaSheet();}
+}
+// Generate any missing concept cards so their formulas appear on the sheet (reuses ensureConceptCard).
+async function fillFormulas(rec,s){
+  if(!CFG.apiKey)return toast('Add an AI key in Settings first.');
+  const missing=rec.points.filter(p=>!p.card);
+  if(!missing.length)return viewFormulaSheet();
+  if(!confirm('Generate learn cards for '+missing.length+' knowledge point'+(missing.length>1?'s':'')+'? That makes about '+missing.length+' AI calls (saved + shared afterwards).'))return;
+  const host=$('#fillStatus');
+  for(let i=0;i<missing.length;i++){if(host)host.textContent='Generating formulas… '+(i+1)+' / '+missing.length;try{await ensureConceptCard(rec,missing[i],s);}catch(e){}}
+  viewFormulaSheet();
+}
+function printFormulaSheet(illus,rec,title){
+  const w=window.open('','_blank');if(!w){toast('Allow pop-ups to print the formula sheet.');return;}
+  const e2=x=>String(x==null?'':x).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  let body='';
+  if(illus&&illus.length){body+='<h2>Key formulas</h2>';illus.forEach(g=>{body+='<div class="f"><b>'+e2(g.title)+':</b> '+e2(g.plain)+'<div class="why">'+e2(g.why)+'</div></div>';});}
+  if(rec&&rec.points){const groups={};rec.points.forEach(p=>{if(p.card&&Array.isArray(p.card.formulas)&&p.card.formulas.length)(groups[p.group]=groups[p.group]||[]).push(p);});
+    Object.keys(groups).forEach(g=>{body+='<h2>'+e2(g)+'</h2>';groups[g].forEach(p=>{p.card.formulas.forEach(f=>{body+='<div class="f">'+e2(plainMath(f))+' <span class="pt">— '+e2(p.name)+'</span></div>';});});});}
+  const css='body{font:15px/1.55 -apple-system,system-ui,sans-serif;color:#111;max-width:720px;margin:24px auto;padding:0 18px}h1{font-size:20px}h2{margin-top:22px;border-top:1px solid #ccc;padding-top:10px;font-size:15px}.f{margin:6px 0}.why{color:#555;font-size:13px;margin-top:1px}.pt{color:#888;font-size:12px}';
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+e2(title||'Formula sheet')+'</title><style>'+css+'</style></head><body><h1>'+e2(title||'Formula sheet')+'</h1>'+body+'<scr'+'ipt>setTimeout(function(){window.print();},300);</scr'+'ipt></body></html>');
+  w.document.close();
+}
+async function viewFormulaSheet(){
+  stopTimer();
+  const s=defaultSettingsFor(activeProfile()),exam=EXAMS[s.exam]||EXAMS.general;
+  const isMaths=/math/i.test(s.subject||'');
+  const yr=levelYear(s.level);
+  const rec=await dbGet('curriculum',curriculumKey(s));
+  const illus=isMaths?FORMULA_GRAPHICS.filter(g=>yr==null||g.minYear==null||yr>=g.minYear):[];
+  // KaTeX validity guard (same as viewConcept): unparseable LaTeX shows a plain caution, not a red blob.
+  const latexValid=f=>{try{if(typeof katex==='undefined'||!katex.renderToString)return true;const spans=String(f||'').match(/\$[^$]+\$/g);if(!spans)return true;return spans.every(sp=>{try{katex.renderToString(sp.replace(/^\$|\$$/g,''),{throwOnError:true,displayMode:false});return true;}catch(e){return false;}});}catch(e){return true;}};
+  const illusBlock=g=>{const svg=g.diagram?sanitizeSvg(PLDiagram.render(g.diagram)):'';
+    return el('div',{style:'padding:12px 0;border-bottom:1px solid var(--line)'},
+      el('div',{class:'row',style:'gap:14px;align-items:flex-start;flex-wrap:wrap'},
+        svg?el('div',{class:'figure',style:'flex:none;max-width:170px;margin:0',html:svg}):'',
+        el('div',{style:'flex:1;min-width:210px'},
+          el('div',{style:'font-weight:700'},g.title),
+          el('div',{class:'qtext',style:'margin:5px 0',html:esc('$'+g.latex+'$')}),
+          el('div',{class:'small muted'},g.why),
+          el('button',{class:'btn sm',style:'margin-top:9px',onclick:()=>practiceFormula(g)},'✏️ Practise this'))));
+  };
+  const cards=[];
+  if(illus.length)cards.push(el('div',{class:'card'},
+    el('h2',{},'📐 Illustrated formulas'),
+    el('p',{class:'sub'},'The key '+(s.level||'')+' shapes and formulas, each with a labelled picture and a plain-language reason.'),
+    ...illus.map(illusBlock)));
+  // AI concept-card formulas (Knowledge map), flattened per strand.
+  if(rec&&rec.points&&rec.points.length){
+    const groups={};rec.points.forEach(p=>{(groups[p.group]=groups[p.group]||[]).push(p);});
+    const order=examTopics(s.exam,s.subject);
+    const gnames=Object.keys(groups).sort((a,b)=>{const ia=order.indexOf(a),ib=order.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+    const missingTotal=rec.points.filter(p=>!p.card).length;
+    gnames.forEach(g=>{
+      const withF=groups[g].filter(p=>p.card&&Array.isArray(p.card.formulas)&&p.card.formulas.length);
+      if(!withF.length)return;
+      const rows=[];
+      withF.forEach(p=>{
+        (p.card.cautions||[]).forEach(c=>rows.push(el('div',{class:'small',style:'color:var(--warn);margin:4px 0'},'⚠️ '+c)));
+        p.card.formulas.forEach(f=>rows.push(el('div',{style:'padding:6px 0;border-bottom:1px solid var(--line)'},
+          latexValid(f)?el('div',{html:esc(f)}):el('div',{style:'color:var(--warn)'},'⚠️ '+plainMath(String(f))+' — couldn’t read this formula'),
+          el('div',{class:'small muted',style:'margin-top:2px'},p.name))));
+      });
+      cards.push(el('div',{class:'card'},el('h2',{style:'margin:0 0 6px'},g),...rows,
+        el('div',{class:'row',style:'margin-top:8px'},el('button',{class:'btn sm ghost',onclick:()=>practiceKnowledgePoint(withF[0],s)},'✏️ Practise '+g))));
+    });
+    if(missingTotal)cards.push(el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},
+      el('div',{class:'small',style:'margin-bottom:8px'},'📖 '+missingTotal+' knowledge point'+(missingTotal>1?'s have':' has')+' no learn card yet — generate them to add their formulas here.'),
+      el('div',{id:'fillStatus',class:'small muted',style:'margin-bottom:6px'},''),
+      el('button',{class:'btn sm',onclick:()=>fillFormulas(rec,s)},'✨ Generate missing formulas')));
+  }
+  // Provenance + accuracy note.
+  cards.push(el('div',{class:'card'},el('div',{class:'row between',style:'align-items:center;gap:8px;flex-wrap:wrap'},
+    el('span',{class:'small muted'},'📐 Curated formulas are checked; 🤖 AI card formulas — double-check anything that looks off.'),
+    el('button',{class:'btn sm ghost',onclick:()=>printFormulaSheet(illus,rec,(s.subject||'')+' formula sheet · '+(s.level||''))},'🖨 Print'))));
+  // Empty state: no curated formulas (non-maths) and no built map yet.
+  if(!illus.length&&!(rec&&rec.points&&rec.points.length)){
+    cards.length=0;
+    cards.push(el('div',{class:'card'},el('h2',{},'📐 Formula sheet'),
+      el('p',{class:'sub'},'Build the Knowledge map for '+(s.level||'')+' '+(s.subject||'')+' first — its concept cards supply the formulas shown here.'),
+      el('button',{class:'btn primary block',onclick:()=>buildKnowledgeMap(s)},'✨ Build my knowledge map')));
+  } else if(!(rec&&rec.points&&rec.points.length)){
+    cards.push(el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},
+      el('div',{class:'small',style:'margin-bottom:8px'},'Want formulas for every topic (not just shapes)? Build the Knowledge map and its cards fill this sheet.'),
+      el('button',{class:'btn sm',onclick:()=>viewKnowledgeMap()},'🗺️ Open Knowledge map')));
+  }
+  show(el('div',{},backBar('Formula sheet',()=>viewHome()),
+    el('div',{class:'card'},el('h2',{},'📐 '+(s.subject||'')+' formula sheet'),
+      el('p',{class:'sub'},(s.level||'')+' · '+exam.label+' — the key formulas for this level, with pictures and simple explanations.')),
+    ...cards));
 }
 function viewResults(a){
   stopTimer();
@@ -3433,7 +3647,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.44';
+const APP_VERSION='v2.45';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

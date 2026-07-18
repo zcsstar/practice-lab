@@ -410,6 +410,45 @@
     return wrap(w, h, inner, null);
   }
 
+  // Decode the per-row DATA VALUES a data-figure actually renders — mirrors the
+  // pictogram / bar / tally renderers EXACTLY so a caller (verify enrichment, the
+  // deterministic figure-vs-key guard) reads the same numbers the student sees.
+  // For a pictogram the drawn value = round(rawValue/per)*per (icons are whole), which
+  // is why a spec with value=3,per=3 shows ONE icon = 3, not 9. Returns
+  // [{label, value (as drawn), symbols, per, rawValue}] or null when it doesn't apply.
+  function figureRows(spec) {
+    try {
+      if (!spec || typeof spec !== 'object') return null;
+      var t = String(spec.type || '').toLowerCase().replace(/[\s_-]/g, '');
+      if (t === 'pictogram' || t === 'picturegraph') {
+        var prows = spec.rows || spec.data || spec.categories || [];
+        if (!Array.isArray(prows) || !prows.length) return null;
+        var per = n(spec.per, 1) || 1;
+        return prows.map(function (r, i) {
+          var raw = n(r.value != null ? r.value : r.count), sym = Math.round(raw / per);
+          return { label: r.label != null ? String(r.label) : ('Row ' + (i + 1)), value: sym * per, symbols: sym, per: per, rawValue: raw };
+        });
+      }
+      if (t === 'bar' || t === 'barchart' || t === 'column' || t === 'columngraph' || t === 'bargraph') {
+        var brows = spec.bars || spec.data || spec.categories || [];
+        if (!Array.isArray(brows) || !brows.length) return null;
+        return brows.map(function (b, i) {
+          return (typeof b === 'object')
+            ? { label: b.label != null ? String(b.label) : ('' + (i + 1)), value: n(b.value != null ? b.value : b.count) }
+            : { label: '' + (i + 1), value: n(b) };
+        });
+      }
+      if (t === 'tally' || t === 'tallychart') {
+        var trows = spec.rows || spec.data || [];
+        if (!Array.isArray(trows) || !trows.length) return null;
+        return trows.map(function (r, i) {
+          return { label: r.label != null ? String(r.label) : ('Row ' + (i + 1)), value: Math.max(0, Math.round(n(r.value != null ? r.value : r.count))) };
+        });
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+
   var R = {
     pie: pie, piechart: pie, fractioncircle: pie, circlegraph: pie,
     mindmap: mindmap, conceptmap: mindmap, knowledgemap: mindmap, mindmup: mindmap,
@@ -443,7 +482,7 @@
     } catch (e) { return ''; }
   }
 
-  var api = { render: render, types: Object.keys(R) };
+  var api = { render: render, figureRows: figureRows, types: Object.keys(R) };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.PLDiagram = api;
 })(typeof window !== 'undefined' ? window : globalThis);

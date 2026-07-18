@@ -32,15 +32,17 @@ function extract(name) {
   return src.slice(start, i);
 }
 const selfRe = src.match(/const SELF_CORRECT_RE=[^\n]*;/)[0]; // module-level const the detector uses
+const PLDiagram = require('./diagram.js'); // real renderer/decoder, so figureContradictsKey reads true drawn values
 
 const ctx = {};
-new Function(
+new Function('PLDiagram',
   selfRe + '\n' + extract('plainMath') + '\n' + extract('plValTokens') + '\n' +
-  extract('explanationSelfCorrects') + '\n' + extract('mcConcludesOffList') + '\n' + extract('questionBroken') + '\n' +
+  extract('explanationSelfCorrects') + '\n' + extract('mcConcludesOffList') + '\n' +
+  extract('figureContradictsKey') + '\n' + extract('questionBroken') + '\n' +
   extract('validateTree') + '\n' + extract('formulaCautions') + '\n' +
-  'this.explanationSelfCorrects=explanationSelfCorrects;this.mcConcludesOffList=mcConcludesOffList;this.questionBroken=questionBroken;this.validateTree=validateTree;this.formulaCautions=formulaCautions;'
-).call(ctx);
-const { explanationSelfCorrects, mcConcludesOffList, questionBroken, validateTree, formulaCautions } = ctx;
+  'this.explanationSelfCorrects=explanationSelfCorrects;this.mcConcludesOffList=mcConcludesOffList;this.figureContradictsKey=figureContradictsKey;this.questionBroken=questionBroken;this.validateTree=validateTree;this.formulaCautions=formulaCautions;'
+).call(ctx, PLDiagram);
+const { explanationSelfCorrects, mcConcludesOffList, figureContradictsKey, questionBroken, validateTree, formulaCautions } = ctx;
 
 let pass = 0, fail = 0;
 const check = (desc, got, expected) => { if (got === expected) pass++; else { fail++; console.log(`  ✗ ${desc}\n      expected ${expected}, got ${got}`); } };
@@ -67,7 +69,26 @@ check('non-numeric options → not judged', mcConcludesOffList(mc(['Red', 'Green
 check('some option non-numeric → not judged', mcConcludesOffList(mc(['4', '6', 'eight', '9'], 'The total is 12.')), false);
 check('empty explanation → not broken', mcConcludesOffList(mc(['1', '2', '3', '4'], '')), false);
 
+// ── figureContradictsKey: pictogram/bar figure disagrees with the keyed answer ──
+// The reported bug: a pictogram drawn with 1 banana icon (=3) but keyed to 9 (option C).
+const picto = (rows, per, q, opts, ai) => ({ type: 'multiple_choice', options: opts, answerIndex: ai, question: q, diagram: { type: 'pictogram', icon: '🍎', per, rows } });
+check('reported: pictogram draws Banana=3 but key on 9 → contradicts',
+  figureContradictsKey(picto([{ label: 'Apple', value: 6 }, { label: 'Banana', value: 3 }, { label: 'Orange', value: 3 }], 3, 'How many students chose Banana?', ['3', '6', '9', '12'], 2)), true);
+check('correct pictogram (Banana=9), key on 9 → not flagged',
+  figureContradictsKey(picto([{ label: 'Apple', value: 6 }, { label: 'Banana', value: 9 }, { label: 'Orange', value: 3 }], 3, 'How many students chose Banana?', ['3', '6', '9', '12'], 2)), false);
+check('difference question ("how many more") not flagged even if key off',
+  figureContradictsKey(picto([{ label: 'Apple', value: 6 }, { label: 'Banana', value: 3 }], 3, 'How many more students chose Apple than Banana?', ['1', '3', '6', '9'], 3)), false);
+check('total question ("altogether") not flagged',
+  figureContradictsKey(picto([{ label: 'Apple', value: 6 }, { label: 'Banana', value: 3 }], 3, 'How many students voted altogether?', ['3', '6', '9', '12'], 0)), false);
+check('two labels in question (Apple or Banana) → not a single-row read',
+  figureContradictsKey(picto([{ label: 'Apple', value: 6 }, { label: 'Banana', value: 3 }], 3, 'How many chose Apple or Banana?', ['3', '6', '9', '12'], 1)), false);
+check('non-numeric options → not judged',
+  figureContradictsKey(picto([{ label: 'Apple', value: 6 }, { label: 'Banana', value: 3 }], 3, 'Which fruit did Banana beat?', ['Apple', 'Orange', 'Kiwi', 'Pear'], 0)), false);
+check('no diagram → not judged', figureContradictsKey({ type: 'multiple_choice', options: ['1', '2', '3', '4'], answerIndex: 0, question: 'How many chose Banana?' }), false);
+check('figureContradictsKey null-safe', figureContradictsKey(null), false);
+
 // ── questionBroken combines both, and leaves sound questions alone ───────────
+check('questionBroken: pictogram figure contradicts key', questionBroken(picto([{ label: 'Apple', value: 6 }, { label: 'Banana', value: 3 }], 3, 'How many students chose Banana?', ['3', '6', '9', '12'], 2)), true);
 check('questionBroken: self-correcting explanation', questionBroken(mc(['1', '2', '3', '4'], 'Actually, the correct answer should be 9.')), true);
 check('questionBroken: off-list MC conclusion', questionBroken(mc(['1', '2', '3', '4'], 'So the value is 12.')), true);
 check('questionBroken: sound MC not flagged', questionBroken(mc(['4', '6', '8', '9'], 'Adding step by step, the answer is 8.')), false);
@@ -100,6 +121,13 @@ check('formula: no formulas → no cautions', formulaCautions('Area of a triangl
 // correct area formula alongside a perimeter note (which contains b+h) must NOT false-flag
 check('formula: triangle ½bh + perimeter note NOT flagged', formulaCautions('Area of a triangle', ['$A=\\frac{1}{2}bh$', '$P=a+b+h$']).length, 0);
 check('formula: triangle ½×b×h NOT flagged', formulaCautions('Area of a triangle', ['$A=\\frac{1}{2}\\times b\\times h$']).length, 0);
+// extended signatures (v2.45): parallelogram / rectangle area & perimeter
+check('formula: parallelogram area b+h flagged', formulaCautions('Area of a parallelogram', ['$A=b+h$']).length > 0, true);
+check('formula: parallelogram area b×h NOT flagged', formulaCautions('Area of a parallelogram', ['$A=b\\times h$']).length, 0);
+check('formula: rectangle area l+w flagged', formulaCautions('Area of a rectangle', ['$A=l+w$']).length > 0, true);
+check('formula: rectangle area l×w NOT flagged', formulaCautions('Area of a rectangle', ['$A=l\\times w$']).length, 0);
+check('formula: rectangle perimeter l×w flagged', formulaCautions('Perimeter of a rectangle', ['$P=l\\times w$']).length > 0, true);
+check('formula: rectangle perimeter 2(l+w) NOT flagged', formulaCautions('Perimeter of a rectangle', ['$P=2(l+w)$']).length, 0);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

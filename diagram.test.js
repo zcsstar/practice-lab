@@ -86,5 +86,19 @@ ok(D.render({ type: 'pie' }) === '', 'pie with no parts → empty');
 ok(D.render({ type: 'pie', parts: [{ value: 0 }, { value: 0 }] }) === '', 'pie all-zero → empty');
 ok(D.render({ type: 'bar', bars: [] }) === '', 'bar with no bars → empty');
 
+// figureRows: decode the exact per-row values a data figure DRAWS (for verify enrichment +
+// the deterministic figure-vs-key guard). Pictogram value = round(rawValue/per)*per.
+{
+  const fr = D.figureRows({ type: 'pictogram', icon: '🍎', per: 3, rows: [{ label: 'Apple', value: 6 }, { label: 'Banana', value: 3 }] });
+  ok(Array.isArray(fr) && fr.length === 2, 'figureRows pictogram → 2 rows');
+  ok(fr && fr[0].symbols === 2 && fr[0].value === 6, 'pictogram Apple: 2 icons = 6');
+  ok(fr && fr[1].symbols === 1 && fr[1].value === 3, 'pictogram Banana value=3,per=3 → 1 icon = 3 (the bug: NOT 9)');
+  ok(fr && fr[1].label === 'Banana', 'pictogram row label preserved');
+}
+ok(D.figureRows({ type: 'bar', bars: [{ label: 'Cat', value: 4 }, { label: 'Dog', value: 7 }] })[1].value === 7, 'figureRows bar reads value');
+ok(D.figureRows({ type: 'tally', rows: [{ label: 'Red', value: 7 }] })[0].value === 7, 'figureRows tally reads value');
+ok(D.figureRows({ type: 'pie', parts: [{ value: 3 }] }) === null, 'figureRows on non-data figure → null');
+ok(D.figureRows(null) === null, 'figureRows null-safe');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

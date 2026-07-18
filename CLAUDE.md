@@ -205,6 +205,26 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `logFlag`, and keeps it out of the notebook). The verifier also now receives a trimmed
   `explanation` and is told to "drop" a self-contradictory/uncertain one. Tested in
   [accuracy.test.js](accuracy.test.js).
+  - **Figure-vs-key + ambiguity hardening (v2.45)** — two reported "my answer was right but
+    marked wrong" cases. (1) A **pictogram whose drawn figure contradicts the key**: the renderer
+    draws `round(value/per)` icons, so a spec with Banana `value:3,per:3` shows 1 icon = 3, but the
+    key/explanation intended 9 — the kid reads the figure correctly and is marked wrong.
+    `figureContradictsKey(q)` (folded into `questionBroken`) catches it **deterministically**:
+    `PLDiagram.figureRows(spec)` (a NEW shared decoder in [diagram.js](diagram.js) that mirrors the
+    pictogram/bar/tally renderers exactly) gives the true drawn per-row values; when an all-numeric MC
+    reads exactly ONE labelled row (no compare/aggregate/fraction wording) and the key ≠ that row's
+    value while the value IS a selectable option, it's a provable mis-key → dropped/self-check.
+    Conservative by construction so difference/sum/"how many more" questions are never false-dropped.
+    `verifyQuestions` also now passes decoded `figureRows` + a decode rule to the AI checker (catches it
+    at generation before banking, which the deterministic guard alone can't for banked/imported items).
+    (2) An **ambiguous logic puzzle** ("Ana not at front, Ben behind Cara — who's in the middle?" has
+    TWO valid orderings) can't be caught deterministically (arbitrary word-problem semantics), so the
+    fix is prompt-side: `buildPrompt` gained a "exactly ONE correct option — for logic/ordering puzzles
+    ENUMERATE all arrangements; if >1 fits, it's ambiguous" clause + a "diagram must match the key"
+    clause + a pictogram-convention note (`value` is the data total; the app draws `value ÷ per` icons).
+    The human escape hatch ("✓ My answer was actually right" → `regrade`) remains the backstop.
+    `formulaCautions` also gained curated wrong-signature flags for parallelogram / rectangle area &
+    perimeter. Tested in [accuracy.test.js](accuracy.test.js) + [diagram.test.js](diagram.test.js).
 - **Remove a question everywhere (v2.31)** — the fix for "a bad question (wrong image /
   no correct answer) keeps coming back even after clearing the bank" (it also lived in the
   notebook or re-synced from another device). A **🗑 Remove** control on the runner
@@ -280,17 +300,35 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     (text-only) to the family's other devices. Copyright-sensitive text (ICAS) stays in the private
     `curriculum.local.js` only.
 - **Views** — `viewHome/Setup/Run/Results/Review/History/Settings/Profiles/Refs/
-  Bank/Dashboard/Skills/Guide/Study/AllQuestions`. `show(node)` swaps `#app` and re-runs
-  KaTeX. No router; functions call each other. `viewBank` = question-bank hub;
+  Bank/Dashboard/Guide/Study/AllQuestions/KnowledgeMap/Concept/FormulaSheet`. `show(node)` swaps
+  `#app` and re-runs KaTeX. No router; functions call each other. `viewBank` = question-bank hub;
   `viewStudy` = focused single-question learning page; `viewAllQuestions` = searchable
   browser of every past question; `viewDashboard` =
-  parent-only all-students progress overview; `viewSkills` = exam-topic coverage map;
+  parent-only all-students progress overview;
   `viewGuide` = "How it works" guide (header ❓ + auto-shows on first run via the
-  `practicelab.guideSeen` flag). **`viewHome` groups the menu into labelled section
-  cards** via a `sectionCard()` helper: **Practise** (Start a practice · 🎯 weak spots ·
-  Mistakes notebook · Question bank), **Track progress** (Progress · Skills map · My
-  cards · All students) and **Exam content** (Reference library · Exam packs); empty /
-  parent-only sections are dropped.
+  `practicelab.guideSeen` flag). **The standalone Skills map was RETIRED (v2.45)** — its coverage
+  heatmap folded into the Knowledge map (`coverageListCard(s)` is the reusable body; the map header
+  now shows the "N of M strands practised" meter + an "Other topics you've practised" off-syllabus
+  card, and the map's empty state shows the coverage list so the zero-setup value survives). **`viewHome`
+  groups the menu into labelled section cards** via a `sectionCard()` helper: **Practise** (Start a
+  practice · 🎯 weak spots · Mistakes notebook · Question bank), **Track progress** (Progress · Past
+  questions · Knowledge map · 📐 Formula sheet · My cards · All students) and **Exam content**
+  (Reference library · Exam packs); empty / parent-only sections are dropped.
+- **Formula sheet (v2.45, home "📐 Formula sheet", `viewFormulaSheet`)** — a printable "key formulas
+  for your level" page answering "a knowledge/formula center with 精准易懂 explanations + 图形解释".
+  Two layers: (1) **`FORMULA_GRAPHICS`** — a CURATED, illustrated maths-formula library (rectangle/
+  square/triangle/parallelogram/trapezium/circle area, perimeter, circumference, cuboid volume,
+  Pythagoras, triangle angles), each `{minYear,title,latex,plain,why,diagram}` where `diagram` is a
+  LABELLED `PLDiagram` shape spec — so the figure is CORRECT by construction (never AI-drawn), the
+  formulas come from `DEFAULT_CURRICULUM`'s KEY FORMULAS (accurate), and `why` is the plain-language
+  reason. Filtered by `levelYear(s.level)` so it shows only level-appropriate formulas. (2) The AI
+  concept-card `formulas[]` (Knowledge map), flattened per strand — reuses the SAME cache + safety
+  (`latexValid` guard, `card.cautions` from `formulaCautions`, provenance). `practiceFormula(entry)`
+  drills a curated formula (notes-scoped, fresh, not banked); `practiceKnowledgePoint` drills an AI one;
+  `fillFormulas(rec,s)` generates any missing cards (reuses `ensureConceptCard`, confirms the call
+  count); `printFormulaSheet(illus,rec,title)` prints (reuses the `printWorksheet` pattern, `plainMath`
+  for the print window). Only maths gets the illustrated layer; other subjects show the AI formulas.
+  Reached from the home menu AND a "📐 Formula sheet" button on the Knowledge map.
 - **Mistakes notebook + spaced repetition** (`viewReview`, home "📓 Mistakes notebook") —
   browses the `review` items grouped by topic, each expandable to its worked answer +
   mastery progress (`timesCorrect`/2). `startReview(items)` re-tests all/one topic
@@ -345,8 +383,9 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   syncs via Drive (merge by id, newest `updatedAt` wins — keeps the copy with more cards
   filled). **`el()` escaping gotcha applies:** strand/point NAMES are `el()` text
   children → pass them raw (never `esc()`, which double-encodes `&`→`&amp;`); `esc()` is
-  only for the `html:` option (question/formula spans). Complements the coarser
-  `viewSkills` coverage map.
+  only for the `html:` option (question/formula spans). The map header ALSO carries the
+  topic-coverage meter + off-syllabus card (the former Skills map, folded in v2.45; see Views)
+  and a "📐 Formula sheet" button.
 - **Progress & stats** (`viewHistory`, home "📈 Progress & stats") — analytics
   dashboard: at-a-glance tiles (questions/accuracy/time/streak), a score-trend
   line and per-day activity bars (`chartLine`/`chartBars` — tiny inline-SVG
@@ -382,7 +421,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     names via `diffLabel()` (`DIFF_NAMES`: L1 Starter…L5 Challenge); shown on runner/bank.
   - **Weak-spot practice** (`practiceWeakSpots()`): a bank-first drill weighted to the
     student's lowest-scoring practised topics + untried `examTopics()`; on the home Practise
-    section and atop the Skills map.
+    section and atop the Knowledge map's coverage view.
   - **Timed mock-exam mode**: `startPaper(pk, timed)` sets a countdown (`paperMins()`,
     ~1 min/Q clamped 10–75) reusing the existing `S.limitSec` timer + auto-submit; runner
     shows a "⏱ Timed exam" pill, results show a per-topic exam report (`topicReport()`).
@@ -637,7 +676,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.44**). Claude suggests the next number on
+  minor on each release (currently at **v2.45**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach
