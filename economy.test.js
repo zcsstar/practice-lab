@@ -21,29 +21,30 @@ function extract(name) {
 const tierValueSrc = src.match(/const TIER_VALUE=\[[^\]]*\];/)[0]; // NPC market pricing table
 const shopMarkupSrc = src.match(/const SHOP_MARKUP=\[[^\]]*\];/)[0]; // per-tier retail markup
 const marketTypesSrc = src.match(/const MARKET_TYPES=\[[^\]]*\];/)[0]; // daily supply/demand type pool
+const badgesSrc = src.match(/const BADGES=\[[\s\S]*?\n\];/)[0];      // Smart-Shopper badge definitions
 const fundConstSrc = src.match(/const FUND_START=[^\n;]*;/)[0];    // FUND_START + CANDY_PER_PRACTICE
 const POKE_BY_ID = { 10: { t: 1 }, 25: { t: 2 }, 6: { t: 4 }, 150: { t: 5 }, 1: { t: 2 }, 4: { t: 2 } }; // stub: dexId → rarity tier
 const pokeTypes = id => id === 1 ? ['grass'] : id === 4 ? ['fire'] : ['normal']; // stub types (rest 'normal' → never hot/cold)
 const todayISO = () => '2026-07-18'; // fixed so the daily market is deterministic in tests
 const ctx = {};
 new Function('POKE_BY_ID', 'pokeTypes', 'todayISO',
-  tierValueSrc + '\n' + shopMarkupSrc + '\n' + marketTypesSrc + '\n' + fundConstSrc + '\n' +
+  tierValueSrc + '\n' + shopMarkupSrc + '\n' + marketTypesSrc + '\n' + badgesSrc + '\n' + fundConstSrc + '\n' +
   ['normCard', 'normTrainer', 'mergeCardRec', 'mergeTrainerVals', 'cardValue', 'wantValue',
     'tradeCards', 'sumValue', 'tradeValue', 'bundlePrice', 'charmPrice', 'dealRating',
     'dayHash', 'todayMarket', 'marketMult', 'marketValue', 'tradeMarketValue', 'askMarketValue', 'npcAcceptProb',
-    'haggleReply', 'auctionBidStep',
+    'haggleReply', 'auctionBidStep', 'earnedBadges', 'tradeNetFor',
     'bankPayout', 'fundStep', 'fundValue', 'shopPrice', 'candyInPractices', 'moneyMathQuestion'].map(extract).join('\n') +
   '\nthis.normCard=normCard;this.normTrainer=normTrainer;this.mergeCardRec=mergeCardRec;this.mergeTrainerVals=mergeTrainerVals;' +
   'this.cardValue=cardValue;this.wantValue=wantValue;this.tradeCards=tradeCards;this.sumValue=sumValue;this.tradeValue=tradeValue;' +
   'this.bundlePrice=bundlePrice;this.charmPrice=charmPrice;this.dealRating=dealRating;this.npcAcceptProb=npcAcceptProb;' +
   'this.dayHash=dayHash;this.todayMarket=todayMarket;this.marketMult=marketMult;this.marketValue=marketValue;this.tradeMarketValue=tradeMarketValue;this.askMarketValue=askMarketValue;' +
-  'this.haggleReply=haggleReply;this.auctionBidStep=auctionBidStep;' +
+  'this.haggleReply=haggleReply;this.auctionBidStep=auctionBidStep;this.earnedBadges=earnedBadges;this.tradeNetFor=tradeNetFor;' +
   'this.bankPayout=bankPayout;this.fundStep=fundStep;this.fundValue=fundValue;this.shopPrice=shopPrice;this.candyInPractices=candyInPractices;' +
   'this.moneyMathQuestion=moneyMathQuestion;').call(ctx, POKE_BY_ID, pokeTypes, todayISO);
 const { normCard, normTrainer, mergeCardRec, mergeTrainerVals, cardValue, wantValue,
   tradeCards, sumValue, tradeValue, bundlePrice, charmPrice, dealRating, npcAcceptProb,
   todayMarket, marketMult, marketValue, tradeMarketValue, askMarketValue,
-  haggleReply, auctionBidStep,
+  haggleReply, auctionBidStep, earnedBadges, tradeNetFor,
   bankPayout, fundStep, fundValue, shopPrice, candyInPractices, moneyMathQuestion } = ctx;
 
 let pass = 0, fail = 0;
@@ -180,6 +181,25 @@ eq('auctionBidStep enforces a minimum +2 step', auctionBidStep(10, 100), 12);
 eq('auctionBidStep caps just above market (115) — at cap → null', auctionBidStep(115, 100), null);
 eq('auctionBidStep past cap → null (no more bids)', auctionBidStep(130, 100), null);
 eq('auctionBidStep never exceeds the cap', auctionBidStep(110, 100), 115);
+
+// ── Smart-Shopper badges + trading P&L (v2.52) ──
+const badge = (vault, extra, name) => earnedBadges(vault, extra).find(b => b.name === name);
+eq('badge Saver earned after a bank deposit', badge({ stats: { banked: 1 } }, {}, 'Saver').got, true);
+eq('badge Saver locked with no deposit', badge({ stats: {} }, {}, 'Saver').got, false);
+eq('badge Maths Whiz needs 5 wins (4 → locked)', badge({ stats: { mathWins: 4 } }, {}, 'Maths Whiz').got, false);
+eq('badge Maths Whiz at 5 → earned', badge({ stats: { mathWins: 5 } }, {}, 'Maths Whiz').got, true);
+eq('badge Generous earned after a gift', badge({ stats: { gifts: 2 } }, {}, 'Generous').got, true);
+eq('badge Profit Trader uses netTrade (>0 → earned)', badge({ stats: {} }, { netTrade: 10 }, 'Profit Trader').got, true);
+eq('badge Profit Trader with 0 net → locked', badge({ stats: {} }, { netTrade: 0 }, 'Profit Trader').got, false);
+eq('earnedBadges handles a missing/empty vault safely', earnedBadges(null, {}).some(b => b.got), false);
+// tradeNetFor: sold (fixed candy sales + auction bids) − bought (candy paid)
+eq('tradeNetFor sums fixed sales + auction bids − buys',
+  tradeNetFor('me', [
+    { status: 'done', sellerId: 'me', want: { type: 'candy', amount: 20 } },
+    { status: 'done', sellerId: 'me', kind: 'auction', bid: 30 },
+    { status: 'done', takenBy: 'me', want: { type: 'candy', amount: 5 } },
+    { status: 'open', sellerId: 'me', want: { type: 'candy', amount: 99 } }, // open → ignored
+  ]), 45);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

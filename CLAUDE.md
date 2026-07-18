@@ -638,8 +638,18 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     `kind!=='auction'`), fold into the cash-flow (P&L) + Recent-deals, and — like all trades — sync
     by status (intermediate live-bid updates are seller-device-local, which is fine since auctions
     resolve on the seller's device). Pure logic unit-tested in [economy.test.js](economy.test.js).
-    **STILL TO BUILD (staged next):** a spicy "single hot card" investing rung, give/charity, and a
-    parent money-skills report + Smart-Shopper badges.
+  - **Give/charity + Smart-Shopper badges + parent money report (v2.52)** — the values + oversight
+    layer. **🎁 Give a card** (`giveCard`/`viewGive`, gated on >1 profile) transfers a card to a
+    family member (`cardTakeFrom`→`cardGiveTo`) — teaches generosity. **🏅 Badges** (`BADGES`/
+    `earnedBadges`) — Saver, Investor, Goal Getter, Negotiator, Bargain Hunter, Auctioneer, Maths
+    Whiz, Generous, Profit Trader — computed from money-skill counters on the synced vault
+    (`vault.stats`, bumped via `bumpStat`/`statBump` in bankDeposit/fundBuy/buyGoalCard/closeHaggle/
+    resolveAuctions/the math challenge/giveCard) plus `tradeNetFor` (trading P&L). Shown in the Money
+    Lab. **Parent money report** — each student's card on `viewDashboard` gets a 💰 line (total net
+    worth, saved, trading net, badges earned, gifts) read from their synced trainer vault + trades.
+    Pure `earnedBadges`/`tradeNetFor` unit-tested in [economy.test.js](economy.test.js).
+    **STILL TO BUILD (optional):** a spicy "single hot card" investing rung (bet on one card's price
+    vs the diversified fund).
 - **Battle vs PC ([battle.js](battle.js), `viewBattle`)** — practice-GATED: each
   practice grants `⚡ energy` (`battleAddEnergy`, +1, +1 at ≥80%, cap 12, stored on
   the trainer doc); a battle costs 1. `viewBattle` is a **team builder**: pick up
@@ -761,7 +771,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.51**). Claude suggests the next number on
+  minor on each release (currently at **v2.52**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

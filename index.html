@@ -3218,7 +3218,7 @@ function makeOffer(amount){
 async function closeHaggle(){
   const hs=haggleState;if(!hs||hs.state!=='deal')return;
   if(!await trainerSpend(hs.dealPrice))return toast('Not enough candy — do more practice!');
-  await cardGiveTo(pid(),hs.snap);scheduleDriveSync();
+  await cardGiveTo(pid(),hs.snap);await statBump('haggles');if(hs.dealPrice<hs.fair)await statBump('haggleWins');scheduleDriveSync();
   toast('🤝 Bought '+hs.name+' for 🍬 '+hs.dealPrice+'!');haggleState=null;viewCards();
 }
 
@@ -3257,6 +3257,7 @@ async function resolveAuctions(){
     else{const cs=tradeCards(a);for(const s of cs)await cardGiveTo(pid(),s);a.status='cancelled';a.resolvedAt=Date.now();out.push({sold:false,msg:'🔨 No bids on your '+lbl+' — card returned.'});}
     await dbPut('trades',a);
   }
+  const soldN=out.filter(r=>r.sold).length;if(soldN)await statBump('auctionsSold',soldN);
   if(out.length)scheduleDriveSync();
   return out;
 }
@@ -3400,12 +3401,63 @@ function fundEnsureDaily(t){const f=vaultOf(t).fund;const today=todayISO();
   return changed;}
 // Atomic vault mutation on the active trainer doc (candy ledger + vault together, then persist+sync).
 async function moneyMutate(fn){const t=await trainerGet();vaultOf(t);const r=fn(t);vaultOf(t).vaultAt=Date.now();t.updatedAt=Date.now();normTrainer(t);await dbPut('trainer',t);scheduleDriveSync();return r;}
-async function bankDeposit(term){return moneyMutate(t=>{if(t.vault.bank)return {ok:false,msg:'You already have savings in the bank.'};if((t.candy||0)<term.amt)return {ok:false,msg:'Not enough candy for that deposit.'};t.candySpent=(t.candySpent||0)+term.amt;const now=Date.now();t.vault.bank={principal:term.amt,rate:term.rate,term:term.days,startedAt:now,maturesAt:now+term.days*86400000};return {ok:true};});}
+async function bankDeposit(term){return moneyMutate(t=>{if(t.vault.bank)return {ok:false,msg:'You already have savings in the bank.'};if((t.candy||0)<term.amt)return {ok:false,msg:'Not enough candy for that deposit.'};t.candySpent=(t.candySpent||0)+term.amt;const now=Date.now();t.vault.bank={principal:term.amt,rate:term.rate,term:term.days,startedAt:now,maturesAt:now+term.days*86400000};bumpStat(t,'banked');return {ok:true};});}
 async function bankCollect(early){return moneyMutate(t=>{const b=t.vault.bank;if(!b)return {ok:false};const matured=Date.now()>=b.maturesAt;const payout=(matured&&!early)?bankPayout(b.principal,b.rate):b.principal;t.candyEarned=(t.candyEarned||0)+payout;t.vault.bank=null;return {ok:true,payout,matured,interest:payout-b.principal};});}
-async function fundBuy(amount){return moneyMutate(t=>{fundEnsureDaily(t);if((t.candy||0)<amount)return {ok:false,msg:'Not enough candy to invest that much.'};const price=fundPrice(t);t.candySpent=(t.candySpent||0)+amount;t.vault.fund.units=(t.vault.fund.units||0)+amount/price;return {ok:true,amount};});}
+async function fundBuy(amount){return moneyMutate(t=>{fundEnsureDaily(t);if((t.candy||0)<amount)return {ok:false,msg:'Not enough candy to invest that much.'};const price=fundPrice(t);t.candySpent=(t.candySpent||0)+amount;t.vault.fund.units=(t.vault.fund.units||0)+amount/price;bumpStat(t,'invested');return {ok:true,amount};});}
 async function fundSellAll(){return moneyMutate(t=>{fundEnsureDaily(t);const f=t.vault.fund;const val=fundValue(f.units,fundPrice(t));if(val<=0)return {ok:false};f.units=0;t.candyEarned=(t.candyEarned||0)+val;return {ok:true,val};});}
 async function setGoalCard(dexId){await moneyMutate(t=>{t.vault.goalDex=dexId;});}
-async function buyGoalCard(){const t=await trainerGet();vaultOf(t);const dex=t.vault.goalDex;const p=dex&&POKE_BY_ID[dex];if(!p)return;const cost=shopPrice(dex);if((t.candy||0)<cost)return toast('Keep saving! You need 🍬 '+cost+'.');await trainerSpend(cost);await cardGiveTo(pid(),{dexId:dex,tier:p.t,level:1,shiny:false});await moneyMutate(tt=>{tt.vault.goalDex=null;});toast('🎉 You saved up and bought '+p.name+'!');}
+async function buyGoalCard(){const t=await trainerGet();vaultOf(t);const dex=t.vault.goalDex;const p=dex&&POKE_BY_ID[dex];if(!p)return;const cost=shopPrice(dex);if((t.candy||0)<cost)return toast('Keep saving! You need 🍬 '+cost+'.');await trainerSpend(cost);await cardGiveTo(pid(),{dexId:dex,tier:p.t,level:1,shiny:false});await moneyMutate(tt=>{tt.vault.goalDex=null;bumpStat(tt,'goalsBought');});toast('🎉 You saved up and bought '+p.name+'!');}
+// ----- Give / charity + Smart-Shopper badges (v2.52) -----
+// Money-skill stat counters live on the synced vault (so the parent dashboard can read them).
+function bumpStat(t,key,n){const v=vaultOf(t);v.stats=v.stats||{};v.stats[key]=(v.stats[key]||0)+(n||1);}
+async function statBump(key,n){try{await moneyMutate(t=>bumpStat(t,key,n));}catch(e){}}
+// Give one of your cards to a family member — teaches generosity & sharing.
+async function giveCard(dexId,toId){
+  const snap=await cardTakeFrom(pid(),dexId);if(!snap)return toast('You don’t have that card to give.');
+  await cardGiveTo(toId,snap);await statBump('gifts');
+  scheduleDriveSync();toast('🎁 Gave '+(POKE_BY_ID[dexId]?POKE_BY_ID[dexId].name:'a card')+' to '+profileName(toId)+' — very kind! 💛');
+}
+const BADGES=[
+  {emoji:'🏦',name:'Saver',desc:'Put candy in the bank',got:st=>(st.banked||0)>0},
+  {emoji:'📈',name:'Investor',desc:'Invested in the fund',got:st=>(st.invested||0)>0},
+  {emoji:'🎯',name:'Goal Getter',desc:'Saved up for a dream card',got:st=>(st.goalsBought||0)>0},
+  {emoji:'💬',name:'Negotiator',desc:'Made a deal by haggling',got:st=>(st.haggles||0)>0},
+  {emoji:'🛍️',name:'Bargain Hunter',desc:'Haggled below market value',got:st=>(st.haggleWins||0)>0},
+  {emoji:'🔨',name:'Auctioneer',desc:'Sold a card at auction',got:st=>(st.auctionsSold||0)>0},
+  {emoji:'🧮',name:'Maths Whiz',desc:'Aced 5 shopkeeper challenges',got:st=>(st.mathWins||0)>=5},
+  {emoji:'🎁',name:'Generous',desc:'Gave a card to family',got:st=>(st.gifts||0)>0},
+  {emoji:'💰',name:'Profit Trader',desc:'Made a profit trading',got:(st,x)=>(x.netTrade||0)>0}
+];
+function earnedBadges(vault,extra){const st=(vault&&vault.stats)||{};extra=extra||{};return BADGES.map(b=>({emoji:b.emoji,name:b.name,desc:b.desc,got:!!b.got(st,extra)}));}
+// Net trading candy for a profile from the trades store (fixed sales + auction sales − buys).
+function tradeNetFor(profileId,allTrades){
+  const done=(allTrades||[]).filter(t=>t.status==='done');
+  const sold=done.filter(t=>t.sellerId===profileId).reduce((s,t)=>s+(t.kind==='auction'?(+t.bid||0):(t.want&&t.want.type==='candy'?(+t.want.amount||0):0)),0);
+  const bought=done.filter(t=>t.takenBy===profileId&&t.want&&t.want.type==='candy').reduce((s,t)=>s+(+t.want.amount||0),0);
+  return sold-bought;
+}
+let giveDraft=null;
+async function viewGive(){
+  stopTimer();
+  const owned=await cardsForProfile(),family=CFG.profiles.filter(p=>p.id!==pid());
+  const bail=(emo,msg)=>show(el('div',{},backBar('Give a card',()=>viewCards()),el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},emo),el('div',{},msg)))));
+  if(!family.length)return bail('🎁','Add another family member (Manage students) to give cards to.');
+  if(!owned.length)return bail('🎴','You have no cards yet — do some practice first!');
+  giveDraft={dexId:null,toId:null};
+  const host=el('div',{});
+  function render(){
+    host.innerHTML='';
+    const grid=el('div',{class:'dexgrid'});
+    owned.forEach(c=>{const p=POKE_BY_ID[c.dexId];if(!p)return;const sel=giveDraft.dexId===c.dexId;
+      grid.append(el('div',{class:'dexcell own'+(sel?' picked':''),style:'border-color:'+RARITY[p.t].color,onclick:()=>{giveDraft.dexId=c.dexId;render();}},c.count>1?el('span',{class:'cnt'},'×'+c.count):'',pokeImg(c.dexId,c.shiny,56),el('div',{class:'dn'},p.name)));});
+    host.append(el('div',{class:'card'},el('h2',{},'🎁 Give a card'),el('p',{class:'sub',style:'margin-bottom:8px'},'Sharing is generous — pick one of your cards to give to family.'),grid));
+    if(giveDraft.dexId)host.append(el('div',{class:'card'},el('h2',{},'To whom?'),
+      el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:6px'},...family.map(f=>el('button',{class:'btn sm'+(giveDraft.toId===f.id?' primary':''),onclick:()=>{giveDraft.toId=f.id;render();}},'🧒 '+f.name))),
+      giveDraft.toId?el('button',{class:'btn primary block',style:'margin-top:12px',onclick:async()=>{await giveCard(giveDraft.dexId,giveDraft.toId);viewCards();}},'🎁 Give '+(POKE_BY_ID[giveDraft.dexId]?POKE_BY_ID[giveDraft.dexId].name:'card')+' to '+profileName(giveDraft.toId)):''));
+  }
+  render();
+  show(el('div',{},backBar('Give a card',()=>viewCards()),host));
+}
 // ----- Deal-math: turn the market back into MATH practice (v2.49) -----
 // Generates a shop-style money problem (%, interest, discount, unit price, profit) with 4 clean
 // integer options. Pure math, grounded in shop numbers — the app's core (learning) inside the game.
@@ -3431,7 +3483,7 @@ function moneyQuizCard(){
   if(!moneyQuiz)moneyQuiz=Object.assign(moneyMathQuestion(),{state:'ask',picked:null,paid:false});
   const mq=moneyQuiz,capped=mathBonusToday()>=MATH_BONUS_CAP,body=[el('div',{style:'font-weight:700;margin-bottom:8px'},mq.q)];
   if(mq.state==='ask'){
-    body.push(el('div',{class:'row',style:'gap:8px;flex-wrap:wrap'},...mq.options.map(o=>el('button',{class:'btn sm',onclick:async()=>{mq.picked=o;if(o===mq.answer){mq.state='right';if(!capped&&!mq.paid){mq.paid=true;await trainerAdd(0,2);bumpMathBonus(2);}}else mq.state='wrong';viewMoney();}},'🍬 '+o))));
+    body.push(el('div',{class:'row',style:'gap:8px;flex-wrap:wrap'},...mq.options.map(o=>el('button',{class:'btn sm',onclick:async()=>{mq.picked=o;if(o===mq.answer){mq.state='right';await statBump('mathWins');if(!capped&&!mq.paid){mq.paid=true;await trainerAdd(0,2);bumpMathBonus(2);}}else mq.state='wrong';viewMoney();}},'🍬 '+o))));
   }else if(mq.state==='right'){
     body.push(el('div',{class:'small',style:'color:#34c759;font-weight:700'},'✅ Correct!'+(mq.paid?' +🍬 2':(capped?' (that’s today’s math bonus — nice!)':''))));
     body.push(el('div',{class:'small muted',style:'margin:4px 0'},mq.concept));
@@ -3505,6 +3557,13 @@ async function viewMoney(){
   cards.push(fundCard);
   // 🧮 Deal-math challenge
   cards.push(moneyQuizCard());
+  // 🏅 Smart-Shopper badges
+  const netTrade=tradeNetFor(pid(),await dbAll('trades'));
+  const badges=earnedBadges(v,{netTrade}),gotN=badges.filter(b=>b.got).length;
+  cards.push(el('div',{class:'card'},el('div',{class:'row between'},el('h2',{style:'margin:0'},'🏅 Money badges'),el('span',{class:'small muted'},gotN+' / '+badges.length)),
+    el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'},...badges.map(b=>el('div',{class:'row',style:'gap:6px;align-items:center;padding:6px 10px;border-radius:10px;border:1px solid var(--line);opacity:'+(b.got?'1':'0.4'),title:b.desc},el('span',{style:'font-size:18px'},b.got?b.emoji:'🔒'),el('span',{class:'small',style:'font-weight:700'},b.name)))),
+    el('p',{class:'small muted',style:'margin-top:8px'},'Earn badges by saving, investing, haggling and being generous!')));
+  if(CFG.profiles.length>1)cards.push(el('button',{class:'btn block',onclick:()=>viewGive()},'🎁 Give a card to family'));
   show(el('div',{},backBar('Money Lab',()=>viewCards()),...cards));
 }
 
@@ -3714,6 +3773,8 @@ async function viewDashboard(){
   if(!isParent())return viewHome();
   const allAttempts=await dbAll('attempts');
   const allReview=(await dbAll('review')).filter(r=>!r.mastered);
+  const allTrainer=(await dbAll('trainer')).map(normTrainer);
+  const allTradesD=await dbAll('trades');
   const students=CFG.profiles.filter(p=>!isParentName(p.name));
   const list=students.length?students:CFG.profiles;
   const cards=list.map(p=>{
@@ -3724,12 +3785,21 @@ async function viewDashboard(){
     const ts={};at.forEach(a=>(a.results||[]).forEach(r=>{const t=r.topic||'General';ts[t]=ts[t]||{n:0,c:0};ts[t].n++;if(r.status==='correct')ts[t].c++;}));
     const weak=Object.entries(ts).map(([t,s])=>({t,pct:Math.round(s.c/s.n*100),n:s.n})).filter(x=>x.n>=2).sort((a,b)=>a.pct-b.pct)[0];
     const last=at[0];
+    // 💰 Money skills — net worth, badges, trading, generosity (from the synced trainer vault + trades).
+    const tr=allTrainer.find(x=>x.id===p.id),vault=tr&&tr.vault;
+    const fund=vault&&vault.fund,fPrice=(fund&&fund.history&&fund.history.length)?fund.history[fund.history.length-1].price:100;
+    const saved=(vault&&vault.bank?vault.bank.principal:0)+fundValue(fund&&fund.units,fPrice);
+    const worth=(tr?tr.candy:0)+saved;
+    const netT=tradeNetFor(p.id,allTradesD),gifts=(vault&&vault.stats&&vault.stats.gifts)||0;
+    const badgeN=earnedBadges(vault,{netTrade:netT}).filter(b=>b.got).length;
+    const moneyLine=el('div',{class:'small muted',style:'margin-top:8px'},'💰 🍬 '+worth+' total'+(saved?(' · saved 🍬 '+saved):'')+' · trading '+(netT>=0?'+':'')+netT+' · 🏅 '+badgeN+'/'+BADGES.length+' badges'+(gifts?(' · 🎁 '+gifts+' gift'+(gifts>1?'s':'')):''));
     return el('div',{class:'card'},
       el('div',{class:'row between'},
         el('div',{class:'row',style:'gap:10px;align-items:center'},el('span',{class:'avatar',style:'background:'+colorFor(p.name)},initials(p.name)),el('div',{},el('div',{style:'font-weight:700'},esc(p.name)),el('div',{class:'small muted'},last?('Last practice: '+last.date):'No practices yet'))),
         el('span',{class:'streak'},'🔥 '+streak)),
       el('div',{class:'tiles',style:'margin-top:12px'},tile(at.length,'Practices'),tile(avg+'%','Avg score'),tile(toReview,'To review'),tile(weak?weak.pct+'%':'—','Weakest')),
       weak?el('div',{class:'small muted',style:'margin-top:8px'},'Focus area: '+weak.t+' ('+weak.pct+'%)'):'',
+      moneyLine,
       el('div',{class:'row',style:'margin-top:12px;gap:8px;flex-wrap:wrap'},
         el('button',{class:'btn sm primary',onclick:()=>openStudent(p.id,viewHome)},'Open'),
         el('button',{class:'btn sm',onclick:()=>openStudent(p.id,viewHistory)},'📈 Progress'),
@@ -4132,7 +4202,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.51';
+const APP_VERSION='v2.52';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
