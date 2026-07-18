@@ -2497,7 +2497,22 @@ const FORMULA_GRAPHICS=[
    diagram:null},
   {id:'pythagoras',minYear:9,title:'Pythagoras’ theorem',latex:'a^2 + b^2 = c^2',plain:'a² + b² = c² (right-angled triangle)',
    why:'In a right-angled triangle the square on the longest side (c) equals the other two squares added.',
-   diagram:{type:'shape',kind:'right-triangle',labels:{base:'a',height:'b',hyp:'c'}}}
+   diagram:{type:'shape',kind:'right-triangle',labels:{base:'a',height:'b',hyp:'c'}}},
+  // ── Number, algebra, graphs & statistics (not just shapes) ──
+  {id:'mean',minYear:6,title:'Average (mean)',latex:'\\text{mean} = \\frac{\\text{sum of values}}{\\text{how many}}',plain:'mean = sum of the values ÷ how many there are',
+   why:'The mean shares the total out evenly: add every value up, then divide by how many values there are.',diagram:null},
+  {id:'percent-of',minYear:7,title:'Percentage of an amount',latex:'\\frac{\\text{percent}}{100} \\times \\text{amount}',plain:'percentage of an amount = (percent ÷ 100) × amount',
+   why:'“Per cent” means “out of 100”. For 20% of 60: do 20 ÷ 100 = 0.2, then 0.2 × 60 = 12.',diagram:null},
+  {id:'speed',minYear:7,title:'Speed, distance & time',latex:'\\text{speed} = \\frac{\\text{distance}}{\\text{time}}',plain:'speed = distance ÷ time (so distance = speed × time)',
+   why:'Speed is how much distance you cover each unit of time. Cover the one you want in the triangle D over S–T to rearrange it.',diagram:null},
+  {id:'probability',minYear:6,title:'Probability',latex:'P = \\frac{\\text{favourable outcomes}}{\\text{total outcomes}}',plain:'probability = ways it can happen ÷ total possible outcomes',
+   why:'Count the outcomes you WANT, divide by ALL the equally-likely outcomes. The answer is always between 0 and 1.',diagram:null},
+  {id:'gradient',minYear:8,title:'Gradient of a line',latex:'m = \\frac{y_2 - y_1}{x_2 - x_1}',plain:'gradient = change in y ÷ change in x (rise ÷ run)',
+   why:'The gradient tells you how STEEP a line is: how far it goes UP (rise) for how far it goes ACROSS (run). Steeper line = bigger gradient.',
+   diagram:{type:'coordinate',min:0,max:10,points:[{x:1,y:2,label:'A'},{x:4,y:8,label:'B'}],path:true}},
+  {id:'line-eqn',minYear:9,title:'Equation of a straight line',latex:'y = mx + c',plain:'y = gradient × x + y-intercept',
+   why:'Every straight line follows y = mx + c: m is the gradient (steepness) and c is where the line crosses the y-axis.',
+   diagram:{type:'coordinate',min:0,max:10,points:[{x:0,y:2,label:'c'},{x:4,y:8,label:''}],path:true}}
 ];
 // Fresh, non-banked drill that forces every question to USE a given formula.
 async function practiceFormula(entry){
@@ -2550,8 +2565,8 @@ async function viewFormulaSheet(){
   };
   const cards=[];
   if(illus.length)cards.push(el('div',{class:'card'},
-    el('h2',{},'📐 Illustrated formulas'),
-    el('p',{class:'sub'},'The key '+(s.level||'')+' shapes and formulas, each with a labelled picture and a plain-language reason.'),
+    el('h2',{},'📐 Key formulas'),
+    el('p',{class:'sub'},'The key '+(s.level||'')+' formulas — shapes, graphs, number & more — with a picture where it helps and a plain-language reason.'),
     ...illus.map(illusBlock)));
   // AI concept-card formulas (Knowledge map), flattened per strand.
   if(rec&&rec.points&&rec.points.length){
@@ -4242,7 +4257,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.54';
+const APP_VERSION='v2.55';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

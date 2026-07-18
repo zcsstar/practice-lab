@@ -316,10 +316,13 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   (Reference library · Exam packs); empty / parent-only sections are dropped.
 - **Formula sheet (v2.45, home "📐 Formula sheet", `viewFormulaSheet`)** — a printable "key formulas
   for your level" page answering "a knowledge/formula center with 精准易懂 explanations + 图形解释".
-  Two layers: (1) **`FORMULA_GRAPHICS`** — a CURATED, illustrated maths-formula library (rectangle/
-  square/triangle/parallelogram/trapezium/circle area, perimeter, circumference, cuboid volume,
-  Pythagoras, triangle angles), each `{minYear,title,latex,plain,why,diagram}` where `diagram` is a
-  LABELLED `PLDiagram` shape spec — so the figure is CORRECT by construction (never AI-drawn), the
+  Two layers: (1) **`FORMULA_GRAPHICS`** — a CURATED, illustrated maths-formula library: shapes
+  (rectangle/square/triangle/parallelogram/trapezium/circle area, perimeter, circumference, cuboid
+  volume, Pythagoras, triangle angles) AND, since **v2.55**, number/algebra/graphs/stats — **gradient**
+  `m=(y₂−y₁)/(x₂−x₁)` + **equation of a line** `y=mx+c` (illustrated with a `coordinate`-plane line),
+  mean, percentage-of-an-amount, speed=distance/time, probability. Each is
+  `{minYear,title,latex,plain,why,diagram}` where `diagram` is a `PLDiagram` spec (shape/coordinate,
+  or null) — so the figure is CORRECT by construction (never AI-drawn), the
   formulas come from `DEFAULT_CURRICULUM`'s KEY FORMULAS (accurate), and `why` is the plain-language
   reason. Filtered by `levelYear(s.level)` so it shows only level-appropriate formulas. (2) The AI
   concept-card `formulas[]` (Knowledge map), flattened per strand — reuses the SAME cache + safety
@@ -779,7 +782,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.54**). Claude suggests the next number on
+  minor on each release (currently at **v2.55**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach
