@@ -611,9 +611,22 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     ("🍬X each"). **Dream-card prices raised** via a per-tier `SHOP_MARKUP` (t1≈20 … t4≈175 …
     **t5≈385**, rounded to 🍬5) so a legendary is a real ~55-practice save. Pure helpers unit-tested
     in [economy.test.js](economy.test.js).
-    **STILL TO BUILD (staged next):** dynamic supply/demand market prices (+ a spicy "single hot
-    card" investing rung), haggling/counter-offers, auctions, a profit/loss ledger + "good deal?"
-    reflection, give/charity, and a parent money-skills report + Smart-Shopper badges.
+  - **Dynamic market + P&L + reflection (v2.50)** — supply & demand made real. A deterministic
+    daily **hot** type (worth +25%) and **cold** type (−20%), picked from the date with zero
+    storage/sync (`MARKET_TYPES`, `dayHash`, `todayMarket(d?)` — hot AND cold each an independent
+    date-hash so both change daily; 'normal' is never hot/cold → stable baseline). `marketMult`/
+    `marketValue`/`tradeMarketValue` adjust CARD trade values (NOT the shop/goal/fund, which stay
+    stable). The Trading Post shows a **📊 Today's Market** board (sell-hot/buy-cold guidance), the
+    trade builder shows today's prices + per-card 🔥/❄️ hints + a market-aware fair-price coach, and
+    `npcAcceptProb` + the deal meter value BOTH sides at market (`askMarketValue` makes card-for-card
+    asks market-aware too) so buy-low/sell-high actually pays off. A **"good deal?" reflection** on
+    `acceptTrade` (compares candy paid vs today's market worth) and a **📈 Your trading** cash-flow
+    card (candy sold − bought, from done trades) teach evaluating decisions + P&L. UI polish: Money
+    School moved to the top of the Money Lab, 价格心理 → "price psychology", and a **💰 Money &
+    trading** intro added to the ❓ guide. Adversarially code-reviewed (the sticky-cold bug it found
+    is fixed); market helpers unit-tested in [economy.test.js](economy.test.js).
+    **STILL TO BUILD (staged next):** a spicy "single hot card" investing rung, haggling/counter-
+    offers, auctions, give/charity, and a parent money-skills report + Smart-Shopper badges.
 - **Battle vs PC ([battle.js](battle.js), `viewBattle`)** — practice-GATED: each
   practice grants `⚡ energy` (`battleAddEnergy`, +1, +1 at ≥80%, cap 12, stored on
   the trainer doc); a battle costs 1. `viewBattle` is a **team builder**: pick up
@@ -735,7 +748,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.49**). Claude suggests the next number on
+  minor on each release (currently at **v2.50**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

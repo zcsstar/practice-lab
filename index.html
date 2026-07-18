@@ -1566,6 +1566,12 @@ function viewGuide(){
       tip('🖨️','Print a worksheet from any results screen for off-screen practice.'),
       tip('✅','In Settings, “Double-check answers” and “AI-mark written answers” improve accuracy.'),
       tip('☁️','Connect Google Drive (Settings) to sync students, history and packs across devices.')),
+    el('div',{class:'card'},el('h2',{},'💰 Money & trading — learn how money works'),
+      el('p',{class:'sub',style:'margin-bottom:6px'},'Practising earns 🍬 candy. Under My cards you can spend it, save it and grow it — a fun way to pick up real money skills.'),
+      tip('💰','Money Lab: keep candy safe in the Bank to earn guaranteed interest, or invest in the Fund to see how risk & reward work — and set a dream card to save toward.'),
+      tip('🔁','Trading Post: swap cards with family or passing traders. A coach helps you set fair prices, make bundle deals, and spot the “ends in 9” pricing trick.'),
+      tip('📊','A daily market makes some card types worth more (hot) and others less (cold) — a simple taste of supply & demand and buy-low, sell-high.'),
+      tip('🧮','The Shopkeeper’s Challenge turns discounts, interest and profit into quick money-maths for a little candy bonus.')),
     el('div',{class:'row'},el('button',{class:'btn primary',onclick:home},'Got it — let’s go'))));
 }
 /* ----- HOME ----- */
@@ -2770,8 +2776,15 @@ async function viewTrades(){
   const mine=open.filter(t=>t.sellerId===pid()),others=open.filter(t=>t.sellerId!==pid());
   const canMap={};for(const t of others)canMap[t.id]=await canFulfill(t.want);
   const tr=await trainerGet();
+  const allTrades=await dbAll('trades');
   // Recent completed deals involving this student (family takers + market traders) — so the post feels alive.
-  const recent=(await dbAll('trades')).filter(t=>t.status==='done'&&(t.sellerId===pid()||t.takenBy===pid())).sort((a,b)=>(b.resolvedAt||0)-(a.resolvedAt||0)).slice(0,6);
+  const recent=allTrades.filter(t=>t.status==='done'&&(t.sellerId===pid()||t.takenBy===pid())).sort((a,b)=>(b.resolvedAt||0)-(a.resolvedAt||0)).slice(0,6);
+  // Trading cash-flow (P&L): candy earned SELLING your cards vs candy spent BUYING others'.
+  const done=allTrades.filter(t=>t.status==='done'&&t.want&&t.want.type==='candy');
+  const sold=done.filter(t=>t.sellerId===pid()).reduce((s,t)=>s+(+t.want.amount||0),0);
+  const bought=done.filter(t=>t.takenBy===pid()).reduce((s,t)=>s+(+t.want.amount||0),0);
+  const netTrade=sold-bought;
+  const mkt=todayMarket();
   const dealRow=t=>{const lbl=tradeCards(t).length>1?('a bundle of '+tradeCards(t).length):(POKE_BY_ID[t.card.dexId]?POKE_BY_ID[t.card.dexId].name:'Pokémon');
     const txt=t.sellerId===pid()?((t.takenByName||'Someone')+' took your '+lbl+' — you got '+wantLabel(t.want))
       :('You took '+lbl+' from '+(t.sellerName||profileName(t.sellerId))+' for '+wantLabel(t.want));
@@ -2779,8 +2792,8 @@ async function viewTrades(){
       el('span',{class:'small',style:'flex:1;min-width:0'},txt),t.npc?el('span',{class:'pill',style:'flex:none'},'🛒 market'):'');};
   const costHint=t=>t.want.type==='candy'?'You’ll pay 🍬 '+t.want.amount+' candy (you keep all your cards).':'You’ll give your '+(POKE_BY_ID[t.want.dexId]?POKE_BY_ID[t.want.dexId].name:'Pokémon')+' for it.';
   const cardsBlock=t=>{const cs=tradeCards(t);if(cs.length<=1)return tradeCardRow(cs[0]||t.card);
-    return el('div',{},el('div',{class:'small',style:'font-weight:700;margin-bottom:6px'},'📦 Bundle · '+cs.length+' cards · worth about 🍬 '+sumValue(cs)),el('div',{style:'display:grid;gap:8px'},...cs.map(tradeCardRow)));};
-  const offerRow=(t,mineFlag)=>{const rate=dealRating(tradeValue(t),wantValue(t.want));
+    return el('div',{},el('div',{class:'small',style:'font-weight:700;margin-bottom:6px'},'📦 Bundle · '+cs.length+' cards · worth about 🍬 '+tradeMarketValue(t,mkt)+' today'),el('div',{style:'display:grid;gap:8px'},...cs.map(tradeCardRow)));};
+  const offerRow=(t,mineFlag)=>{const rate=dealRating(tradeMarketValue(t,mkt),wantValue(t.want));
     return el('div',{class:'card'},
       cardsBlock(t),
       el('div',{class:'row between',style:'margin-top:8px;gap:8px'},el('span',{class:'small'},mineFlag?'You’re offering this':('From '+esc(t.sellerName||profileName(t.sellerId)))),el('b',{},'Wants: '+wantLabel(t.want))),
@@ -2794,15 +2807,21 @@ async function viewTrades(){
     el('p',{class:'sub',style:'margin:8px 0 2px'},'A few tricks real shops use — tap to learn, then try them in your next offer!'),
     lesson('💰','What a card is worth','Rarer Pokémon (more ★) and higher levels are worth more candy. Every card shows its 🍬 value — use it as your guide.'),
     lesson('⚖️','Price it fair','Ask close to a card’s value and it sells fast. Ask way more and it just sits there. The green ⚖️ tag on an offer means it’s a fair deal.'),
-    lesson('🏷️','The “9” trick (价格心理)','Shops write 🍬 19 or $9.90 instead of 20 or 10 — it FEELS much cheaper but it’s almost the same! Use it to tempt buyers… and don’t get fooled yourself.'),
+    lesson('🏷️','The “9” trick (price psychology)','Shops write 🍬 19 or $9.90 instead of 20 or 10 — it FEELS much cheaper but it’s almost the same! Use it to tempt buyers… and don’t get fooled yourself.'),
     lesson('📦','Bundle & save','Sell a few cards together for a little less each. Buyers love a bundle and you clear more cards — that’s a “bulk discount”.'),
     lesson('🎁','Add one more (upsell)','“Want one more for just a bit extra?” Adding a small extra is how shops sell more — try turning an offer into a bundle.'),
-    lesson('📈','Supply & demand','Everyone owns common Pokémon, so they’re cheap. Legendaries are rare, so they’re worth a lot. Rare = pricey.'),
+    lesson('📈','Supply & demand','Rare cards (legendaries) are worth more; common ones are cheap. And demand shifts daily — check “Today’s Market” to see which type is HOT (worth more) and which is cold.'),
     lesson('🤝','Win–win wins','The best deals feel good for BOTH sides. Trade fairly and family and traders keep dealing with you.'));
   show(el('div',{},backBar('Trading Post',()=>viewCards()),
     el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},el('h2',{},'🔁 Trading Post'),
       el('p',{class:'sub',style:'margin:0'},'Offer one of your Pokémon (or a bundle!) and say what you want. Anyone in the family can take the deal later — you don’t both need to be here! You have 🍬 '+(tr.candy||0)+' candy.'),
       el('p',{class:'small muted',style:'margin:6px 0 0'},'💡 A candy deal costs the taker candy (no card leaves their collection); a card deal swaps card-for-card. Traders also pass through the market and may take fair offers — the more you practise, the more they visit.')),
+    el('div',{class:'card'},
+      el('div',{class:'row between'},el('h2',{style:'margin:0'},'📊 Today’s Market'),el('span',{class:'small muted'},'supply & demand')),
+      el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'},
+        el('span',{class:'tchip',style:'background:'+(TYPE_COLOR[mkt.hot]||'#999')},'🔥 '+mkt.hot+' +25%'),
+        el('span',{class:'tchip',style:'background:'+(TYPE_COLOR[mkt.cold]||'#999')},'❄️ '+mkt.cold+' −20%')),
+      el('p',{class:'small muted',style:'margin-top:8px'},'Demand changes prices! SELL your '+mkt.hot+' cards while they’re hot, and it’s a cheap day to pick up '+mkt.cold+' cards. It all changes tomorrow.')),
     marketSchool,
     el('button',{class:'btn primary block',style:'margin-bottom:6px',onclick:()=>viewTradeNew()},'➕ Make a new offer'),
     others.length?el('div',{class:'seclabel'},'Deals you can take'):'',
@@ -2810,6 +2829,10 @@ async function viewTrades(){
     mine.length?el('div',{class:'seclabel'},'Your offers'):'',
     ...mine.map(t=>offerRow(t,true)),
     (!open.length)?el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'🔁'),el('div',{},'No offers yet. Tap “Make a new offer” to start trading with your family — or with traders passing through!'))):'',
+    (sold||bought)?el('div',{class:'card'},el('h2',{style:'margin:0 0 4px'},'📈 Your trading'),
+      el('div',{class:'small'},'Sold cards for 🍬 '+sold+' · spent 🍬 '+bought+' buying'),
+      el('div',{style:'font-weight:800;margin-top:4px;color:'+(netTrade>=0?'#34c759':'#ff3b30')},(netTrade>=0?'Net profit 🍬 +':'Net 🍬 ')+netTrade),
+      el('p',{class:'small muted',style:'margin-top:4px'},'Buy low, sell high — that’s how traders make a profit!')):'',
     recent.length?el('div',{class:'card'},el('h2',{style:'margin:0 0 4px'},'🧾 Recent deals'),el('p',{class:'sub'},'The latest trades — including traders passing through the market.'),...recent.map(dealRow)):''));
   if(visited.length){const d=visited[0];toast('🔔 '+d.npc.emoji+' '+d.npc.name+' took '+tradeLabel(d.trade)+'!');}
 }
@@ -2824,29 +2847,34 @@ async function viewTradeNew(){
   const inCart=id=>tradeDraft.cards.some(c=>c.dexId===id);
   function render(){
     host.innerHTML='';
+    const mkt=todayMarket();
     // Step 1 — pick one card, or a few to make a bundle.
     const cardGrid=el('div',{class:'dexgrid'});
-    owned.forEach(c=>{const p=POKE_BY_ID[c.dexId];if(!p)return;const sel=inCart(c.dexId);
+    owned.forEach(c=>{const p=POKE_BY_ID[c.dexId];if(!p)return;const sel=inCart(c.dexId);const mm=marketMult(c.dexId,mkt);
       cardGrid.append(el('div',{class:'dexcell own'+(sel?' picked':''),style:'border-color:'+RARITY[p.t].color,onclick:()=>{
         if(sel)tradeDraft.cards=tradeDraft.cards.filter(x=>x.dexId!==c.dexId);
         else{if(tradeDraft.cards.length>=BUNDLE_MAX)return toast('A bundle can hold up to '+BUNDLE_MAX+' cards.');tradeDraft.cards.push({dexId:c.dexId,tier:p.t,level:c.level||1,shiny:!!c.shiny});}
         render();
       }},
-        c.count>1?el('span',{class:'cnt'},'×'+c.count):'',pokeImg(c.dexId,c.shiny,56),el('div',{class:'dn'},p.name),el('div',{class:'lv'},'Lv '+(c.level||1)+' · 🍬'+cardValue({dexId:c.dexId,tier:p.t,level:c.level||1}))));});
-    const n=tradeDraft.cards.length,sum=sumValue(tradeDraft.cards);
+        c.count>1?el('span',{class:'cnt'},'×'+c.count):'',pokeImg(c.dexId,c.shiny,56),el('div',{class:'dn'},p.name),el('div',{class:'lv'},'Lv '+(c.level||1)+' · 🍬'+marketValue({dexId:c.dexId,tier:p.t,level:c.level||1},mkt)+(mm>1?' 🔥':mm<1?' ❄️':''))));});
+    const n=tradeDraft.cards.length,sum=tradeMarketValue({cards:tradeDraft.cards},mkt);
+    const anyHot=tradeDraft.cards.some(c=>marketMult(c.dexId,mkt)>1),anyCold=tradeDraft.cards.some(c=>marketMult(c.dexId,mkt)<1);
+    const mktHint=anyHot?('🔥 '+mkt.hot+' is HOT today (+25%) — a great time to SELL. You can ask a bit more!'):anyCold?('❄️ '+mkt.cold+' is cold today (−20%) — you may get less; maybe wait, or price it low.'):'';
     host.append(el('div',{class:'card'},el('h2',{},'1. Choose what to offer'),
-      el('p',{class:'sub',style:'margin-bottom:8px'},'Tap one Pokémon — or a few (up to '+BUNDLE_MAX+') to make a 📦 bundle. The 🍬 number is roughly what each is worth.'),cardGrid,
-      n?el('div',{class:'small',style:'margin-top:8px;font-weight:700'},(n>1?('📦 Bundle of '+n+' · '):'')+'worth about 🍬 '+sum):''));
+      el('p',{class:'sub',style:'margin-bottom:8px'},'Tap one Pokémon — or a few (up to '+BUNDLE_MAX+') to make a 📦 bundle. The 🍬 number is today’s market price.'),cardGrid,
+      n?el('div',{class:'small',style:'margin-top:8px;font-weight:700'},(n>1?('📦 Bundle of '+n+' · '):'')+'worth about 🍬 '+sum+' today'):'',
+      (n&&mktHint)?el('div',{class:'small',style:'margin-top:4px;color:'+(anyHot?'#e8590c':'#3b82f6')},mktHint):''));
     if(!n)return;
+    const bp=n>=2?Math.max(1,Math.round(sum*(1-Math.min(0.2,0.06*(n-1))))):sum;
     // Bundle coach — teach the bulk discount.
-    if(n>=2){const bp=bundlePrice(tradeDraft.cards),save=sum-bp;
+    if(n>=2){const save=sum-bp;
       host.append(el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},
         el('div',{style:'font-weight:700;margin-bottom:2px'},'📦 Bundle tip'),
         el('div',{class:'small'},'Selling '+n+' together for a little less moves them faster — buyers love a bundle and you clear your shelf! Single total is 🍬 '+sum+'; a tempting bundle price is 🍬 '+bp+' (buyer saves 🍬 '+save+'). That’s only 🍬 '+Math.round(bp/n)+' each — cheaper per card, which is why bulk deals feel good value.'),
         el('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>{tradeDraft.want={type:'candy',amount:bp};tradeDraft.wantPick=false;render();}},'Use bundle price 🍬 '+bp)));
     }
     // Step 2 — what do you want, with a live fair-deal coach.
-    const fair=Math.max(1,n>=2?bundlePrice(tradeDraft.cards):sum);
+    const fair=Math.max(1,bp);
     // Round the suggested prices to clean tens — kid-friendly and lets the "shop price" (charm) toggle
     // visibly turn e.g. 60 into 59.
     const opts=[...new Set([fair*0.6,fair*0.85,fair,fair*1.3].map(x=>Math.max(10,Math.round(x/10)*10)))].sort((a,b)=>a-b);
@@ -2863,8 +2891,8 @@ async function viewTradeNew(){
       const pickBtn=el('button',{class:'btn sm'+(tradeDraft.want&&tradeDraft.want.type==='card'?' primary':''),onclick:()=>{tradeDraft.wantPick=!tradeDraft.wantPick;renderWant();}},(tradeDraft.want&&tradeDraft.want.type==='card')?('🎴 '+(POKE_BY_ID[tradeDraft.want.dexId]?POKE_BY_ID[tradeDraft.want.dexId].name:'Pokémon')):'🎴 Ask for a Pokémon instead');
       wantHost.append(el('div',{style:'margin-top:12px'},pickBtn));
       if(tradeDraft.wantPick){const g=el('div',{class:'dexgrid',style:'margin-top:8px'});POKEDEX.slice().sort((a,b)=>(b.t-a.t)||(a.id-b.id)).forEach(p=>g.append(el('div',{class:'dexcell own',style:'border-color:'+RARITY[p.t].color,onclick:()=>{tradeDraft.want={type:'card',dexId:p.id};tradeDraft.wantPick=false;renderWant();}},pokeImg(p.id,false,50),el('div',{class:'dn'},p.name),el('div',{class:'ds',style:'color:'+RARITY[p.t].color},rarityStars(p.t)+' · 🍬'+(TIER_VALUE[p.t]||0)))));wantHost.append(g);}
-      // live deal meter — the interactive teaching moment
-      if(tradeDraft.want){const ask=wantValue(tradeDraft.want),r=dealRating(sum,ask);
+      // live deal meter — the interactive teaching moment (market value on both sides)
+      if(tradeDraft.want){const ask=askMarketValue(tradeDraft.want,mkt),r=dealRating(sum,ask);
         wantHost.append(el('div',{style:'margin-top:14px'},
           el('div',{class:'row between',style:'align-items:center;gap:8px'},el('b',{},r.emoji+' '+r.label),el('span',{class:'small muted',style:'flex:none'},'🍬'+sum+' ⇄ 🍬'+ask)),
           el('div',{class:'gbar',style:'margin-top:6px'},el('div',{class:'gbar-fill',style:'width:'+r.pct+'%;background:'+dealColor(r.tone)}))));
@@ -3104,7 +3132,13 @@ async function acceptTrade(id){
   // give the offered card(s) to the buyer
   const cs=tradeCards(t);for(const s of cs)await cardGiveTo(pid(),s);
   t.status='done';t.takenBy=pid();t.takenByName=activeProfile().name;t.resolvedAt=Date.now();await dbPut('trades',t);
-  scheduleDriveSync();toast('Trade complete! You got '+(cs.length>1?(cs.length+' cards'):(POKE_BY_ID[t.card.dexId]?POKE_BY_ID[t.card.dexId].name:'a Pokémon'))+'. 🎉');
+  scheduleDriveSync();
+  const got=(cs.length>1?(cs.length+' cards'):(POKE_BY_ID[t.card.dexId]?POKE_BY_ID[t.card.dexId].name:'a Pokémon'));
+  // "Good deal?" reflection: when you PAID candy, compare it to today's market value of what you got.
+  let ref='';
+  if(t.want.type==='candy'){const paid=+t.want.amount||0,worth=tradeMarketValue(t);
+    ref=paid<=worth*0.85?' 🌟 Bargain — worth about 🍬 '+worth+'!':paid<=worth*1.1?' 👍 Fair deal (worth ~🍬 '+worth+').':' 💸 You paid 🍬 '+paid+' for ~🍬 '+worth+' of value — a bit much next time.';}
+  toast('Trade complete! You got '+got+'.'+ref);
 }
 
 /* ----- Simulated trade market (NPC traders, v2.46) -----
@@ -3147,10 +3181,26 @@ function dealRating(give,ask){
   return {emoji:'🙈',label:'Too steep — buyers will walk away',tone:'bad',pct:16};
 }
 function dealColor(tone){return tone==='ok'?'#34c759':tone==='warn'?'#ff9500':'#ff3b30';}
+// ----- Dynamic market: supply & demand move card TRADE prices each day (v2.50) -----
+// A different HOT type (high demand → worth +25%) and COLD type (low demand → −20%) each day, picked
+// DETERMINISTICALLY from the date so every device agrees with zero storage/sync. Teaches supply &
+// demand and buy-low/sell-high. 'normal' is never hot/cold, so it stays a stable baseline.
+const MARKET_TYPES=['fire','water','grass','electric','ice','fighting','poison','ground','flying','psychic','bug','rock','ghost','dragon','dark','steel','fairy'];
+function dayHash(s){let h=0;s=String(s);for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
+// Hot AND cold are each an INDEPENDENT hash of the date (cold uses a salted string) so BOTH change
+// every day (the "it changes tomorrow" promise holds), while staying distinct.
+function todayMarket(d){d=d||todayISO();const n=MARKET_TYPES.length,hot=MARKET_TYPES[dayHash(d)%n];let ci=dayHash(d+'|cold')%n;if(MARKET_TYPES[ci]===hot)ci=(ci+1)%n;return {hot,cold:MARKET_TYPES[ci]};}
+function marketMult(dexId,mkt){mkt=mkt||todayMarket();const ty=(typeof pokeTypes==='function')?pokeTypes(dexId):['normal'];if(ty.indexOf(mkt.hot)>=0)return 1.25;if(ty.indexOf(mkt.cold)>=0)return 0.8;return 1;}
+function marketValue(snap,mkt){return Math.round(cardValue(snap)*marketMult(snap&&snap.dexId,mkt));}
+function tradeMarketValue(t,mkt){mkt=mkt||todayMarket();return tradeCards(t).reduce((s,c)=>s+marketValue(c,mkt),0);}
+// What a WANT is worth at today's market: candy is its amount; a requested card is its market value
+// (so a hot requested card costs more) — keeps card-for-card deals accurate for the meter + NPC.
+function askMarketValue(w,mkt){return (w&&w.type==='card')?Math.round((TIER_VALUE[(POKE_BY_ID[w.dexId]||{t:1}).t]||12)*marketMult(w.dexId,mkt)):(+((w||{}).amount)||0);}
 // How keen a trader is to take an offer: keen when the offered goods are worth MORE than the ask
-// (a good deal for the taker), reluctant when the ask is greedy — so reasonable offers move.
+// (a good deal for the taker), reluctant when the ask is greedy — so reasonable offers move. Uses
+// TODAY'S market value on BOTH sides, so hot cards fetch better deals (buy-low/sell-high pays off).
 function npcAcceptProb(t){
-  const give=tradeValue(t),ask=Math.max(1,wantValue(t.want)),ratio=give/ask;
+  const mkt=todayMarket(),give=tradeMarketValue(t,mkt),ask=Math.max(1,askMarketValue(t.want,mkt)),ratio=give/ask;
   return ratio>=1.25?0.92:ratio>=1.0?0.7:ratio>=0.8?0.42:ratio>=0.6?0.2:0.06;
 }
 function npcTradesToday(){try{return (JSON.parse(localStorage.getItem('practicelab.npc')||'{}'))[todayISO()]||0;}catch(e){return 0;}}
@@ -3283,6 +3333,13 @@ async function viewMoney(){
   cards.push(el('div',{class:'card',style:'background:var(--feature);border-color:#cfe2ff'},
     el('div',{class:'row between'},el('h2',{style:'margin:0'},'💰 Money Lab'),el('b',{},'🍬 '+wallet)),
     el('p',{class:'small muted',style:'margin:6px 0 0'},'Your total money: 🍬 '+net+' (wallet '+wallet+(bank?(' · bank '+bank.principal):'')+(fval?(' · fund '+fval):'')+'). Earn it from practice, then save it, grow it, or spend it wisely.')));
+  // 🎓 Money School — an intro to how it all works, right at the top.
+  const lesson=(t2,b)=>el('div',{style:'padding:8px 0;border-bottom:1px solid var(--line)'},el('div',{style:'font-weight:700'},t2),el('div',{class:'small muted',style:'margin-top:2px'},b));
+  cards.push(el('details',{class:'card'},el('summary',{style:'font-weight:700;cursor:pointer;font-size:16px'},'🎓 Money School — saving & investing'),
+    lesson('🟢 Safe vs 🟡 risky','The bank ALWAYS pays you back with interest — safe but small. The fund can grow bigger, but it goes up AND down. More reward usually means more risk.'),
+    lesson('⏳ Be patient','Don’t panic-sell on a down day. Over a longer time the fund usually recovers and grows. Time in the market beats guessing the perfect day.'),
+    lesson('🧺 Don’t bet it all on one','The fund spreads your candy across many things (that’s “diversifying”), so it’s calmer than betting everything on a single card.'),
+    lesson('💸 Only invest spare candy','Keep some to enjoy now, save some in the bank for sure, and invest only what you won’t need soon.')));
   // 🎯 Savings goal
   const dex=v.goalDex,gp=dex&&POKE_BY_ID[dex];
   if(moneyPickGoal||!gp){
@@ -3327,13 +3384,6 @@ async function viewMoney(){
   cards.push(fundCard);
   // 🧮 Deal-math challenge
   cards.push(moneyQuizCard());
-  // 🎓 Money School
-  const lesson=(t2,b)=>el('div',{style:'padding:8px 0;border-bottom:1px solid var(--line)'},el('div',{style:'font-weight:700'},t2),el('div',{class:'small muted',style:'margin-top:2px'},b));
-  cards.push(el('details',{class:'card'},el('summary',{style:'font-weight:700;cursor:pointer;font-size:16px'},'🎓 Money School — saving & investing'),
-    lesson('🟢 Safe vs 🟡 risky','The bank ALWAYS pays you back with interest — safe but small. The fund can grow bigger, but it goes up AND down. More reward usually means more risk.'),
-    lesson('⏳ Be patient','Don’t panic-sell on a down day. Over a longer time the fund usually recovers and grows. Time in the market beats guessing the perfect day.'),
-    lesson('🧺 Don’t bet it all on one','The fund spreads your candy across many things (that’s “diversifying”), so it’s calmer than betting everything on a single card.'),
-    lesson('💸 Only invest spare candy','Keep some to enjoy now, save some in the bank for sure, and invest only what you won’t need soon.')));
   show(el('div',{},backBar('Money Lab',()=>viewCards()),...cards));
 }
 
@@ -3961,7 +4011,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.49';
+const APP_VERSION='v2.50';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

@@ -20,21 +20,27 @@ function extract(name) {
 }
 const tierValueSrc = src.match(/const TIER_VALUE=\[[^\]]*\];/)[0]; // NPC market pricing table
 const shopMarkupSrc = src.match(/const SHOP_MARKUP=\[[^\]]*\];/)[0]; // per-tier retail markup
+const marketTypesSrc = src.match(/const MARKET_TYPES=\[[^\]]*\];/)[0]; // daily supply/demand type pool
 const fundConstSrc = src.match(/const FUND_START=[^\n;]*;/)[0];    // FUND_START + CANDY_PER_PRACTICE
-const POKE_BY_ID = { 10: { t: 1 }, 25: { t: 2 }, 6: { t: 4 }, 150: { t: 5 } }; // stub: dexId → rarity tier
+const POKE_BY_ID = { 10: { t: 1 }, 25: { t: 2 }, 6: { t: 4 }, 150: { t: 5 }, 1: { t: 2 }, 4: { t: 2 } }; // stub: dexId → rarity tier
+const pokeTypes = id => id === 1 ? ['grass'] : id === 4 ? ['fire'] : ['normal']; // stub types (rest 'normal' → never hot/cold)
+const todayISO = () => '2026-07-18'; // fixed so the daily market is deterministic in tests
 const ctx = {};
-new Function('POKE_BY_ID',
-  tierValueSrc + '\n' + shopMarkupSrc + '\n' + fundConstSrc + '\n' +
+new Function('POKE_BY_ID', 'pokeTypes', 'todayISO',
+  tierValueSrc + '\n' + shopMarkupSrc + '\n' + marketTypesSrc + '\n' + fundConstSrc + '\n' +
   ['normCard', 'normTrainer', 'mergeCardRec', 'mergeTrainerVals', 'cardValue', 'wantValue',
-    'tradeCards', 'sumValue', 'tradeValue', 'bundlePrice', 'charmPrice', 'dealRating', 'npcAcceptProb',
+    'tradeCards', 'sumValue', 'tradeValue', 'bundlePrice', 'charmPrice', 'dealRating',
+    'dayHash', 'todayMarket', 'marketMult', 'marketValue', 'tradeMarketValue', 'askMarketValue', 'npcAcceptProb',
     'bankPayout', 'fundStep', 'fundValue', 'shopPrice', 'candyInPractices', 'moneyMathQuestion'].map(extract).join('\n') +
   '\nthis.normCard=normCard;this.normTrainer=normTrainer;this.mergeCardRec=mergeCardRec;this.mergeTrainerVals=mergeTrainerVals;' +
   'this.cardValue=cardValue;this.wantValue=wantValue;this.tradeCards=tradeCards;this.sumValue=sumValue;this.tradeValue=tradeValue;' +
   'this.bundlePrice=bundlePrice;this.charmPrice=charmPrice;this.dealRating=dealRating;this.npcAcceptProb=npcAcceptProb;' +
+  'this.dayHash=dayHash;this.todayMarket=todayMarket;this.marketMult=marketMult;this.marketValue=marketValue;this.tradeMarketValue=tradeMarketValue;this.askMarketValue=askMarketValue;' +
   'this.bankPayout=bankPayout;this.fundStep=fundStep;this.fundValue=fundValue;this.shopPrice=shopPrice;this.candyInPractices=candyInPractices;' +
-  'this.moneyMathQuestion=moneyMathQuestion;').call(ctx, POKE_BY_ID);
+  'this.moneyMathQuestion=moneyMathQuestion;').call(ctx, POKE_BY_ID, pokeTypes, todayISO);
 const { normCard, normTrainer, mergeCardRec, mergeTrainerVals, cardValue, wantValue,
   tradeCards, sumValue, tradeValue, bundlePrice, charmPrice, dealRating, npcAcceptProb,
+  todayMarket, marketMult, marketValue, tradeMarketValue, askMarketValue,
   bankPayout, fundStep, fundValue, shopPrice, candyInPractices, moneyMathQuestion } = ctx;
 
 let pass = 0, fail = 0;
@@ -101,8 +107,31 @@ eq('dealRating generous (ratio 7) → warns to ask more', dealRating(70, 10).emo
 eq('dealRating fair (equal value) → ok', dealRating(24, 24).tone, 'ok');
 eq('dealRating great deal (ratio 1.2) → ok', dealRating(24, 20).tone, 'ok');
 eq('dealRating too steep (ratio 0.5) → bad', dealRating(24, 48).tone, 'bad');
-// npcAcceptProb now values a BUNDLE by its summed value.
+// npcAcceptProb values a BUNDLE by its summed value. Test cards have no dexId → type 'normal' →
+// never hot/cold → market multiplier 1, so these stay equal to the base-value expectations.
 eq('npcAcceptProb bundle vs candy (give 94 / ask 90 ≈ fair)', npcAcceptProb({ cards: [{ tier: 2, level: 1 }, { tier: 4, level: 1 }], want: { type: 'candy', amount: 90 } }), 0.7);
+
+// ── Dynamic market (v2.50): a hot type is worth +25%, cold −20%, others unchanged ──
+const MKT = { hot: 'grass', cold: 'fire' };
+eq('marketMult hot type → 1.25', marketMult(1, MKT), 1.25);   // dexId 1 = grass (hot)
+eq('marketMult cold type → 0.8', marketMult(4, MKT), 0.8);    // dexId 4 = fire (cold)
+eq('marketMult neutral type → 1', marketMult(99, MKT), 1);    // 'normal'
+eq('marketValue lifts a hot card (t2 24 → 30)', marketValue({ dexId: 1, tier: 2, level: 1 }, MKT), 30);
+eq('marketValue drops a cold card (t2 24 → 19)', marketValue({ dexId: 4, tier: 2, level: 1 }, MKT), 19);
+eq('tradeMarketValue sums a mixed bundle at market', tradeMarketValue({ cards: [{ dexId: 1, tier: 2, level: 1 }, { dexId: 4, tier: 2, level: 1 }] }, MKT), 49); // 30 + 19
+eq('askMarketValue candy = amount', askMarketValue({ type: 'candy', amount: 25 }, MKT), 25);
+eq('askMarketValue hot requested card is market-adjusted (t2 grass 24→30)', askMarketValue({ type: 'card', dexId: 1 }, MKT), 30);
+eq('askMarketValue cold requested card (t2 fire 24→19)', askMarketValue({ type: 'card', dexId: 4 }, MKT), 19);
+// todayMarket is deterministic per date, picks two distinct non-'normal' types, and BOTH hot AND
+// cold change day-to-day (the v2.50 review fix — cold must not be sticky for a week).
+{
+  const m = todayMarket('2026-07-18');
+  eq('todayMarket is deterministic per date', JSON.stringify(m), JSON.stringify(todayMarket('2026-07-18')));
+  eq('todayMarket hot ≠ cold and both real types', m.hot !== m.cold && m.hot !== 'normal' && m.cold !== 'normal', true);
+  // cold changes at least once across the next 3 days (would fail the old floor(h/7) sticky-cold logic)
+  const colds = ['2026-07-18', '2026-07-19', '2026-07-20', '2026-07-21'].map(d => todayMarket(d).cold);
+  eq('cold type is not stuck day-to-day', new Set(colds).size > 1, true);
+}
 
 // ── Money Lab (v2.48): term-deposit interest, fund price movement, shop pricing ──
 eq('bankPayout 50 @ +60% = 80', bankPayout(50, 0.6), 80);
