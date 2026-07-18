@@ -625,8 +625,21 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     School moved to the top of the Money Lab, 价格心理 → "price psychology", and a **💰 Money &
     trading** intro added to the ❓ guide. Adversarially code-reviewed (the sticky-cold bug it found
     is fixed); market helpers unit-tested in [economy.test.js](economy.test.js).
-    **STILL TO BUILD (staged next):** a spicy "single hot card" investing rung, haggling/counter-
-    offers, auctions, give/charity, and a parent money-skills report + Smart-Shopper badges.
+  - **Haggling + auctions (v2.51)** — two negotiation surfaces in the Trading Post. **💬 Haggle**
+    (`viewHaggle`, `startHaggle`, `makeOffer`, `closeHaggle`) is a self-contained mini-game: an NPC
+    shopkeeper sells a random card at a marked-up price; you counter, `haggleReply(reservation,
+    sellerPrice,yourOffer,round,maxRounds)` (pure) accepts at/above the reservation, else meets in
+    the middle, else walks away after `HAGGLE_MAX_ROUNDS`. Teaches negotiation + walking away. **🔨
+    Auctions** (`postAuction`, `auctionBidStep` (pure — bumps ~15% toward a soft cap just above
+    market), `runAuctionBids`, `resolveAuctions`, `endAuctionNow`): list a card (a `trades` record
+    with `kind:'auction'`, escrowed, opens at ~half market), NPC bidders drive it up on practice +
+    on opening the post, and you collect the winning bid when it ends or you End-now. Auctions are
+    filtered OUT of the fixed-price offer lists (`tradesOpen` consumers + `runNpcMarket` guard
+    `kind!=='auction'`), fold into the cash-flow (P&L) + Recent-deals, and — like all trades — sync
+    by status (intermediate live-bid updates are seller-device-local, which is fine since auctions
+    resolve on the seller's device). Pure logic unit-tested in [economy.test.js](economy.test.js).
+    **STILL TO BUILD (staged next):** a spicy "single hot card" investing rung, give/charity, and a
+    parent money-skills report + Smart-Shopper badges.
 - **Battle vs PC ([battle.js](battle.js), `viewBattle`)** — practice-GATED: each
   practice grants `⚡ energy` (`battleAddEnergy`, +1, +1 at ≥80%, cap 12, stored on
   the trainer doc); a battle costs 1. `viewBattle` is a **team builder**: pick up
@@ -748,7 +761,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.50**). Claude suggests the next number on
+  minor on each release (currently at **v2.51**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

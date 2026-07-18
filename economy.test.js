@@ -31,16 +31,19 @@ new Function('POKE_BY_ID', 'pokeTypes', 'todayISO',
   ['normCard', 'normTrainer', 'mergeCardRec', 'mergeTrainerVals', 'cardValue', 'wantValue',
     'tradeCards', 'sumValue', 'tradeValue', 'bundlePrice', 'charmPrice', 'dealRating',
     'dayHash', 'todayMarket', 'marketMult', 'marketValue', 'tradeMarketValue', 'askMarketValue', 'npcAcceptProb',
+    'haggleReply', 'auctionBidStep',
     'bankPayout', 'fundStep', 'fundValue', 'shopPrice', 'candyInPractices', 'moneyMathQuestion'].map(extract).join('\n') +
   '\nthis.normCard=normCard;this.normTrainer=normTrainer;this.mergeCardRec=mergeCardRec;this.mergeTrainerVals=mergeTrainerVals;' +
   'this.cardValue=cardValue;this.wantValue=wantValue;this.tradeCards=tradeCards;this.sumValue=sumValue;this.tradeValue=tradeValue;' +
   'this.bundlePrice=bundlePrice;this.charmPrice=charmPrice;this.dealRating=dealRating;this.npcAcceptProb=npcAcceptProb;' +
   'this.dayHash=dayHash;this.todayMarket=todayMarket;this.marketMult=marketMult;this.marketValue=marketValue;this.tradeMarketValue=tradeMarketValue;this.askMarketValue=askMarketValue;' +
+  'this.haggleReply=haggleReply;this.auctionBidStep=auctionBidStep;' +
   'this.bankPayout=bankPayout;this.fundStep=fundStep;this.fundValue=fundValue;this.shopPrice=shopPrice;this.candyInPractices=candyInPractices;' +
   'this.moneyMathQuestion=moneyMathQuestion;').call(ctx, POKE_BY_ID, pokeTypes, todayISO);
 const { normCard, normTrainer, mergeCardRec, mergeTrainerVals, cardValue, wantValue,
   tradeCards, sumValue, tradeValue, bundlePrice, charmPrice, dealRating, npcAcceptProb,
   todayMarket, marketMult, marketValue, tradeMarketValue, askMarketValue,
+  haggleReply, auctionBidStep,
   bankPayout, fundStep, fundValue, shopPrice, candyInPractices, moneyMathQuestion } = ctx;
 
 let pass = 0, fail = 0;
@@ -158,6 +161,25 @@ eq('candyInPractices ~ cost / earn-rate', candyInPractices(70), 10);
   }
   eq('moneyMathQuestion always well-formed (4 unique int options incl. answer)', ok, true);
 }
+
+// ── Haggling (v2.51): negotiate — accept at/above reservation, else meet in the middle, else walk ──
+// reservation 20, seller asking 40. Offering their ask → deal at the ask.
+eq('haggle: offering the ask → deal at ask', haggleReply(20, 40, 40, 0, 4).action, 'deal');
+eq('haggle: offer at/above reservation → deal at your offer', JSON.stringify((r => [r.action, r.price])(haggleReply(20, 40, 22, 0, 4))), JSON.stringify(['deal', 22]));
+{ // below reservation early → counter meeting in the middle, never below reservation
+  const r = haggleReply(20, 40, 10, 0, 4);
+  eq('haggle: too low early → counter', r.action, 'counter');
+  eq('haggle: counter is the midpoint (40+10)/2 = 25', r.sellerPrice, 25);
+  eq('haggle: counter never below reservation', haggleReply(20, 24, 4, 0, 4).sellerPrice >= 20, true);
+}
+eq('haggle: too low on the last round → walk away', haggleReply(20, 40, 5, 3, 4).action, 'walk');
+
+// ── Auctions (v2.51): NPC bids bump ~15% toward a soft cap just above market, then stop ──
+eq('auctionBidStep bumps ~15% (100 → 115)', auctionBidStep(100, 100), 115);
+eq('auctionBidStep enforces a minimum +2 step', auctionBidStep(10, 100), 12);
+eq('auctionBidStep caps just above market (115) — at cap → null', auctionBidStep(115, 100), null);
+eq('auctionBidStep past cap → null (no more bids)', auctionBidStep(130, 100), null);
+eq('auctionBidStep never exceeds the cap', auctionBidStep(110, 100), 115);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

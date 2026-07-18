@@ -2120,6 +2120,7 @@ async function submitSession(){
         const took=await runNpcMarket(pid(),{max:(Math.random()<0.18?2:1)});
         if(took.length){attempt.npcTrades=took.map(d=>({npc:d.npc.emoji+' '+d.npc.name,label:tradeLabel(d.trade),want:d.trade.want}));await dbPut('attempts',attempt);}
       }
+      await runAuctionBids(); // traders bid up any live auctions while you practise
     }catch(e){console.warn('npc market',e);}
   }
   // Adaptive difficulty (practice only): suggest a level change, or auto-apply it
@@ -2772,24 +2773,35 @@ function tradeCardRow(snap){return el('div',{class:'row',style:'gap:10px;align-i
 async function viewTrades(){
   stopTimer();
   const visited=await npcMaybeVisit(); // a trader may pass through while you're here
-  const open=await tradesOpen();
+  await runAuctionBids();               // traders bid up any live auctions
+  const auctionResults=await resolveAuctions(); // collect any that just ended
+  const open=(await tradesOpen()).filter(t=>t.kind!=='auction'); // fixed-price offers only
   const mine=open.filter(t=>t.sellerId===pid()),others=open.filter(t=>t.sellerId!==pid());
   const canMap={};for(const t of others)canMap[t.id]=await canFulfill(t.want);
   const tr=await trainerGet();
   const allTrades=await dbAll('trades');
-  // Recent completed deals involving this student (family takers + market traders) — so the post feels alive.
-  const recent=allTrades.filter(t=>t.status==='done'&&(t.sellerId===pid()||t.takenBy===pid())).sort((a,b)=>(b.resolvedAt||0)-(a.resolvedAt||0)).slice(0,6);
-  // Trading cash-flow (P&L): candy earned SELLING your cards vs candy spent BUYING others'.
-  const done=allTrades.filter(t=>t.status==='done'&&t.want&&t.want.type==='candy');
-  const sold=done.filter(t=>t.sellerId===pid()).reduce((s,t)=>s+(+t.want.amount||0),0);
-  const bought=done.filter(t=>t.takenBy===pid()).reduce((s,t)=>s+(+t.want.amount||0),0);
+  const myAuctions=allTrades.filter(t=>t.kind==='auction'&&t.status==='open'&&t.sellerId===pid()).sort((a,b)=>a.endsAt-b.endsAt);
+  // Recent completed deals involving this student (family takers + market traders + auctions) — so the post feels alive.
+  const recent=allTrades.filter(t=>(t.status==='done'||(t.kind==='auction'&&t.status==='cancelled'&&t.bidder))&&(t.sellerId===pid()||t.takenBy===pid())).sort((a,b)=>(b.resolvedAt||0)-(a.resolvedAt||0)).slice(0,6);
+  // Trading cash-flow (P&L): candy earned SELLING (fixed offers + auction sales) vs spent BUYING.
+  const doneAll=allTrades.filter(t=>t.status==='done');
+  const soldFixed=doneAll.filter(t=>t.sellerId===pid()&&t.want&&t.want.type==='candy').reduce((s,t)=>s+(+t.want.amount||0),0);
+  const soldAuction=doneAll.filter(t=>t.sellerId===pid()&&t.kind==='auction').reduce((s,t)=>s+(+t.bid||0),0);
+  const sold=soldFixed+soldAuction;
+  const bought=doneAll.filter(t=>t.takenBy===pid()&&t.want&&t.want.type==='candy').reduce((s,t)=>s+(+t.want.amount||0),0);
   const netTrade=sold-bought;
   const mkt=todayMarket();
   const dealRow=t=>{const lbl=tradeCards(t).length>1?('a bundle of '+tradeCards(t).length):(POKE_BY_ID[t.card.dexId]?POKE_BY_ID[t.card.dexId].name:'Pokémon');
-    const txt=t.sellerId===pid()?((t.takenByName||'Someone')+' took your '+lbl+' — you got '+wantLabel(t.want))
+    const txt=t.kind==='auction'?('Your '+lbl+' auction sold for 🍬 '+t.bid+(t.bidderName?(' to '+t.bidderName):''))
+      :t.sellerId===pid()?((t.takenByName||'Someone')+' took your '+lbl+' — you got '+wantLabel(t.want))
       :('You took '+lbl+' from '+(t.sellerName||profileName(t.sellerId))+' for '+wantLabel(t.want));
     return el('div',{class:'row between',style:'gap:8px;padding:7px 0;border-bottom:1px solid var(--line);align-items:center'},
-      el('span',{class:'small',style:'flex:1;min-width:0'},txt),t.npc?el('span',{class:'pill',style:'flex:none'},'🛒 market'):'');};
+      el('span',{class:'small',style:'flex:1;min-width:0'},txt),(t.npc||t.kind==='auction')?el('span',{class:'pill',style:'flex:none'},t.kind==='auction'?'🔨 auction':'🛒 market'):'');};
+  const auctionRow=a=>{const cs=tradeCards(a),hrs=Math.max(0,Math.ceil((a.endsAt-Date.now())/3600000));
+    return el('div',{class:'card'},
+      cs.length>1?el('div',{class:'small',style:'font-weight:700;margin-bottom:6px'},'📦 Bundle · '+cs.length+' cards'):tradeCardRow(cs[0]),
+      el('div',{class:'row between',style:'margin-top:8px;gap:8px'},el('span',{class:'small'},a.bidder?('🔨 Top bid 🍬 '+a.bid+' · '+a.bidderName):('Starting bid 🍬 '+a.bid+' · no bids yet')),el('span',{class:'small muted'},hrs+'h left')),
+      el('button',{class:'btn sm ghost',style:'margin-top:8px',onclick:async()=>{const r=await endAuctionNow(a.id);viewTrades();if(r&&r[0])toast(r[0].msg);}},'End auction now'));};
   const costHint=t=>t.want.type==='candy'?'You’ll pay 🍬 '+t.want.amount+' candy (you keep all your cards).':'You’ll give your '+(POKE_BY_ID[t.want.dexId]?POKE_BY_ID[t.want.dexId].name:'Pokémon')+' for it.';
   const cardsBlock=t=>{const cs=tradeCards(t);if(cs.length<=1)return tradeCardRow(cs[0]||t.card);
     return el('div',{},el('div',{class:'small',style:'font-weight:700;margin-bottom:6px'},'📦 Bundle · '+cs.length+' cards · worth about 🍬 '+tradeMarketValue(t,mkt)+' today'),el('div',{style:'display:grid;gap:8px'},...cs.map(tradeCardRow)));};
@@ -2823,18 +2835,23 @@ async function viewTrades(){
         el('span',{class:'tchip',style:'background:'+(TYPE_COLOR[mkt.cold]||'#999')},'❄️ '+mkt.cold+' −20%')),
       el('p',{class:'small muted',style:'margin-top:8px'},'Demand changes prices! SELL your '+mkt.hot+' cards while they’re hot, and it’s a cheap day to pick up '+mkt.cold+' cards. It all changes tomorrow.')),
     marketSchool,
-    el('button',{class:'btn primary block',style:'margin-bottom:6px',onclick:()=>viewTradeNew()},'➕ Make a new offer'),
+    el('div',{class:'row',style:'gap:8px;margin-bottom:6px'},
+      el('button',{class:'btn primary',style:'flex:1',onclick:()=>viewTradeNew()},'➕ New offer'),
+      el('button',{class:'btn',style:'flex:1',onclick:()=>{haggleState=null;startHaggle();}},'💬 Haggle')),
     others.length?el('div',{class:'seclabel'},'Deals you can take'):'',
     ...others.map(t=>offerRow(t,false)),
     mine.length?el('div',{class:'seclabel'},'Your offers'):'',
     ...mine.map(t=>offerRow(t,true)),
-    (!open.length)?el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'🔁'),el('div',{},'No offers yet. Tap “Make a new offer” to start trading with your family — or with traders passing through!'))):'',
+    myAuctions.length?el('div',{class:'seclabel'},'🔨 Your auctions'):'',
+    ...myAuctions.map(auctionRow),
+    (!open.length&&!myAuctions.length)?el('div',{class:'card'},el('div',{class:'empty'},el('div',{class:'big'},'🔁'),el('div',{},'No offers yet. Tap “New offer” to trade, or “Haggle” to bargain for a card!'))):'',
     (sold||bought)?el('div',{class:'card'},el('h2',{style:'margin:0 0 4px'},'📈 Your trading'),
       el('div',{class:'small'},'Sold cards for 🍬 '+sold+' · spent 🍬 '+bought+' buying'),
       el('div',{style:'font-weight:800;margin-top:4px;color:'+(netTrade>=0?'#34c759':'#ff3b30')},(netTrade>=0?'Net profit 🍬 +':'Net 🍬 ')+netTrade),
       el('p',{class:'small muted',style:'margin-top:4px'},'Buy low, sell high — that’s how traders make a profit!')):'',
-    recent.length?el('div',{class:'card'},el('h2',{style:'margin:0 0 4px'},'🧾 Recent deals'),el('p',{class:'sub'},'The latest trades — including traders passing through the market.'),...recent.map(dealRow)):''));
-  if(visited.length){const d=visited[0];toast('🔔 '+d.npc.emoji+' '+d.npc.name+' took '+tradeLabel(d.trade)+'!');}
+    recent.length?el('div',{class:'card'},el('h2',{style:'margin:0 0 4px'},'🧾 Recent deals'),el('p',{class:'sub'},'The latest trades — including traders and auctions.'),...recent.map(dealRow)):''));
+  if(auctionResults&&auctionResults.length)toast(auctionResults[0].msg);
+  else if(visited.length){const d=visited[0];toast('🔔 '+d.npc.emoji+' '+d.npc.name+' took '+tradeLabel(d.trade)+'!');}
 }
 let tradeDraft=null;
 const BUNDLE_MAX=3;
@@ -2901,9 +2918,37 @@ async function viewTradeNew(){
     renderWant();
     host.append(el('div',{class:'card'},el('h2',{},'2. What do you want for it?'),wantHost));
     host.append(el('button',{class:'btn primary lg block'+(tradeDraft.want?'':' ghost'),onclick:async()=>{if(!tradeDraft.want)return toast('Pick what you want first.');await postTrade(tradeDraft.cards.map(c=>c.dexId),tradeDraft.want);viewTrades();}},n>1?'Post bundle offer':'Post offer'));
+    host.append(el('div',{class:'card',style:'margin-top:6px'},el('div',{class:'row between',style:'align-items:center;gap:8px;flex-wrap:wrap'},
+      el('div',{style:'flex:1;min-width:0'},el('div',{style:'font-weight:700'},'🔨 Or auction it'),el('div',{class:'small muted'},'Skip setting a price — let traders BID against each other. In demand? It can sell for MORE!')),
+      el('button',{class:'btn sm',onclick:async()=>{await postAuction(tradeDraft.cards.map(c=>c.dexId));viewTrades();}},'Start auction'))));
   }
   render();
   show(el('div',{},backBar('New offer',()=>viewTrades()),host));
+}
+async function viewHaggle(){
+  stopTimer();
+  if(!haggleState)return startHaggle();
+  const hs=haggleState,wallet=(await trainerGet()).candy||0,body=[];
+  body.push(el('div',{class:'card'},
+    el('div',{class:'row',style:'gap:12px;align-items:center'},pokeImg(hs.snap.dexId,false,64),
+      el('div',{},el('div',{style:'font-weight:800;font-size:16px'},hs.name),el('div',{class:'small muted'},rarityStars(hs.snap.tier)+' · market ~🍬 '+hs.fair))),
+    el('div',{class:'explain',style:'margin-top:10px'},el('div',{class:'h'},'🧑‍🌾 Shopkeeper'),el('div',{},hs.msg))));
+  if(hs.state==='ask'){
+    const sp=hs.sellerPrice,offers=[...new Set([Math.round(sp*0.6),Math.round(sp*0.78),Math.round(sp*0.9)].map(x=>Math.max(1,x)))].sort((a,b)=>a-b);
+    body.push(el('div',{class:'card'},el('h2',{},'Your offer'),el('p',{class:'sub',style:'margin-bottom:8px'},'They’re asking 🍬 '+sp+' (fair value is ~🍬 '+hs.fair+'). Offer low and meet in the middle — but too low and they’ll walk away!'),
+      el('div',{class:'row',style:'gap:8px;flex-wrap:wrap'},
+        ...offers.map(a=>el('button',{class:'btn sm',onclick:()=>makeOffer(a)},'Offer 🍬 '+a)),
+        el('button',{class:'btn sm primary',onclick:()=>makeOffer(sp)},'Pay 🍬 '+sp)),
+      el('button',{class:'btn ghost block',style:'margin-top:10px',onclick:()=>{haggleState=null;viewTrades();}},'🚶 Walk away')));
+  }else if(hs.state==='deal'){
+    body.push(el('div',{class:'card'},el('div',{style:'font-weight:700;color:#34c759'},'🤝 Agreed at 🍬 '+hs.dealPrice+(hs.dealPrice<hs.fair?' — below market, nice haggling!':'')),
+      wallet>=hs.dealPrice?el('button',{class:'btn primary block',style:'margin-top:10px',onclick:()=>closeHaggle()},'Buy '+hs.name+' for 🍬 '+hs.dealPrice):el('p',{class:'small',style:'color:var(--warn);margin-top:8px'},'You need 🍬 '+hs.dealPrice+' — do more practice to earn candy!'),
+      el('button',{class:'btn ghost block',style:'margin-top:8px',onclick:()=>{haggleState=null;viewTrades();}},'Cancel')));
+  }else{
+    body.push(el('div',{class:'card'},el('div',{class:'small muted'},'No deal this time. Walking away is a real skill — it can get you a better price next time!'),
+      el('div',{class:'row',style:'gap:8px;margin-top:10px'},el('button',{class:'btn',onclick:()=>{haggleState=null;startHaggle();}},'🛒 See another card'),el('button',{class:'btn ghost',onclick:()=>{haggleState=null;viewTrades();}},'Back'))));
+  }
+  show(el('div',{},backBar('Haggle',()=>{haggleState=null;viewTrades();}),...body));
 }
 
 /* ----- REFERENCE LIBRARY (real past papers → authentic grounding) ----- */
@@ -3141,6 +3186,82 @@ async function acceptTrade(id){
   toast('Trade complete! You got '+got+'.'+ref);
 }
 
+/* ===== Haggle: negotiate a price with an NPC shopkeeper (v2.51) =====
+   A little market stall where you BUY a card by bargaining. Teaches negotiation: start low, meet in
+   the middle, know the fair value, and that walking away is a real tactic. */
+const HAGGLE_MAX_ROUNDS=4;
+// Pure negotiation step. `reservation` = the lowest the seller will accept; `sellerPrice` = their
+// current ask; `yourOffer` = what you just offered. Returns deal / counter (meet-in-the-middle) / walk.
+function haggleReply(reservation,sellerPrice,yourOffer,round,maxRounds){
+  maxRounds=maxRounds||HAGGLE_MAX_ROUNDS;
+  if(yourOffer>=sellerPrice)return {action:'deal',price:sellerPrice,msg:'Deal! 🤝'};
+  if(yourOffer>=reservation)return {action:'deal',price:yourOffer,msg:'You drive a hard bargain — deal! 🤝'};
+  if(round>=maxRounds-1)return {action:'walk',msg:'Sorry, I can’t go that low. Maybe another time!'};
+  const next=Math.max(reservation,Math.round((sellerPrice+yourOffer)/2));
+  return {action:'counter',sellerPrice:next,msg:'Hmm… I couldn’t let it go for that. How about 🍬 '+next+'?'};
+}
+let haggleState=null;
+function startHaggle(){
+  const pool=POKEDEX.filter(p=>p.t<=3),p=pool[Math.floor(Math.random()*pool.length)];
+  const snap={dexId:p.id,tier:p.t,level:1},fair=marketValue(snap);
+  haggleState={snap,name:p.name,fair,list:Math.round(fair*1.4),reservation:Math.round(fair*0.95),sellerPrice:Math.round(fair*1.4),round:0,state:'ask',msg:'This '+p.name+' is a beauty — I’m asking 🍬 '+Math.round(fair*1.4)+'.'};
+  viewHaggle();
+}
+function makeOffer(amount){
+  const hs=haggleState;if(!hs||hs.state!=='ask')return;
+  const r=haggleReply(hs.reservation,hs.sellerPrice,amount,hs.round);hs.round++;hs.msg=r.msg;
+  if(r.action==='deal'){hs.state='deal';hs.dealPrice=r.price;}
+  else if(r.action==='walk')hs.state='walk';
+  else hs.sellerPrice=r.sellerPrice;
+  viewHaggle();
+}
+async function closeHaggle(){
+  const hs=haggleState;if(!hs||hs.state!=='deal')return;
+  if(!await trainerSpend(hs.dealPrice))return toast('Not enough candy — do more practice!');
+  await cardGiveTo(pid(),hs.snap);scheduleDriveSync();
+  toast('🤝 Bought '+hs.name+' for 🍬 '+hs.dealPrice+'!');haggleState=null;viewCards();
+}
+
+/* ===== Auctions: list a card and let demand bid it up (v2.51) =====
+   Traders bid against each other, so a card in demand can sell for MORE than a fixed price. Teaches
+   auctions and how competition drives prices up. NPC bidders drive the price toward market value. */
+// Pure: the next NPC bid on an auction (bumps ~15% toward a soft cap just above market value), or null.
+function auctionBidStep(currentBid,marketVal){
+  const cap=Math.round((marketVal||0)*1.15);if(currentBid>=cap)return null;
+  return Math.min(cap,Math.max(currentBid+2,Math.round(currentBid*1.15)));
+}
+async function postAuction(dexIds){
+  const ids=Array.isArray(dexIds)?dexIds:[dexIds],snaps=[];
+  for(const d of ids){const s=await cardTakeFrom(pid(),d);if(s)snaps.push(s);}
+  if(!snaps.length)return toast('You don’t have that card to auction.');
+  const start=Math.max(2,Math.round(tradeMarketValue({cards:snaps})*0.5)); // opens at ~half market
+  await dbPut('trades',{id:uid(),kind:'auction',sellerId:pid(),sellerName:activeProfile().name,card:snaps[0],cards:snaps,startBid:start,bid:start,bidder:null,bidderName:null,endsAt:Date.now()+86400000,status:'open',createdAt:Date.now()});
+  scheduleDriveSync();toast(snaps.length>1?('🔨 Bundle auction started!'):'🔨 Auction started — traders will bid it up!');
+}
+// NPC bidders drive up open auctions (best-effort, a few per visit).
+async function runAuctionBids(){
+  try{
+    const live=(await dbAll('trades')).filter(t=>t.kind==='auction'&&t.status==='open'&&Date.now()<t.endsAt);
+    let bids=0;
+    for(const a of live){if(bids>=2)break;const nb=auctionBidStep(a.bid,tradeMarketValue(a));
+      if(nb&&Math.random()<0.6){const npc=NPC_TRADERS[Math.floor(Math.random()*NPC_TRADERS.length)];a.bid=nb;a.bidder='npc';a.bidderName=npc.emoji+' '+npc.name;a.updatedAt=Date.now();await dbPut('trades',a);bids++;}}
+    if(bids)scheduleDriveSync();
+  }catch(e){}
+}
+// Resolve the active seller's ENDED auctions: a bid → they get the candy (card leaves play); no bid → card returned.
+async function resolveAuctions(){
+  const ended=(await dbAll('trades')).filter(t=>t.kind==='auction'&&t.status==='open'&&t.sellerId===pid()&&Date.now()>=t.endsAt),out=[];
+  for(const a of ended){
+    const lbl=tradeCards(a).length>1?('bundle of '+tradeCards(a).length):(POKE_BY_ID[a.card.dexId]?POKE_BY_ID[a.card.dexId].name:'card');
+    if(a.bidder&&a.bid>a.startBid){await trainerAdd(0,a.bid);a.status='done';a.resolvedAt=Date.now();out.push({sold:true,msg:'🔨 Your '+lbl+' auction sold for 🍬 '+a.bid+'!'});}
+    else{const cs=tradeCards(a);for(const s of cs)await cardGiveTo(pid(),s);a.status='cancelled';a.resolvedAt=Date.now();out.push({sold:false,msg:'🔨 No bids on your '+lbl+' — card returned.'});}
+    await dbPut('trades',a);
+  }
+  if(out.length)scheduleDriveSync();
+  return out;
+}
+async function endAuctionNow(id){const a=(await dbAll('trades')).find(x=>x.id===id);if(!a||a.status!=='open')return [];a.endsAt=Date.now()-1;await dbPut('trades',a);return await resolveAuctions();}
+
 /* ----- Simulated trade market (NPC traders, v2.46) -----
    Kids post offers faster than family members take them, so the Trading Post can feel dead.
    These NPC "traders" occasionally accept a student's OPEN offers so the market stays lively —
@@ -3220,7 +3341,7 @@ async function runNpcMarket(profileId,opts){
   try{
     const budget=Math.max(0,NPC_DAILY_CAP-npcTradesToday());if(!budget)return [];
     const max=Math.min(budget,opts.max||1);
-    const open=(await dbAll('trades')).filter(t=>t.status==='open'&&t.sellerId===profileId).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    const open=(await dbAll('trades')).filter(t=>t.status==='open'&&t.sellerId===profileId&&t.kind!=='auction').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
     if(!open.length)return [];
     const done=[];
     for(const t of open){
@@ -4011,7 +4132,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.50';
+const APP_VERSION='v2.51';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
