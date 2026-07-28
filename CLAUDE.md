@@ -225,6 +225,49 @@ locally. It runs by double-clicking `index.html` or hosting it statically
     The human escape hatch ("✓ My answer was actually right" → `regrade`) remains the backstop.
     `formulaCautions` also gained curated wrong-signature flags for parallelogram / rectangle area &
     perimeter. Tested in [accuracy.test.js](accuracy.test.js) + [diagram.test.js](diagram.test.js).
+  - **Mis-key / broken-question hardening (v2.56)** — five reported "wrong answer / marked wrong /
+    image issue" cases from real practices, each root-caused and fixed with a deterministic guard
+    (adversarially code-reviewed in two rounds; all confirmed false-positive risks fixed):
+    - **The `distractor` substring bug (the big one):** `repointFromExplanation`/`mcConcludesOffList`
+      skip a number if a "distractor/negation" word sits just before it — but the keywords were
+      **substring**-matched, so "a**not**her" (in "…minus another 5 minutes is 8:15") matched "not"
+      and the concluding **8:15** was wrongly skipped, leaving the key on the wrong intermediate 8:20
+      (reported time question). Fixed by **`\b`-anchoring** all keywords (+ added `\bcannot\b`, changed
+      `\btrap`→`\btrap(?![a-z])` so "trapezoid/trapezium" isn't a distractor; the two closures now share
+      one keyword list). This one fix helps a broad class of elimination explanations.
+    - **`repointFromNumericCondition(q)` (NEW):** select-the-value questions ("Which decimal is larger
+      than 0.3 but smaller than 0.75?") — the elimination explanation ends on the REJECTED option, so
+      the explanation scan can't be trusted. Instead parse the numeric CONDITION from the question and
+      repoint to the ONE option that satisfies it. Grounded in question+options, not the explanation.
+      Scans only the **selection clause** (from the last "which/what") so a scenario threshold ("a whale
+      weighs more than 40 tonnes") isn't used; bails on non-inequality picks (even/prime/factor/…) and
+      negated comparisons ("no more than").
+    - **`repointFromSequence(q)` (NEW):** ordering answers ("1, 2, 3, 4" vs "4, 3, 2, 1") — the
+      single-value scan matched the last number to whichever option merely STARTS with it. Matches the
+      **full ordered tuple**, and only accepts a run preceded by a positive conclusion cue and not by a
+      negation/reverse aside ("…is 1,2,3,4, **not** 4,3,2,1", "reversed would be…"). `repointFromExplanation`
+      now bails when all options are multi-number sequences (leaves them to this).
+    - **`figureAnswerBroken(q)` (NEW, folded into `questionBroken`):** the pictograph "image issue" — a
+      "how many more in April than March?" whose figure draws both months equal (diff 0, not an option).
+      `figureContradictsKey` skips difference/total wording, so this sibling computes the difference (two
+      named rows) or total (all rows) from the DRAWN `figureRows` and **drops only when that value is off
+      every option** (a valid question's answer is always an option → never false-dropped). Total wording
+      takes precedence over an incidental "fewer/less than" narrative; the difference branch abstains when
+      a multiplier ("than twice B") sits between the two labels.
+    - **`orderingPuzzleSolve/Broken(q)` + `repointFromOrdering(q)` (NEW):** ambiguous line-ordering
+      puzzles ("Liam is not first. Mia is behind Noah. Oscar is in front of Liam… who is second?" — has
+      several valid orderings). Parses clues into position constraints (pos 1 = FRONT; "in front of"→
+      smaller, "behind"→larger; ordinal, not-ordinal, directly-before/after, next-to, and **compound**
+      "X is behind Y and Z"), brute-forces all permutations (N≤6), and DROPS when the asked position has
+      >1 answer (ambiguous) or 0 (contradiction); repoints a unique answer that disagrees with the key.
+      **Phantom-name-safe:** capitalised non-people ("On Tuesday", "Standing", "Mr Smith") are filtered
+      out — a name is kept only if a parsed constraint references it OR it's an option; a roster sentence
+      ("Ivy, Jon and Kim wait…") is skipped (not treated as an unparsed clue). **Abstains** unless every
+      clue with a positional word parses, so a puzzle we can't fully read is left to the AI verifier.
+    `fixQuestion` chains the new repoints AFTER `repointFromExplanation` (each a no-op unless it applies);
+    `questionBroken` ORs in the two new broken-detectors. `buildPrompt` + `verifyQuestions` gained matching
+    clauses (affirm the correct option / "which value" boundary / full-sequence / enumerate ordering /
+    figure difference-or-total). Tested in [repoint.test.js](repoint.test.js) + [accuracy.test.js](accuracy.test.js).
 - **Remove a question everywhere (v2.31)** — the fix for "a bad question (wrong image /
   no correct answer) keeps coming back even after clearing the bank" (it also lived in the
   notebook or re-synced from another device). A **🗑 Remove** control on the runner
@@ -782,7 +825,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.55**). Claude suggests the next number on
+  minor on each release (currently at **v2.56**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

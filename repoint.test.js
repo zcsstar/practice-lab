@@ -44,11 +44,14 @@ function extract(name) {
 const ctx = {};
 new Function(
   extract('plainMath') + '\n' + extract('plValTokens') + '\n' +
-  extract('repointFromExplanation') + '\n' + extract('dedupeOptions') + '\n' +
+  extract('repointFromExplanation') + '\n' + extract('repointFromNumericCondition') + '\n' +
+  extract('repointFromSequence') + '\n' + extract('dedupeOptions') + '\n' +
   extract('repointFromWhyWrong') + '\n' +
-  'this.repointFromExplanation=repointFromExplanation;this.dedupeOptions=dedupeOptions;this.repointFromWhyWrong=repointFromWhyWrong;'
+  'this.repointFromExplanation=repointFromExplanation;this.repointFromNumericCondition=repointFromNumericCondition;this.repointFromSequence=repointFromSequence;this.dedupeOptions=dedupeOptions;this.repointFromWhyWrong=repointFromWhyWrong;'
 ).call(ctx);
 const repoint = ctx.repointFromExplanation;
+const numCond = ctx.repointFromNumericCondition;
+const seq = ctx.repointFromSequence;
 const dedupe = ctx.dedupeOptions;
 const whyWrong = ctx.repointFromWhyWrong;
 
@@ -149,6 +152,24 @@ check('negation "not 6" ignored, concludes 9 → D', {
   explanation: 'The answer is not 6. Counting the divisors gives 9.'
 }, 3);
 
+// ── "cannot" is a real negation the \b-anchoring must still catch ─────────────
+check('"cannot be 8" distractor skipped, concludes 6 → B', {
+  type: 'multiple_choice',
+  options: ['4', '6', '7', '8'],
+  answerIndex: 3,                       // mis-keyed to D (8)
+  answer: '8',
+  explanation: 'The answer is 6. It cannot be 8.'
+}, 1);
+
+// ── "trapezoid"/"trapezium" must NOT be mistaken for the "trap" distractor word ─
+check('geometry "trapezoid area is 24" not treated as distractor → repoints to 24 (B)', {
+  type: 'multiple_choice',
+  options: ['12', '24', '30', '36'],
+  answerIndex: 0,                       // mis-keyed to A (12)
+  answer: '12',
+  explanation: 'The trapezoid area is 24.'
+}, 1);
+
 // ── Safety: non-numeric options left untouched ───────────────────────────────
 check('non-numeric options untouched', {
   type: 'multiple_choice',
@@ -239,6 +260,161 @@ check('mixed number: 15/8 = 1 7/8 is A, key was B', {
   const q = whyWrong({ type: 'multiple_choice', options: ['A', 'B', 'C', 'D'], answerIndex: 1, whyWrong: ['only one'] });
   if (q.answerIndex === 1) pass++; else { fail++; console.log('  ✗ whyWrong acted on mismatched-length array'); }
 }
+
+// ── Word-boundary distractor fix: "aNOTher" must not trip the "not" filter ─────
+// Reported Q14: "…minus another 5 minutes is 8:15 AM" — "another" contains "not", so the
+// concluding 8:15 was wrongly skipped and the key stayed on the wrong 8:20.
+check('time: "another" no longer masks the concluding 8:15 (C)', {
+  type: 'multiple_choice',
+  question: 'You need to be at school by 8:40 AM. The walk takes 25 minutes. What is the latest time you should leave?',
+  options: ['8:05 AM', '8:10 AM', '8:15 AM', '8:20 AM'],
+  answerIndex: 3,                       // mis-keyed to D (8:20, an intermediate step)
+  answer: '8:20 AM',
+  explanation: '8:40 AM minus 20 minutes is 8:20 AM. Minus another 5 minutes is 8:15 AM.'
+}, 2);
+
+// repointFromExplanation must BAIL on sequence options (leave them to repointFromSequence),
+// so it can't mis-fire by matching the last number to an option that merely starts with it.
+check('sequence options → repointFromExplanation is a no-op', {
+  type: 'multiple_choice',
+  question: 'Order the angles from smallest to largest.',
+  options: ['1, 2, 3, 4', '2, 1, 3, 4', '4, 3, 2, 1', '1, 3, 2, 4'],
+  answerIndex: 2,
+  answer: '4, 3, 2, 1',
+  explanation: 'Therefore the order from smallest to largest is 1, 2, 3, 4.'
+}, 2);   // unchanged by repointFromExplanation; repointFromSequence handles it (tested below)
+
+// ── repointFromNumericCondition: select-the-value questions grounded in the question ──
+const nc = (desc, q, expected) => { const r = numCond({ ...q }); if (r.answerIndex === expected) pass++; else { fail++; console.log(`  ✗ ${desc}\n      expected answerIndex ${expected}, got ${r.answerIndex}`); } };
+// Reported Q1: elimination explanation ends on the rejected 0.30; only 0.6 is in (0.3, 0.75).
+nc('decimals: only 0.6 is >0.3 and <0.75 → C', {
+  type: 'multiple_choice',
+  question: 'Which decimal is larger than 0.3 but smaller than 0.75?',
+  options: ['0.25', '0.8', '0.6', '0.30'], answerIndex: 3, answer: '0.30'
+}, 2);
+nc('between 20 and 30: only 24 qualifies → repoint', {
+  type: 'multiple_choice',
+  question: 'Which number is between 20 and 30?',
+  options: ['12', '24', '35', '40'], answerIndex: 0
+}, 1);
+nc('at least 100: only 120 qualifies → repoint', {
+  type: 'multiple_choice',
+  question: 'Which value is at least 100?',
+  options: ['50', '75', '99', '120'], answerIndex: 0
+}, 3);
+// Safety: two options satisfy → ambiguous → abstain (leave the key).
+nc('two options satisfy → abstain', {
+  type: 'multiple_choice',
+  question: 'Which number is greater than 5?',
+  options: ['3', '7', '9', '2'], answerIndex: 1
+}, 1);
+// Safety: already correctly keyed → no change.
+nc('correctly keyed selection stays put', {
+  type: 'multiple_choice',
+  question: 'Which decimal is larger than 0.3 but smaller than 0.75?',
+  options: ['0.25', '0.8', '0.6', '0.30'], answerIndex: 2
+}, 2);
+// Safety: not a "which value" question → abstain.
+nc('non-selection question → abstain', {
+  type: 'multiple_choice',
+  question: 'What is 4 plus 5?',
+  options: ['7', '8', '9', '10'], answerIndex: 3
+}, 3);
+// Safety: non-numeric options → abstain.
+nc('non-numeric options → abstain', {
+  type: 'multiple_choice',
+  question: 'Which colour is warmer than blue?',
+  options: ['red', 'green', 'grey', 'black'], answerIndex: 1
+}, 1);
+// Safety: negated comparison ("no more than") inverts the sense → abstain, never mis-repoint.
+nc('"no more than 10" negated comparison → abstain', {
+  type: 'multiple_choice',
+  question: 'Which number is no more than 10?',
+  options: ['8', '12', '15', '20'], answerIndex: 1
+}, 1);
+nc('"not greater than 10" negated comparison → abstain', {
+  type: 'multiple_choice',
+  question: 'Which value is not greater than 10?',
+  options: ['8', '12', '15', '20'], answerIndex: 2
+}, 2);
+// Safety: an INCIDENTAL threshold in the scenario ("a whale weighs more than 40 tonnes") is NOT the
+// selection rule — restricting the scan to the pick clause + bailing on factor/even keeps the key.
+nc('incidental scenario threshold + "factor of 12" → abstain', {
+  type: 'multiple_choice',
+  question: 'A whale weighs more than 40 tonnes. Which number is a factor of 12?',
+  options: ['4', '44', '5', '7'], answerIndex: 0
+}, 0);
+nc('incidental "scored more than 15" + "which is even" → abstain', {
+  type: 'multiple_choice',
+  question: 'Ana scored more than 15 points. Which number is even?',
+  options: ['4', '20', '7', '9'], answerIndex: 0
+}, 0);
+// Safety: "somewhat"/"whatever" must not truncate the pick slice (word-boundary head match).
+nc('"somewhat" does not truncate pick → key stays', {
+  type: 'multiple_choice',
+  question: 'Which value is less than 5 for a class that is somewhat more than 30 pupils?',
+  options: ['3', '40', '2', '1'], answerIndex: 0
+}, 0);
+// Safety: an incidental comparison about a DIFFERENT noun (in a sub-clause) → abstain.
+nc('"the shop with more than 50 boxes" incidental (different noun) → abstain', {
+  type: 'multiple_choice',
+  question: 'Which number of apples did the shop with more than 50 boxes sell?',
+  options: ['55', '12', '30', '44'], answerIndex: 1
+}, 1);
+
+// ── repointFromSequence: ordering answers matched as full tuples ──────────────
+const sq = (desc, q, expected) => { const r = seq({ ...q }); if (r.answerIndex === expected) pass++; else { fail++; console.log(`  ✗ ${desc}\n      expected answerIndex ${expected}, got ${r.answerIndex}`); } };
+// Reported Q4: explanation concludes "1, 2, 3, 4" (A); key wrongly on C (4,3,2,1).
+sq('angles order 1,2,3,4 is A, key was C', {
+  type: 'multiple_choice',
+  question: 'What is the order of the angles from smallest to largest?',
+  options: ['1, 2, 3, 4', '2, 1, 3, 4', '4, 3, 2, 1', '1, 3, 2, 4'], answerIndex: 2, answer: '4, 3, 2, 1',
+  explanation: 'Angle 1 is smallest and angle 4 is largest. Therefore the order from smallest to largest is 1, 2, 3, 4.'
+}, 0);
+// Safety: correctly keyed ordering stays put.
+sq('correctly keyed ordering stays put', {
+  type: 'multiple_choice',
+  question: 'Order them.',
+  options: ['1, 2, 3, 4', '4, 3, 2, 1'], answerIndex: 1,
+  explanation: 'Largest first: the order is 4, 3, 2, 1.'
+}, 1);
+// Safety: single-value options → not a sequence → no-op.
+sq('single-value options → sequence no-op', {
+  type: 'multiple_choice',
+  question: 'Which is largest?',
+  options: ['1', '2', '3', '4'], answerIndex: 0,
+  explanation: 'The largest is 4.'
+}, 0);
+// Safety: a REJECTED sequence stated last ("…is 1,2,3,4, not 4,3,2,1") must not win — the negation
+// guard skips it and the correct order (A) still gets keyed.
+sq('rejected trailing sequence ignored → keeps correct order A', {
+  type: 'multiple_choice',
+  question: 'Order the angles from smallest to largest.',
+  options: ['1, 2, 3, 4', '2, 1, 3, 4', '4, 3, 2, 1', '1, 3, 2, 4'], answerIndex: 2, answer: '4, 3, 2, 1',
+  explanation: 'The correct order from smallest to largest is 1, 2, 3, 4, not 4, 3, 2, 1.'
+}, 0);
+// Safety: a trailing REVERSED-order aside ("Reversed that would be 8,6,4,2") must not win.
+sq('reversed-order aside ignored → correct key stays', {
+  type: 'multiple_choice',
+  question: 'Which row shows 2, 4, 6, 8 in order?',
+  options: ['2, 4, 6, 8', '8, 6, 4, 2', '4, 2, 8, 6', '6, 8, 2, 4'], answerIndex: 0,
+  explanation: 'Counting by twos the order is 2, 4, 6, 8. Reversed that would be 8, 6, 4, 2.'
+}, 0);
+// Safety: an incidental number run with NO ordering cue ("the ends are 1 and 3") must not repoint.
+sq('incidental run without conclusion cue → no repoint', {
+  type: 'multiple_choice',
+  question: 'Order these from least to greatest.',
+  options: ['1, 2, 3', '3, 2, 1', '2, 1, 3'], answerIndex: 0,
+  explanation: 'The middle value is 2 and the ends are 1 and 3.'
+}, 0);
+// Safety: for an ASCENDING question, a "descending order is 4,3,2,1" restatement must be treated as a
+// contrast (wrong direction) and NOT beat the un-cued-adjacent true conclusion "…they are 1,2,3,4".
+sq('descending restatement not chosen for ascending Q → key stays', {
+  type: 'multiple_choice',
+  question: 'Which shows them smallest to largest?',
+  options: ['1, 2, 3, 4', '4, 3, 2, 1', '3, 1, 2, 4'], answerIndex: 0,
+  explanation: 'Their descending order is 4, 3, 2, 1. So smallest to largest, they are 1, 2, 3, 4.'
+}, 0);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

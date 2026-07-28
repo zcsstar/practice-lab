@@ -689,9 +689,11 @@ REQUIREMENTS:
 - multiple_choice: give "options" (array of 4 strings) and "answerIndex" (0-3); distractors should reflect common mistakes. All 4 options MUST be DISTINCT — never repeat the same value/text in two options (e.g. two "3/8" choices is a bug); make each distractor a genuinely different value.
 - HINT: include a short "hint" (one sentence) pointing to the FIRST step or key idea WITHOUT giving away the answer — a nudge for a stuck student.
 - WHY-WRONG (multiple_choice only): include "whyWrong" — an array of 4 short strings aligned to "options". For each WRONG option give the likely mistake/misconception that leads a student to pick it (≤ ~12 words, kid-friendly); for the CORRECT option use "". Learning from distractors matters.
-- CRITICAL — answer accuracy: actually SOLVE each question and double-check the arithmetic. The "answer"/"answerIndex" MUST be the correct result AND must equal the final result your explanation arrives at. For multiple_choice, the option at "answerIndex" must be exactly that correct result (and "answer" must be that option's text). If your worked explanation ends at a value, the key MUST point to the option showing that value — never a different one.
-- CRITICAL — exactly ONE correct option (no ambiguity): before finalising a multiple_choice question, check that NO OTHER option could ALSO be a valid answer under the wording. For logic / ordering / arrangement / "who is in the middle / who is next to" puzzles, ENUMERATE every arrangement that satisfies ALL the clues — if more than one arrangement fits (so two different options could each be right), the question is AMBIGUOUS: add another clue to pin down a UNIQUE answer, or discard it. Never justify a key with "the only way" unless you have genuinely checked every case.
-- CRITICAL — diagrams must match the key: when a question refers to a "diagram", the answer MUST be derivable purely from the figure values you supply. After writing the diagram spec, re-read it as the student will SEE it and confirm the keyed answer matches what the figure actually shows (e.g. a pictogram row drawn with 1 icon at 3-per shows 3, not 9).
+- CRITICAL — answer accuracy: actually SOLVE each question and double-check the arithmetic. The "answer"/"answerIndex" MUST be the correct result AND must equal the final result your explanation arrives at. For multiple_choice, the option at "answerIndex" must be exactly that correct result (and "answer" must be that option's text). If your worked explanation ends at a value, the key MUST point to the option showing that value — never a different one. The explanation must FINISH by affirming the CORRECT option; do NOT end it discussing a rejected option (an elimination explanation that ends "…option D is not right" invites the key to be mis-set to D).
+- CRITICAL — "which value" questions: when the question asks which option satisfies a numeric condition ("larger than 0.3 but smaller than 0.75", "between 20 and 30", "at least 100"), check EACH option against the condition and confirm EXACTLY ONE passes — that one is the key. Watch the boundaries: 0.30 is NOT "larger than 0.3" (equal, not larger). If zero or more than one option passes, fix the numbers so exactly one does.
+- CRITICAL — ordering / sequence answers: when options are ordered LISTS ("1, 2, 3, 4" vs "4, 3, 2, 1"), the keyed option's FULL sequence must exactly equal the order your explanation concludes. "Smallest to largest" is ascending (1, 2, 3, 4); "largest to smallest" is descending — do not key the reverse.
+- CRITICAL — exactly ONE correct option (no ambiguity): before finalising a multiple_choice question, check that NO OTHER option could ALSO be a valid answer under the wording. For logic / ordering / arrangement / "who is in the middle / who is next to / who is second in line" puzzles, ENUMERATE every arrangement that satisfies ALL the clues — if more than one arrangement fits (so two different options could each be right), the question is AMBIGUOUS: add another clue to pin down a UNIQUE answer, or discard it. Never justify a key with "the only way" unless you have genuinely checked every case.
+- CRITICAL — diagrams must match the key: when a question refers to a "diagram", the answer MUST be derivable purely from the figure values you supply. After writing the diagram spec, re-read it as the student will SEE it and confirm the keyed answer matches what the figure actually shows (e.g. a pictogram row drawn with 1 icon at 3-per shows 3, not 9). For a "how many more A than B" or "total" question, compute the answer FROM the drawn rows (difference or sum) and confirm that value is one of the options — if the rows make the true answer 0 or something not listed, fix the row values so the intended answer is actually selectable.
 - numeric/short: give "answer" (exact) plus "acceptedAnswers" (equivalent correct forms, e.g. ["0.5","1/2"]).
 - "marks": whole number; harder questions worth more.
 - DIAGRAMS — when a picture genuinely helps (fractions, shapes/geometry, data, time, number sense), add a "diagram" field: a STRUCTURED object {"type":...,...} that the app renders correctly. Do NOT hand-draw SVG for these. Choose the matching type:
@@ -857,10 +859,17 @@ function repointFromExplanation(q){
   // Each option's stated value = the FIRST value token in it (so "1 7/8 cups" → 1.875).
   const optNums=q.options.map(o=>{const t=plValTokens(o).tokens;return t.length?t[0].val:null;});
   if(!optNums.some(n=>n!=null))return q; // non-numeric options — leave to the answer-text guard
+  // Sequence/ordering options ("1, 2, 3, 4" vs "4, 3, 2, 1") carry MULTIPLE numbers each; a
+  // single-value scan mis-fires (it matches the last number to whichever option merely STARTS
+  // with it — the reported Q4 angle-ordering bug). Leave those to repointFromSequence.
+  if(q.options.every(o=>plValTokens(o).tokens.length>=2))return q;
   const {clean:plain,tokens:toks}=plValTokens(q.explanation);
   const optHits=val=>{const h=[];optNums.forEach((n,idx)=>{if(n!=null&&Math.abs(n-val)<1e-6)h.push(idx);});return h;};
   // Distractor/negation mention right before a number ("a common mistake is 180", "not 6").
-  const distractor=at=>/(not|n't|rather than|instead of|exclud|rule[ds]? out|mistake|error|wrong|incorrect|avoid|trap)/.test(plain.slice(Math.max(0,at-24),at).toLowerCase());
+  // Keywords are \b-anchored so an ordinary word that merely CONTAINS one ("aNOTher 5 minutes",
+  // "NOTice") no longer false-flags the concluding value — the reported Q14 time bug, where
+  // "another" tripped the bare "not" test and the real answer 8:15 was wrongly skipped.
+  const distractor=at=>/(\bnot\b|\bcannot\b|n't|\brather than\b|\binstead of\b|\bexclud|\brule[ds]? out\b|\bmistake|\berror|\bwrong|\bincorrect|\bavoid|\btrap(?![a-z])|\bcommon)/.test(plain.slice(Math.max(0,at-24),at).toLowerCase());
   // COUNTING questions ("how many …") conclude with a COUNT that is usually FOLLOWED
   // by an enumeration of the counted items (themselves numbers) and/or a descriptor —
   // e.g. "…3 possible 4-digit codes: 1374, 2370, 2376." A plain scan-from-end then
@@ -879,6 +888,90 @@ function repointFromExplanation(q){
     const hits=optHits(toks[k].val);
     if(hits.length===1){if(hits[0]!==q.answerIndex)q.answerIndex=hits[0];return q;}
     if(hits.indexOf(q.answerIndex)>=0)return q; // explanation's last value agrees with the key — stop
+  }
+  return q;
+}
+// SELECT-THE-VALUE mis-key backstop, grounded in the QUESTION + OPTION VALUES (not the fragile
+// explanation scan). "Which decimal is larger than 0.3 but smaller than 0.75?" states a numeric
+// CONDITION the answer must satisfy; the elimination-style explanation ends by discussing the
+// REJECTED option (0.30), so repointFromExplanation confirmed the wrong key (reported Q1). Here we
+// parse the comparison thresholds from the question, evaluate every option, and if EXACTLY ONE
+// option satisfies all conditions, that IS the answer — repoint to it. Abstains unless the wording
+// clearly picks a value AND exactly one option qualifies (0 or ≥2 → misread/ambiguous → leave it).
+function repointFromNumericCondition(q){
+  if(!q||q.type!=='multiple_choice'||!Array.isArray(q.options)||q.options.length<2)return q;
+  const qt=plainMath(String(q.question||'')).replace(/,/g,'').toLowerCase();
+  if(!/\bwhich\b|\bwhat\b/.test(qt))return q;                       // must be a "which/what … is …" pick
+  if(!/\b(number|numeral|decimal|value|fraction|amount|integer|digit|weight|length|mass|score)\b/.test(qt))return q;
+  const optVals=q.options.map(o=>{const t=plValTokens(o).tokens;return t.length?t[0].val:null;});
+  if(optVals.some(v=>v==null||!isFinite(v)))return q;               // every option must be a number
+  // Only trust a threshold that is part of the SELECTION clause. A comparison in the SCENARIO
+  // ("a whale weighs more than 40 tonnes. Which number is a factor of 12?") is narrative, NOT the
+  // pick rule — using it would mis-key a correct answer. So scan only from the last which/what on.
+  // Use a WORD-BOUNDARY match for the head (raw lastIndexOf('what') would match inside "somewhat").
+  let pi=-1;for(const mm of qt.matchAll(/\b(which|what)\b/g))pi=mm.index; const pick=pi>=0?qt.slice(pi):qt;
+  // Bail when the pick asks for a non-inequality PROPERTY (even/prime/factor/…): any "greater than N"
+  // is then certainly incidental flavour.
+  if(/\b(even|odd|prime|factor|multiple|square|cube|cubed|squared|divisib|divisor|round|nearest|closest|median|mode|average)\b/.test(pick))return q;
+  // Restrict the threshold scan to the pick's MAIN clause — cut at the first subordinating connector
+  // ("that/who/with/did/…") so a comparison describing a DIFFERENT noun in a sub-clause ("the shop
+  // with more than 50 boxes") isn't taken as the selection rule for the asked quantity.
+  const clause=pick.replace(/^\s*(which|what)\b/,'').split(/\b(?:that|who|whom|whose|where|with|did|does|do|when|while)\b/)[0];
+  // Negated comparisons ("no more than", "not greater than") INVERT the sense; the simple parser
+  // below would read them backwards, so abstain rather than risk a mis-key.
+  if(/\bno (?:more|less|fewer|greater|higher|lower|bigger|smaller) than\b|\bnot (?:more|less|fewer|greater|smaller|larger|higher|lower|bigger)\b/.test(clause))return q;
+  const num='(-?\\d+(?:\\.\\d+)?)',out=[];let m,r;
+  r=new RegExp('between\\s+'+num+'\\s+and\\s+'+num,'g');
+  while((m=r.exec(clause))){const a=+m[1],b=+m[2],lo=Math.min(a,b),hi=Math.max(a,b);out.push(v=>v>lo&&v<hi);}
+  r=new RegExp('(?:great|larg|bigg|high|more)\\w*\\s+than(\\s+or\\s+equal\\s+to)?\\s+'+num,'g');
+  while((m=r.exec(clause))){const eq=!!m[1],x=+m[2];out.push(eq?(v=>v>=x):(v=>v>x));}
+  r=new RegExp('(?:small|less|few|low|short|light)\\w*\\s+than(\\s+or\\s+equal\\s+to)?\\s+'+num,'g');
+  while((m=r.exec(clause))){const eq=!!m[1],x=+m[2];out.push(eq?(v=>v<=x):(v=>v<x));}
+  r=new RegExp('at\\s+least\\s+'+num,'g');while((m=r.exec(clause))){const x=+m[1];out.push(v=>v>=x);}
+  r=new RegExp('at\\s+most\\s+'+num,'g');while((m=r.exec(clause))){const x=+m[1];out.push(v=>v<=x);}
+  if(!out.length)return q;
+  const sat=[];optVals.forEach((v,i)=>{if(out.every(p=>p(v)))sat.push(i);});
+  if(sat.length===1&&sat[0]!==q.answerIndex)q.answerIndex=sat[0];
+  return q;
+}
+// ORDERING / SEQUENCE answers: options are LISTS of numbers ("1, 2, 3, 4" vs "4, 3, 2, 1") — e.g.
+// "put the angles in order from smallest to largest". A single-value scan mis-fires (the reported
+// Q4: the explanation ends "…is 1, 2, 3, 4" and the last number 4 matched the option that merely
+// STARTS with 4). Instead match the FULL ordered sequence: if the explanation concludes with a run
+// of numbers that exactly equals one option's sequence, repoint to that option.
+function repointFromSequence(q){
+  if(!q||q.type!=='multiple_choice'||!Array.isArray(q.options)||q.options.length<2||!q.explanation)return q;
+  const optSeqs=q.options.map(o=>plValTokens(o).tokens.map(t=>t.val));
+  const len=optSeqs[0].length;
+  if(len<2||!optSeqs.every(s=>s.length===len))return q;            // not a clean set of equal-length sequences
+  const key=s=>s.join('|');
+  if(new Set(optSeqs.map(key)).size!==optSeqs.length)return q;      // options must be distinct orderings
+  const {clean:plain,tokens}=plValTokens(q.explanation);
+  // Only ACCEPT a run presented as THE ANSWER: preceded by an ordering/answer CUE ("the order is",
+  // "smallest to largest they are", "sorted:", "answer is", "=") — a short connective filler between
+  // the cue and the numbers is allowed ("they are", "we get", "gives") — AND not by a negation/contrast
+  // aside ("not 4,3,2,1", "reversed would be…", "the original was…"). Without the cue an incidental run
+  // ("the ends are 1 and 3" → 2,1,3) could flip a correct key; without the negation guard a trailing
+  // rejected/reverse order could win. Direction-aware: for a "smallest to largest" question a run
+  // introduced by "descending order is…" is the WRONG order and is treated as a contrast (and vice-versa).
+  const qLow=plainMath(String(q.question||'')).toLowerCase();
+  const asc=/smallest to largest|least to greatest|ascending|increasing|lowest to highest|smallest to biggest/.test(qLow);
+  const desc=/largest to smallest|greatest to least|descending|decreasing|highest to lowest|biggest to smallest/.test(qLow);
+  const before=at=>plain.slice(Math.max(0,at-44),at).toLowerCase();
+  const cueBefore=at=>/(order|sequence|arrang|smallest to largest|largest to smallest|least to greatest|greatest to least|ascending|descending|increasing|decreasing|sorted|answer|result|therefore|thus|\bso\b|correct|:|=|gives?|we get|we have|they are|becomes?|equals?|would be)\b[^0-9]{0,18}$/.test(before(at));
+  const negBefore=at=>{const w=before(at);
+    if(/(\bnot\b|\bcannot\b|n't|\bwrong|\bincorrect|\binstead|\bavoid|\brather than|\bnever\b|revers|backward|\boriginal|\bopposite|contrast|cyclic|shift|unsorted)/.test(w))return true;
+    if(asc&&/descending|largest to smallest|greatest to least|highest to lowest|decreasing/.test(w))return true;   // wrong direction for an ascending Q
+    if(desc&&/ascending|smallest to largest|least to greatest|lowest to highest|increasing/.test(w))return true;   // wrong direction for a descending Q
+    return false;};
+  for(let start=tokens.length-len;start>=0;start--){               // last cued, non-negated run = the conclusion
+    const run=key(tokens.slice(start,start+len).map(t=>t.val));
+    const idx=optSeqs.findIndex(s=>key(s)===run);
+    if(idx>=0){
+      const at=tokens[start].index;
+      if(negBefore(at)||!cueBefore(at))continue;                   // not a stated answer → keep scanning
+      if(idx!==q.answerIndex)q.answerIndex=idx;return q;
+    }
   }
   return q;
 }
@@ -951,7 +1044,7 @@ function mcConcludesOffList(q){
   if(optNums.some(n=>n==null))return false; // some option isn't numeric → can't judge safely
   const {clean:plain,tokens:toks}=plValTokens(q.explanation);
   const cue=at=>/(?:=|\bis\b|\bare\b|\bequals?\b|\bgives?\b|answer|therefore|thus|\bso\b|total|result|=)\s*[:=]?\s*[$*\s]*$/i.test(plain.slice(Math.max(0,at-20),at));
-  const distractor=at=>/(not|n't|rather than|instead of|exclud|mistake|error|wrong|incorrect|avoid|trap|common)/i.test(plain.slice(Math.max(0,at-24),at));
+  const distractor=at=>/(\bnot\b|\bcannot\b|n't|\brather than\b|\binstead of\b|\bexclud|\brule[ds]? out\b|\bmistake|\berror|\bwrong|\bincorrect|\bavoid|\btrap(?![a-z])|\bcommon)/i.test(plain.slice(Math.max(0,at-24),at));
   for(let k=toks.length-1;k>=0;k--){
     const t=toks[k],end=t.index+t.text.length;
     if(/^-\s*digits?\b/i.test(plain.slice(end,end+8)))continue; // "4-digit" descriptor
@@ -992,10 +1085,152 @@ function figureContradictsKey(q){
     return !near(keyed,target)&&optVals.some(v=>near(v,target));
   }catch(e){return false;}
 }
+// A DATA-FIGURE multiple-choice question whose answer — computed straight from the figure the
+// student SEES — cannot be selected. The reported pictograph bug: "how many more balls in April
+// than March?" but the figure draws both months with one icon (=5 each), so the true difference
+// is 0, which is not an option. figureContradictsKey deliberately SKIPS difference/total wording
+// (to never false-drop those), so this sibling handles the aggregate case: read the operation
+// (difference of two named rows, or the total of all rows) from the wording, compute it from the
+// DRAWN figureRows, and DROP only when that value is absent from EVERY option — a valid question,
+// whose correct answer must be an option, is therefore never dropped.
+function figureAnswerBroken(q){
+  try{
+    if(!q||q.type!=='multiple_choice'||!Array.isArray(q.options)||q.options.length<2)return false;
+    if(!q.diagram||typeof q.diagram!=='object')return false;
+    if(typeof PLDiagram==='undefined'||!PLDiagram.figureRows)return false;
+    const rows=PLDiagram.figureRows(q.diagram);if(!rows||rows.length<2)return false;
+    const optVals=q.options.map(o=>{const t=plValTokens(String(o)).tokens;return t.length?t[0].val:null;});
+    if(optVals.some(v=>v==null||!isFinite(v)))return false;
+    const qt=plainMath(String(q.question||'')).toLowerCase();
+    const inOpts=v=>optVals.some(o=>Math.abs(o-v)<1e-6);
+    // Compute EVERY plausible answer the figure supports (the difference of the two named rows AND/OR
+    // the total of all rows) and DROP only when NONE of them is a selectable option. This never drops
+    // a question whose true answer IS an option — so a difference question whose scenario merely SAYS
+    // "total"/"combined", or a total question with a "fewer than" narrative, is safe either way.
+    const cand=[];
+    if(/\b(more|fewer|less|difference|differ)\b/.test(qt)){        // difference of two named rows
+      const named=rows.filter(r=>{const lb=String(r.label||'').trim().toLowerCase();return lb.length>1&&/[a-z]/.test(lb)&&qt.indexOf(lb)>=0;});
+      if(named.length===2){
+        // Only trust the raw |A−B| when the rows are compared DIRECTLY. "than twice B", "half of B" etc.
+        // make the answer NOT the plain row difference, so skip it (don't add a bogus candidate).
+        const li=named.map(r=>qt.indexOf(String(r.label).trim().toLowerCase()));
+        const between=qt.slice(Math.min(li[0],li[1]),Math.max(li[0],li[1]));
+        if(!/\b(twice|thrice|double|triple|times|multipl|half|third|quarter|plus|minus|sum|total)\b|[*×]/.test(between)){
+          const diff=Math.abs((+named[0].value||0)-(+named[1].value||0));if(isFinite(diff))cand.push(diff);
+        }
+      }
+    }
+    if(/\b(total|altogether|all together|in all|in total|combined|sum)\b/.test(qt)){ // sum of all rows
+      const sum=rows.reduce((a,r)=>a+(isFinite(+r.value)?+r.value:0),0);if(isFinite(sum))cand.push(sum);
+    }
+    return cand.length>0&&!cand.some(v=>inOpts(v));                // broken only if we computed value(s) and NONE is an option
+  }catch(e){return false;}
+}
+// Deterministic solver for LINE-ORDERING logic puzzles ("Four friends stand in a line. Liam is not
+// first. Mia is behind Noah. Oscar is in front of Liam. Noah is not last. Who is second?"). Such a
+// puzzle is only sound if the clues pin the asked position to a UNIQUE person; models routinely ship
+// ones with several valid orderings (the reported Q10 — "second in line" has multiple answers). We
+// parse the clues into position constraints, brute-force every arrangement of the named people, and
+// read off the asked position. Returns {status:'ambiguous'|'unique'|'contradiction'|'none', index}
+// (index = the winning OPTION index when unique). Abstains ('none') unless EVERY clue sentence parses
+// — so a sound, fully-understood puzzle is judged and anything we can't fully read is left to the AI.
+function orderingPuzzleSolve(q){
+  try{
+    if(!q||q.type!=='multiple_choice'||!Array.isArray(q.options)||q.options.length<2)return {status:'none'};
+    const raw=plainMath(String(q.question||''));
+    if(!/\b(line|queue|row|order|position|front|behind|first|last|next to|middle)\b/i.test(raw))return {status:'none'};
+    const sentences=(raw.match(/[^.?!]+[.?!]*/g)||[]).map(x=>x.trim()).filter(Boolean);
+    if(sentences.length<3)return {status:'none'};
+    // Stop-words that are NOT people (checked at EVERY position: grammatical + scene/framing words +
+    // titles), so "Standing there…", "Line up.", "Mr Smith" don't become phantom people. Weekday/month
+    // names are deliberately NOT here (they'd wrongly drop a child actually named April/June/May) — the
+    // used-name filter below removes any capitalised token no clue references, which covers "On Tuesday…".
+    const SKIP=/^(The|A|An|Who|Whom|Which|What|Where|When|How|Why|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|In|If|At|On|Of|To|By|Up|As|Is|Are|They|Their|Them|Each|Every|Both|All|Also|And|But|First|Last|Next|Now|So|Then|There|Here|These|Those|This|That|People|Persons|Friends|Children|Kids|Students|Pupils|Standing|Sitting|Waiting|Facing|Looking|Reading|Counting|Line|Row|Queue|Order|Position|Imagine|Picture|Consider|Look|Suppose|Given|Together|Mr|Mrs|Miss|Ms|Mx|Dr|Sir|Madam|Prof)$/;
+    const nameSet={};
+    sentences.forEach(sc=>sc.split(/\s+/).forEach(w=>{const mm=w.match(/^([A-Z][a-z]{1,})\b/);if(!mm)return;const nm=mm[1];if(SKIP.test(nm))return;nameSet[nm]=1;}));
+    let names=Object.keys(nameSet);
+    if(names.length<3||names.length>8)return {status:'none'};
+    const ord=['first','second','third','fourth','fifth','sixth','seventh','eighth'];
+    const REL=/\b(first|last|second|third|fourth|fifth|sixth|seventh|eighth|front|behind|ahead|before|after|next to|beside|between|middle)\b/i;
+    const NMl=()=>'('+names.map(n=>n.toLowerCase()).join('|')+')';
+    const find=nm=>names.find(n=>n.toLowerCase()===String(nm).toLowerCase());
+    const cons=[],used=new Set();let parsedAll=true,questionPos=null;
+    sentences.forEach(sc=>{
+      const low=sc.toLowerCase();
+      if(/\?\s*$/.test(sc)||/^\s*who\b/i.test(sc)){                // the QUESTION sentence
+        if(/\bmiddle\b/.test(low))questionPos='middle';
+        else{const om=low.match(/\b(first|second|third|fourth|fifth|sixth|seventh|eighth|last)\b/);if(om)questionPos=om[1]==='last'?'last':(ord.indexOf(om[1])+1);}
+        return;
+      }
+      let matched=false,m;
+      // "X is (not) first/last/second…"
+      if((m=low.match(new RegExp('\\b'+NMl()+'\\b\\s+is\\s+(not\\s+)?(first|last|'+ord.join('|')+')\\b')))){
+        const nm=find(m[1]);used.add(nm);cons.push({kind:'ord',nm,neg:!!m[2],w:m[3]});matched=true;
+      }
+      // "X is [directly] in front of/behind/before/after/next to Y [and Z, …]" — compound tail supported
+      let rm=low.match(new RegExp('\\b'+NMl()+'\\b\\s+is\\s+(?:(directly|immediately)\\s+)?(in front of|ahead of|before|behind|after|next to|beside)\\s+(.*)$'));
+      if(rm){
+        const a=find(rm[1]),adj=!!rm[2],rel=rm[3],objs=[];
+        const re2=new RegExp('\\b'+NMl()+'\\b','g');let mm2;while((mm2=re2.exec(rm[4]))){const b=find(mm2[1]);if(b&&b!==a&&objs.indexOf(b)<0)objs.push(b);}
+        if(objs.length){
+          if(adj&&objs.length>1)parsedAll=false;                   // "directly in front of two people" is not sensible → abstain
+          else{used.add(a);objs.forEach(b=>{used.add(b);cons.push({kind:'rel',a,b,rel,adj});});matched=true;}
+        }
+      }
+      if(!matched){
+        // A clue containing a POSITIONAL word we couldn't parse → abstain (safer than dropping a
+        // required constraint). A pure roster/scene sentence ("Ann, Ben and Cara wait in a line.")
+        // has no positional word → skip it, don't count it as an unparsed clue.
+        if(REL.test(low))parsedAll=false;
+      }
+    });
+    // Names explicitly enumerated in a roster ("Kim, Leo, Max and Sam are the runners") are REAL
+    // participants even if no later clue names them (an elimination puzzle deliberately leaves the
+    // last-by-elimination person out of the options) — dropping one would shrink N and mis-key a sound
+    // "who is last" question. Collect them so the filter below keeps them.
+    const roster=new Set(),NMr='('+names.map(n=>n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')';
+    let em;const enre=new RegExp('\\b'+NMr+'\\b(?:\\s*,\\s*\\b'+NMr+'\\b)*\\s+and\\s+\\b'+NMr+'\\b','g');
+    while((em=enre.exec(raw))){const seg=em[0].match(new RegExp('\\b'+NMr+'\\b','g'));if(seg&&seg.length>=3)seg.forEach(x=>roster.add(x));}
+    // Keep only REAL participants: names used by a constraint, present in an option, OR roster-enumerated.
+    // A capitalised token that no clue references, isn't an option, and isn't in a roster list is a
+    // phantom (place/day/verb) → drop it.
+    const optTxt=q.options.map(o=>plainMath(String(o)).toLowerCase());
+    names=names.filter(nm=>used.has(nm)||roster.has(nm)||optTxt.some(t=>new RegExp('\\b'+nm.toLowerCase()+'\\b').test(t)));
+    const N=names.length;
+    if(N<3||N>6||!parsedAll||cons.length<2||questionPos==null)return {status:'none'}; // N cap = perf (≤720 perms)
+    let qpos=questionPos;
+    if(qpos==='last')qpos=N; else if(qpos==='middle'){if(N%2===0)return {status:'none'};qpos=(N+1)/2;}
+    if(cons.some(c=>(c.nm&&names.indexOf(c.nm)<0)||(c.a&&names.indexOf(c.a)<0)||(c.b&&names.indexOf(c.b)<0)))return {status:'none'};
+    const preds=cons.map(c=>{
+      if(c.kind==='ord'){const pos=c.w==='last'?N:(c.w==='first'?1:(ord.indexOf(c.w)+1));return p=>c.neg?p[c.nm]!==pos:p[c.nm]===pos;}
+      const front=/front|ahead|before/.test(c.rel),nextto=/next to|beside/.test(c.rel);
+      if(nextto)return p=>Math.abs(p[c.a]-p[c.b])===1;
+      if(c.adj)return p=>front?p[c.a]===p[c.b]-1:p[c.a]===p[c.b]+1;
+      return p=>front?p[c.a]<p[c.b]:p[c.a]>p[c.b];
+    });
+    const answers=new Set();let valid=0;
+    const permute=(pool,pre)=>{
+      if(!pool.length){const p={};names.forEach((nm,i)=>p[nm]=pre[i]);if(preds.every(fn=>fn(p))){valid++;answers.add(names.find(nm=>p[nm]===qpos));}return;}
+      for(let i=0;i<pool.length;i++)permute(pool.slice(0,i).concat(pool.slice(i+1)),pre.concat(pool[i]));
+    };
+    permute(Array.from({length:N},(_,i)=>i+1),[]);
+    if(valid===0)return {status:'contradiction'};
+    if(answers.size>1)return {status:'ambiguous'};
+    const winner=[...answers][0];
+    const oi=q.options.findIndex(o=>new RegExp('\\b'+winner+'\\b','i').test(plainMath(String(o))));
+    return {status:'unique',index:oi>=0?oi:null,winner};
+  }catch(e){return {status:'none'};}
+}
+// An ordering puzzle with no unique answer to what it asks is unanswerable → drop it.
+function orderingPuzzleBroken(q){const v=orderingPuzzleSolve(q);return v.status==='ambiguous'||v.status==='contradiction';}
+// When the puzzle DOES have a unique answer but the key points elsewhere, repoint to it.
+function repointFromOrdering(q){if(!q||q.type!=='multiple_choice')return q;const v=orderingPuzzleSolve(q);if(v.status==='unique'&&v.index!=null&&v.index>=0&&v.index!==q.answerIndex)q.answerIndex=v.index;return q;}
 // True when a question is broken/unanswerable and should be dropped or not counted.
-function questionBroken(q){return !!q&&(explanationSelfCorrects(q.explanation)||mcConcludesOffList(q)||figureContradictsKey(q));}
-// Combined per-question fixups applied at parse time AND on every serve path.
-function fixQuestion(q){return repointFromExplanation(repointFromWhyWrong(dedupeOptions(repairQ(q))));}
+function questionBroken(q){return !!q&&(explanationSelfCorrects(q.explanation)||mcConcludesOffList(q)||figureContradictsKey(q)||figureAnswerBroken(q)||orderingPuzzleBroken(q));}
+// Combined per-question fixups applied at parse time AND on every serve path. The question-grounded
+// repoints (sequence, numeric-condition, ordering) run AFTER the explanation scan so they have the
+// final say for their question class; each is a no-op when it doesn't apply.
+function fixQuestion(q){return repointFromNumericCondition(repointFromSequence(repointFromOrdering(repointFromExplanation(repointFromWhyWrong(dedupeOptions(repairQ(q)))))));}
 // Output-token budget needed for a batch. Each question (with a short
 // explanation, options and maybe a small SVG) is ~900 tokens; give headroom so
 // big bank batches don't truncate. Clamped per provider's real ceiling.
@@ -1100,6 +1335,10 @@ Return ONLY JSON (no prose, no code fences): {"checks":[{"i":<index>,"verdict":"
 - "ok": the marked answer is correct and the question has a single, unambiguous answer.
 - "fix": the question is sound but the marked answer is wrong — for multiple_choice, give the correct "correctIndex".
 - "drop": the question is broken, ambiguous, has no single correct option, has two options with the same value (duplicate choices), or the figure data doesn't match any option.
+- FOR "WHICH VALUE" QUESTIONS (which option is larger/smaller than / between given numbers): test EACH option against the stated condition (mind boundaries — 0.30 is NOT larger than 0.3). If exactly one option passes and it is not the marked one, "fix" to it; if zero or more than one passes, "drop".
+- FOR ORDERING / SEQUENCE answers (options are ordered lists like "1, 2, 3, 4"): compare the FULL sequence, not the first number. "Smallest to largest" is ascending. If the marked option's sequence is the wrong order, "fix" to the option whose sequence matches.
+- FOR ORDERING / ARRANGEMENT / "who is Nth in line" LOGIC PUZZLES: enumerate every arrangement consistent with all clues. If more than one arrangement gives a different answer to what is asked, the puzzle is ambiguous → "drop". If exactly one answer holds and it is not the marked option, "fix".
+- FOR "how many more A than B" / "total" FIGURE questions: compute the difference (or sum) from the figureRows values. If that number is not one of the options, "drop"; if it is an option and not the marked one, "fix".
 - The "explanation" field is the original marker's own working. Verdict "drop" if it is self-contradictory or uncertain — e.g. it admits the answer is wrong, apologises, second-guesses ("wait", "actually", "let me reconsider"), says none of the options fit, or concludes a value that is NOT one of the options. A clean question has a confident explanation that matches the correct option.
 Be strict, but only flag "fix"/"drop" when you are confident.
 QUESTIONS:
@@ -4257,7 +4496,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.55';
+const APP_VERSION='v2.56';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}
