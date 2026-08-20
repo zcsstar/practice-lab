@@ -647,6 +647,41 @@ const EXAMS={
 };
 function examTopics(examId,subject){const e=EXAMS[examId];return (e&&e.topics&&e.topics[subject])||[];}
 
+// Teacher-flagged focus areas per student (from real teacher feedback — recorded here so they
+// survive across devices and drive the weak-spot drill + Knowledge map). Keyed by lowercased
+// login name. `topics` are exam-strand names; they only take effect where the names line up with
+// the student's exam topic list (so Howard's Rangitoto Maths strands don't misapply to another
+// exam). `subject` gates them to one subject.
+const STUDENT_FOCUS={
+  // Howard — Year 8 (Year 9 entrance) Maths. Areas his maths teacher (2026) flagged to work on.
+  howard:{subject:'Mathematics',
+    note:'Maths teacher flagged these to work on — plus problem solving (multi-step reasoning, not just recall).',
+    topics:['Measurement, area & volume','Patterns & early algebra','Linear relationships & graphs','Geometry, angles & shape','Statistics & data','Probability','Problem solving & reasoning']}
+};
+// The focus topics for a profile that are VALID for the given exam+subject (intersection with the
+// exam's topic list, so a mismatched exam/subject simply yields none). Returns {topics,note}.
+function focusTopicsFor(profile,examId,subject){
+  const f=profile&&STUDENT_FOCUS[String(profile.name||'').toLowerCase().trim()];
+  if(!f)return {topics:[],note:''};
+  if(f.subject&&subject&&f.subject.toLowerCase()!==String(subject).toLowerCase())return {topics:[],note:''};
+  const known=examTopics(examId,subject);
+  const topics=(f.topics||[]).filter(t=>!known.length||known.includes(t));
+  return {topics,note:f.note||''};
+}
+// A card listing a student's teacher-flagged focus areas (or null if none). Shown on the Knowledge
+// map + home so revision targets what the teacher asked for; the button runs the weak-spot drill
+// (which seeds these first). Text children are passed RAW — el() escapes them (never esc() here).
+function focusCard(s,profile){
+  profile=profile||activeProfile();
+  const f=focusTopicsFor(profile,EXAMS[s.exam]?s.exam:'icas',s.subject);
+  if(!f.topics.length)return null;
+  return el('div',{class:'card',style:'border-left:4px solid var(--brand)'},
+    el('h2',{style:'margin:0 0 4px'},'🎯 Teacher’s focus for '+profile.name),
+    f.note?el('p',{class:'sub',style:'margin:0 0 8px'},f.note):'',
+    el('div',{class:'row',style:'gap:6px;flex-wrap:wrap;margin-bottom:10px'},...f.topics.map(t=>el('span',{class:'pill'},t))),
+    el('button',{class:'btn primary block',onclick:()=>practiceWeakSpots()},'🎯 Practise these now'));
+}
+
 /* ============================================================ AI generation ============================================================ */
 // Friendly difficulty names (1–5) shown to kids/parents instead of a bare number.
 const DIFF_NAMES=['','Starter','Easy','Standard','Hard','Challenge'];
@@ -1527,7 +1562,13 @@ async function practiceWeakSpots(){
   const stat={};attempts.forEach(a=>(a.results||[]).forEach(r=>{const t=r.topic||'General';(stat[t]=stat[t]||{n:0,c:0}).n++;if(r.status==='correct')stat[t].c++;}));
   const weak=Object.keys(stat).filter(t=>stat[t].n>=2&&stat[t].c/stat[t].n<0.8).sort((a,b)=>(stat[a].c/stat[a].n)-(stat[b].c/stat[b].n));
   const uncovered=examTopics(examId,subject).filter(t=>!stat[t]||stat[t].n===0);
-  let topics=[...weak.slice(0,4),...uncovered.slice(0,2)];
+  // Teacher-flagged focus areas lead the drill. Rotate by practice count so repeated drills cycle
+  // through ALL flagged areas over time (not always the same first few), then fill from measured
+  // weak spots + untried topics. Cap at 6 topics for a 10-question set.
+  const focus=focusTopicsFor(p,examId,subject).topics;
+  const rot=focus.length?attempts.length%focus.length:0;
+  const focusRot=focus.slice(rot).concat(focus.slice(0,rot));
+  let topics=[...focusRot.slice(0,4),...weak,...uncovered].filter((t,i,a)=>a.indexOf(t)===i).slice(0,6);
   if(!topics.length){toast('Do a few practices first so I can spot your weak topics.');return;}
   const exam=EXAMS[examId]||EXAMS.icas;
   const s={country:ds.country||exam.country,subject,exam:examId,level:ds.level,topics,count:10,difficulty:ds.difficulty||3,style:ds.style||exam.style||'mixed',context:CFG.examContext[examId]||'',webSearch:CFG.webSearch,notes:'',examLabel:exam.label};
@@ -1827,6 +1868,7 @@ async function viewHome(){
   const goal=CFG.dailyGoal||10;
   const doneToday=attempts.filter(a=>a.date===todayISO()).reduce((s,a)=>s+(a.count||0),0);
   const goalPct=Math.min(100,Math.round(doneToday/goal*100));
+  const homeFocus=focusCard(defaultSettingsFor(activeProfile())); // teacher-flagged focus areas (null if none)
   const tiles=el('div',{class:'tiles'},tile(attempts.length,'Practices'),tile(avg+'%','Avg score'),tile(dueN||review.length,dueN?'Due now':'To review'),tile(el('span',{class:'streak'},'🔥 '+streak),'Day streak'));
   const goalCard=el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:8px'},el('b',{},'🎯 Today’s goal'),el('span',{class:'small muted'},doneToday+' / '+goal+' questions'+(doneToday>=goal?' · done! 🎉':''))),el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+goalPct+'%;background:'+(doneToday>=goal?'var(--ok)':'var(--brand)')})));
   // Grouped into meaningful sections (each its own card) so the home screen scans easily:
@@ -1857,6 +1899,7 @@ async function viewHome(){
     attempts.length?goalCard:null,
     setupWarn,
     driveBanner,
+    homeFocus,
     secPractise,
     secProgress,
     secContent
@@ -2003,6 +2046,67 @@ KEY FORMULAS (primary → lower secondary)
 - Average (mean) = sum of values ÷ number of values.
 - Percentage of an amount = (percent ÷ 100) × amount.
 - Pythagoras: a² + b² = c² (right-angled triangles).`
+},{
+  id:'nz-maths-y8-y9entrance',name:'NZ Maths — Year 8 → Year 9 entrance focus',subject:'Mathematics',country:'New Zealand',exam:'rangitoto',level:'Year 8 (Year 9 entrance)',
+  text:`NEW ZEALAND MATHEMATICS — Year 8 preparing for a Year 9 extension/entrance exam (Rangitoto-style). Demanding, multi-step problem solving at Year 8 level (curriculum L4, some L5). NO senior topics (no calculus, surds or formal trigonometry). Key knowledge and formulas per strand, for grounding practice questions and learn cards.
+
+MEASUREMENT — DISTANCE, AREA & VOLUME (mensuration)
+- Metric units & conversions: length mm/cm/m/km; area mm²/cm²/m²/ha; volume/capacity cm³/m³ and mL/L (1 mL = 1 cm³, 1 L = 1000 cm³); mass g/kg/t. Convert by ×/÷ 10, 100, 1000; match units before calculating.
+- Perimeter = total distance around a 2D shape (add all sides). Circle: circumference = π × diameter = 2 × π × radius.
+- Area: rectangle = length × width; square = side²; triangle = ½ × base × perpendicular height; parallelogram = base × perpendicular height; trapezium = ½ × (a + b) × height; circle = π × radius². Composite shapes: split into rectangles/triangles and add or subtract.
+- Surface area of a cuboid = 2(lw + lh + wh) (sum of the 6 faces).
+- Volume: cuboid = length × width × height; prism = cross-section area × length.
+- Time, distance & speed: speed = distance ÷ time; distance = speed × time; time = distance ÷ speed. Use 12/24-hour time and timetables.
+- Common errors: confusing area and perimeter; using slant not perpendicular height; not converting units; dropping units in the answer.
+
+SEQUENCES, FUNCTIONS & GRAPHS (patterns, early algebra, linear relationships)
+- Patterns/sequences: continue a pattern; term-to-term rule (what you add each step) vs position-to-term rule. Linear sequence nth term = a + (n − 1)d, where a = first term, d = common difference. Find a rule from a table.
+- Function machines: input → operation(s) → output; find the output, find the input (work backwards), or find the rule. Inverse operations undo each other.
+- Early algebra: write expressions from words; substitute values; collect like terms; expand a(b + c) = ab + ac; solve one- and two-step linear equations by doing the same to both sides.
+- Cartesian plane: x-axis (horizontal), y-axis (vertical), origin (0, 0); plot and read (x, y) in all four quadrants.
+- Straight-line graphs: y = mx + c; m = gradient = rise ÷ run = (y₂ − y₁) ÷ (x₂ − x₁); c = y-intercept. Plot a line from a table of values; read gradient and intercept off a graph.
+- Interpreting graphs: read values, describe trends (increasing/decreasing/steady); distance-time graphs (steeper = faster).
+- Common errors: mixing up term-to-term and position-to-term rules; swapping x and y; wrong sign or rise/run for the gradient.
+
+POSITION & TRANSFORMATIONS (geometry)
+- Position: describe location with coordinates (four quadrants) and on grids/maps; compass directions (N, NE, E…) and simple bearings; give and follow directions.
+- The four transformations: TRANSLATION — slide by units left/right and up/down (a vector); size and orientation unchanged. REFLECTION — flip over a mirror line (an axis or a line like y = x); each point equal distance the other side; orientation reversed. ROTATION — turn about a centre by an angle (90°, 180°, 270°) clockwise or anticlockwise; size unchanged. ENLARGEMENT — scale from a centre by a scale factor; lengths × scale factor, angles unchanged; factor > 1 bigger, between 0 and 1 smaller.
+- Congruent vs similar: translation, reflection and rotation give a CONGRUENT image (same size); enlargement gives a SIMILAR image (same shape, different size).
+- Symmetry: line (reflective) symmetry — count the lines of symmetry; rotational symmetry — order = times a shape maps onto itself in one full turn.
+- Scale: read/use map and plan scales (e.g. 1 : 100); scale drawings.
+- Common errors: wrong rotation direction/centre; reflecting the wrong distance from the mirror line; changing angles when enlarging; confusing congruent and similar.
+
+STATISTICS & DATA
+- Statistical enquiry cycle: pose a question → collect/organise → display → analyse → conclude. Data types: categorical vs numerical (discrete/continuous).
+- Displays: tables & tallies, pictographs (with a key), bar/column graphs, dot plots, stem-and-leaf plots, line graphs (change over time), pie/strip charts (parts of a whole). Choose a suitable display; read values off it.
+- Summary statistics: mean = sum ÷ count; median = middle value when ordered (mean of the two middle values if the count is even); mode = most frequent; range = highest − lowest. Know how an outlier affects the mean.
+- Interpret and compare data sets; back statements with the data; spot misleading graphs (e.g. a truncated axis).
+- Common errors: not ordering before finding the median; misreading a pictograph key (one symbol = several items); reading the wrong axis or scale.
+
+PROBABILITY
+- Probability scale 0 (impossible) to 1 (certain), as a fraction, decimal or percentage; 0.5 = even chance.
+- Theoretical probability = favourable outcomes ÷ total equally likely outcomes.
+- Experimental (relative frequency) = times it happened ÷ number of trials; approaches the theoretical value with more trials.
+- Complement: P(not A) = 1 − P(A); the probabilities of all outcomes sum to 1.
+- Sample space for one- and two-stage experiments (organised lists, tables, tree diagrams); simple combined events.
+- Common errors: probabilities not summing to 1; treating unequal outcomes as equally likely; confusing "and" with "or".
+
+PROBLEM SOLVING & REASONING
+- Method: (1) understand — what is asked, what is given, what units; (2) plan — pick a strategy; (3) do — show clear step-by-step working; (4) check — reasonable? answers the question? units right?
+- Strategies: draw a diagram/table; look for a pattern; work backwards; try a simpler/smaller case; guess-check-improve; break a multi-step problem into parts; logical elimination.
+- Multi-step problems usually combine two or more ideas (e.g. a rate then a percentage); track units and convert as needed. Justify steps; estimate to sense-check; give exact vs rounded answers appropriately.
+- Common errors: rushing without a plan; no working shown; answering a different question; not checking units or reasonableness.
+
+KEY FORMULAS (quick reference)
+- Perimeter = sum of all sides. Circle: circumference = π × diameter = 2 × π × radius.
+- Area: rectangle = l × w; square = s²; triangle = ½ × base × height; parallelogram = base × height; trapezium = ½ × (a + b) × h; circle = π × r².
+- Surface area of a cuboid = 2(lw + lh + wh). Volume: cuboid = l × w × h; prism = cross-section area × length.
+- Speed = distance ÷ time (distance = speed × time; time = distance ÷ speed).
+- Linear sequence: nth term = a + (n − 1)d.
+- Straight line: y = mx + c; gradient m = rise ÷ run = (y₂ − y₁) ÷ (x₂ − x₁).
+- Mean = sum ÷ count; range = max − min.
+- Probability = favourable ÷ total; P(not A) = 1 − P(A).
+- Enlargement: image length = object length × scale factor.`
 }];
 // Seed CURRICULUM/syllabus reference docs on boot: the built-in DEFAULT_CURRICULUM PLUS any
 // private curriculum.local.js (window.PL_CURRICULUM = [{id,name,subject,exam?,level?,text}]).
@@ -2439,9 +2543,10 @@ async function coverageListCard(s){
   const known=examTopics(examId,subject);const topics=known.length?known.slice():Object.keys(stat);
   Object.keys(stat).forEach(t=>{if(!topics.includes(t))topics.push(t);}); // include practised topics outside the known list
   const practised=topics.filter(t=>stat[t]&&stat[t].n>0).length;
+  const focusSet=new Set(focusTopicsFor(activeProfile(),examId,subject).topics); // teacher-flagged strands
   const row=t=>{const o=stat[t]||{n:0,c:0};const pct=o.n?Math.round(o.c/o.n*100):0;
     return el('div',{class:'row between',style:'gap:10px;padding:8px 0;border-bottom:1px solid var(--line);align-items:center'},
-      el('div',{style:'flex:1;min-width:0'},el('div',{},t),o.n?el('div',{class:'gbar',style:'margin-top:5px'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:'+accColor(pct)})):el('div',{class:'small muted',style:'margin-top:3px'},'not tried yet')),
+      el('div',{style:'flex:1;min-width:0'},el('div',{},t,focusSet.has(t)?el('span',{class:'pill',style:'margin-left:6px;background:var(--brand);color:#fff'},'🎯'):''),o.n?el('div',{class:'gbar',style:'margin-top:5px'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:'+accColor(pct)})):el('div',{class:'small muted',style:'margin-top:3px'},'not tried yet')),
       o.n?el('b',{style:'flex:none;width:44px;text-align:right;color:'+accColor(pct)},pct+'%'):el('span',{class:'pill',style:'flex:none'},'new'),
       el('button',{class:'btn sm',style:'flex:none',onclick:()=>practiceTopic(t)},o.n?'Practise':'Try'));
   };
@@ -2570,6 +2675,7 @@ async function viewKnowledgeMap(){
       el('p',{class:'sub'},'A map of everything '+(s.level||'')+' '+(s.subject||'')+' ('+exam.label+') covers — grouped by strand, each knowledge point with a learn card (key idea + formulas + worked example) and a focused drill.'),
       el('p',{class:'small muted',style:'margin-bottom:12px'},'Built once by AI, then saved and shared to your devices. Your topic coverage below works right away.'),
       el('button',{class:'btn primary block lg',onclick:()=>buildKnowledgeMap(s)},'✨ Build my knowledge map')),
+    focusCard(s),
     coverage));
 }
 async function buildKnowledgeMap(s){
@@ -2585,6 +2691,7 @@ async function renderKnowledgeMap(rec,s){
   const order=examTopics(s.exam,s.subject);
   const gnames=Object.keys(groups).sort((a,b)=>{const ia=order.indexOf(a),ib=order.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
   const nameById={};rec.points.forEach(p=>nameById[p.id]=p.name);
+  const focusSet=new Set(focusTopicsFor(activeProfile(),s.exam,s.subject).topics); // teacher-flagged strands
   const pctOf=g=>{const o=stats[g]||{n:0,c:0};return o.n?Math.round(o.c/o.n*100):null;};
   // 思维导图 overview (visual): root → strands, coloured by mastery.
   let mapSvg='';
@@ -2605,8 +2712,8 @@ async function renderKnowledgeMap(rec,s){
           el('button',{class:'btn sm',onclick:()=>viewConcept(rec.key,p.id)},'📖 Learn'),
           el('button',{class:'btn sm',onclick:()=>practiceKnowledgePoint(p,s)},'✏️ Practise')));
     });
-    return el('div',{class:'card'},
-      el('div',{class:'row between'},el('h2',{style:'margin:0'},g),pct==null?el('span',{class:'pill'},'new'):el('b',{style:'color:'+accColor(pct)},pct+'%')),
+    return el('div',{class:'card',style:focusSet.has(g)?'border-left:4px solid var(--brand)':''},
+      el('div',{class:'row between'},el('h2',{style:'margin:0'},g,focusSet.has(g)?el('span',{class:'pill',style:'margin-left:8px;background:var(--brand);color:#fff'},'🎯 Focus'):''),pct==null?el('span',{class:'pill'},'new'):el('b',{style:'color:'+accColor(pct)},pct+'%')),
       pct==null?el('p',{class:'small muted',style:'margin:6px 0 2px'},'Not practised yet'):el('div',{class:'gbar',style:'margin:8px 0 2px'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:'+accColor(pct)})),
       ...pointRows);
   });
@@ -2623,6 +2730,7 @@ async function renderKnowledgeMap(rec,s){
         el('button',{class:'btn',onclick:()=>viewFormulaSheet()},'📐 Formula sheet'),
         (rec.source&&/🤖/.test(rec.source))?el('button',{class:'btn',onclick:()=>viewRefs()},'🔗 Add a curriculum source'):'',
         el('button',{class:'btn ghost',onclick:()=>rebuildKnowledgeMap(s)},'↻ Rebuild map'))),
+    focusCard(s),
     ...cards,
     offList.length?el('div',{class:'card'},el('h2',{style:'margin:0 0 4px'},'Other topics you’ve practised'),
       el('p',{class:'sub'},'Practised but outside this exam’s strands.'),
@@ -4496,7 +4604,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.56';
+const APP_VERSION='v2.57';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

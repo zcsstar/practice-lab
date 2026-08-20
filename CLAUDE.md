@@ -468,6 +468,22 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   - **Weak-spot practice** (`practiceWeakSpots()`): a bank-first drill weighted to the
     student's lowest-scoring practised topics + untried `examTopics()`; on the home Practise
     section and atop the Knowledge map's coverage view.
+  - **Teacher-flagged focus areas (v2.57)** — record a real teacher's "work on these" feedback so
+    it drives revision, not just the app's measured weak spots. `STUDENT_FOCUS` (next to `EXAMS`,
+    keyed by lowercased login name) holds `{subject, note, topics[]}`; `topics` are exam-strand
+    names. `focusTopicsFor(profile,examId,subject)` returns only the topics VALID for the current
+    exam+subject (intersection with `examTopics`, plus a subject gate) so they never misapply to
+    another exam/subject/student — committed in the file so they sync to every device with no
+    UI/migration. Wired in: `practiceWeakSpots()` seeds focus topics FIRST (rotated by practice
+    count so repeated drills cycle through ALL flagged areas), capped at 6 topics; `focusCard(s)`
+    renders a "🎯 Teacher's focus" banner on the home screen + Knowledge map (both branches), and
+    focus strands get a 🎯 pill in `renderKnowledgeMap` + `coverageListCard`. Howard's record maps
+    his 2026 maths-teacher feedback (Distance/Area/Volume · Sequences/Functions/Graphs · Position &
+    Transformations · Statistics & Probability · Problem solving) to the Rangitoto Maths strands. A
+    matching **Rangitoto-tagged Year-8 curriculum doc** (`nz-maths-y8-y9entrance` in
+    `DEFAULT_CURRICULUM`, `exam:'rangitoto'`) grounds his knowledge map / concept cards / formula
+    sheet on accurate content for exactly these strands (scores highest in `curriculumRefDocs` for
+    his exam, combined with the general NZ default).
   - **Timed mock-exam mode**: `startPaper(pk, timed)` sets a countdown (`paperMins()`,
     ~1 min/Q clamped 10–75) reusing the existing `S.limitSec` timer + auto-submit; runner
     shows a "⏱ Timed exam" pill, results show a per-topic exam report (`topicReport()`).
