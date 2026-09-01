@@ -648,38 +648,85 @@ const EXAMS={
 function examTopics(examId,subject){const e=EXAMS[examId];return (e&&e.topics&&e.topics[subject])||[];}
 
 // Teacher-flagged focus areas per student (from real teacher feedback — recorded here so they
-// survive across devices and drive the weak-spot drill + Knowledge map). Keyed by lowercased
-// login name. `topics` are exam-strand names; they only take effect where the names line up with
-// the student's exam topic list (so Howard's Rangitoto Maths strands don't misapply to another
-// exam). `subject` gates them to one subject.
+// survive across devices and drive the weak-spot drill + Knowledge map). Keyed by lowercased login
+// name. Each `areas` entry is one teacher theme, listed in the teacher's PRIORITY order (highest
+// first), with the exam-strand `topics` it maps to. They only take effect where the strand names
+// line up with the student's exam topic list (so Howard's Rangitoto Maths strands don't misapply
+// to another exam). `subject` gates them to one subject. (A legacy flat `topics` array is also
+// accepted.)
 const STUDENT_FOCUS={
-  // Howard — Year 8 (Year 9 entrance) Maths. Areas his maths teacher (2026) flagged to work on.
+  // Howard — Year 8 (Year 9 entrance) Maths. His maths teacher's (2026) PRIORITY ORDER to work on.
+  // The top 3 are the teacher's latest ordered focus; the last 2 were flagged earlier as lighter
+  // revision (kept below, so the drill still touches them but weights the top themes more).
   howard:{subject:'Mathematics',
-    note:'Maths teacher flagged these to work on — plus problem solving (multi-step reasoning, not just recall).',
-    topics:['Measurement, area & volume','Patterns & early algebra','Linear relationships & graphs','Geometry, angles & shape','Statistics & data','Probability','Problem solving & reasoning']}
+    note:'Your maths teacher’s priority order — focus from the top down. The last two are lighter revision.',
+    areas:[
+      {label:'Sequences, functions & graphs',topics:['Patterns & early algebra','Linear relationships & graphs']},
+      {label:'Position & transformations',topics:['Geometry, angles & shape']},
+      {label:'Statistics & probability',topics:['Statistics & data','Probability']},
+      {label:'Distance, area & volume',topics:['Measurement, area & volume']},
+      {label:'Problem solving',topics:['Problem solving & reasoning']}
+    ]}
 };
-// The focus topics for a profile that are VALID for the given exam+subject (intersection with the
-// exam's topic list, so a mismatched exam/subject simply yields none). Returns {topics,note}.
+// The teacher-focus for a profile, restricted to what's VALID for the given exam+subject
+// (intersection with the exam's topic list, so a mismatched exam/subject yields none). Returns
+// {areas (ordered, each {label,topics}), topics (flattened, priority order), note}.
 function focusTopicsFor(profile,examId,subject){
   const f=profile&&STUDENT_FOCUS[String(profile.name||'').toLowerCase().trim()];
-  if(!f)return {topics:[],note:''};
-  if(f.subject&&subject&&f.subject.toLowerCase()!==String(subject).toLowerCase())return {topics:[],note:''};
-  const known=examTopics(examId,subject);
-  const topics=(f.topics||[]).filter(t=>!known.length||known.includes(t));
-  return {topics,note:f.note||''};
+  if(!f)return {topics:[],note:'',areas:[]};
+  if(f.subject&&subject&&f.subject.toLowerCase()!==String(subject).toLowerCase())return {topics:[],note:'',areas:[]};
+  const known=examTopics(examId,subject),ok=t=>!known.length||known.includes(t);
+  let areas=Array.isArray(f.areas)?f.areas.map(a=>({label:a.label||'',topics:(a.topics||[]).filter(ok)}))
+    :[{label:'',topics:(f.topics||[]).filter(ok)}];
+  areas=areas.filter(a=>a.topics.length);
+  const topics=[];areas.forEach(a=>a.topics.forEach(t=>{if(!topics.includes(t))topics.push(t);}));
+  return {topics,note:f.note||'',areas};
+}
+// Apportion `count` questions across `topics` by relative `weights` (largest-remainder, so the
+// per-topic counts sum to exactly `count`). Zero-weight / rounded-to-0 topics are omitted. Pure +
+// unit-tested — used to weight a weak-spot drill toward higher-priority focus areas.
+function apportion(topics,weights,count){
+  const list=(topics||[]).filter(t=>(weights&&weights[t]||0)>0);
+  if(!list.length||count<=0)return {};
+  const tot=list.reduce((s,t)=>s+weights[t],0);
+  const raw=list.map(t=>count*weights[t]/tot);
+  const base=raw.map(Math.floor);
+  const rem=raw.map((r,i)=>({i,f:r-Math.floor(r)})).sort((a,b)=>b.f-a.f);
+  let need=count-base.reduce((a,b)=>a+b,0);
+  for(let k=0;k<need&&k<rem.length;k++)base[rem[k].i]++;
+  const out={};list.forEach((t,i)=>{if(base[i]>0)out[t]=base[i];});
+  return out;
+}
+// Build an ordered, PRIORITY-WEIGHTED topic list for a weak-spot drill. `areas` are the teacher's
+// themes in priority order (each {topics:[strand,…]}); an earlier theme gets more weight, split
+// evenly among its strands — so priority is honoured per THEME even when themes have a different
+// number of strands (a 2-strand theme doesn't automatically outweigh a 1-strand higher one).
+// `extras` (measured-weak then untried topics not already in a theme) trail at a low weight so
+// they still get occasional coverage. Returns {topics (ordered), weights (topic→relative weight)}.
+function weightedFocusTopics(areas,extras){
+  const weights={},topics=[],n=(areas||[]).length;
+  (areas||[]).forEach((a,ti)=>{const per=(n-ti)/Math.max(1,(a.topics||[]).length);
+    (a.topics||[]).forEach(t=>{if(!(t in weights)){weights[t]=per;topics.push(t);}});});
+  (extras||[]).forEach(t=>{if(t&&!(t in weights)){weights[t]=0.4;topics.push(t);}}); // low-priority tail
+  return {topics,weights};
 }
 // A card listing a student's teacher-flagged focus areas (or null if none). Shown on the Knowledge
 // map + home so revision targets what the teacher asked for; the button runs the weak-spot drill
-// (which seeds these first). Text children are passed RAW — el() escapes them (never esc() here).
+// (which seeds these first, in priority order). When the teacher gave ordered labelled themes we
+// number them 1., 2., 3. Text children are passed RAW — el() escapes them (never esc() here).
 function focusCard(s,profile){
   profile=profile||activeProfile();
   const f=focusTopicsFor(profile,EXAMS[s.exam]?s.exam:'icas',s.subject);
   if(!f.topics.length)return null;
+  const numbered=f.areas.length>1&&f.areas.every(a=>a.label); // ordered priority list
+  const areaEls=f.areas.map((a,i)=>el('div',{style:'margin:6px 0'},
+    a.label?el('div',{style:'font-weight:600;margin-bottom:3px'},(numbered?(i+1)+'. ':'')+a.label):'',
+    el('div',{class:'row',style:'gap:6px;flex-wrap:wrap'},...a.topics.map(t=>el('span',{class:'pill'},t)))));
   return el('div',{class:'card',style:'border-left:4px solid var(--brand)'},
     el('h2',{style:'margin:0 0 4px'},'🎯 Teacher’s focus for '+profile.name),
     f.note?el('p',{class:'sub',style:'margin:0 0 8px'},f.note):'',
-    el('div',{class:'row',style:'gap:6px;flex-wrap:wrap;margin-bottom:10px'},...f.topics.map(t=>el('span',{class:'pill'},t))),
-    el('button',{class:'btn primary block',onclick:()=>practiceWeakSpots()},'🎯 Practise these now'));
+    ...areaEls,
+    el('button',{class:'btn primary block',style:'margin-top:12px',onclick:()=>practiceWeakSpots()},'🎯 Practise these now'));
 }
 
 /* ============================================================ AI generation ============================================================ */
@@ -690,7 +737,12 @@ function buildPrompt(s,refsText){
   const exam=EXAMS[s.exam]||EXAMS.general;
   const chosenTopics=(s.topics&&s.topics.length);
   const known=examTopics(s.exam,s.subject);
-  const topics=chosenTopics?s.topics.join(', ')
+  // Priority-weighted drill (weak-spot focus): tell the model exactly how many questions to spend
+  // on each topic, earlier = higher priority. Only set by practiceWeakSpots; every other flow keeps
+  // the plain topic list.
+  const alloc=(s.topicWeights&&chosenTopics)?apportion(s.topics,s.topicWeights,s.count):null;
+  const topics=alloc?('the topics below, ALLOCATED BY PRIORITY — make the stated NUMBER of questions for each (earlier topics are higher priority, so they get more): '+Object.keys(alloc).map(t=>t+' — '+alloc[t]).join(', '))
+    :chosenTopics?s.topics.join(', ')
     :(known.length?('a WIDE VARIETY across these areas: '+known.join(', ')):'a balanced mix of topics appropriate to the level');
   const styleLine=s.style==='multiple_choice'?'ALL questions must be multiple choice with exactly 4 options.'
     :s.style==='short'?'All questions are short-answer (numeric or short text); do NOT provide options.'
@@ -1562,16 +1614,23 @@ async function practiceWeakSpots(){
   const stat={};attempts.forEach(a=>(a.results||[]).forEach(r=>{const t=r.topic||'General';(stat[t]=stat[t]||{n:0,c:0}).n++;if(r.status==='correct')stat[t].c++;}));
   const weak=Object.keys(stat).filter(t=>stat[t].n>=2&&stat[t].c/stat[t].n<0.8).sort((a,b)=>(stat[a].c/stat[a].n)-(stat[b].c/stat[b].n));
   const uncovered=examTopics(examId,subject).filter(t=>!stat[t]||stat[t].n===0);
-  // Teacher-flagged focus areas lead the drill. Rotate by practice count so repeated drills cycle
-  // through ALL flagged areas over time (not always the same first few), then fill from measured
-  // weak spots + untried topics. Cap at 6 topics for a 10-question set.
-  const focus=focusTopicsFor(p,examId,subject).topics;
-  const rot=focus.length?attempts.length%focus.length:0;
-  const focusRot=focus.slice(rot).concat(focus.slice(0,rot));
-  let topics=[...focusRot.slice(0,4),...weak,...uncovered].filter((t,i,a)=>a.indexOf(t)===i).slice(0,6);
+  // Teacher-flagged focus (if any) leads the drill WEIGHTED by the teacher's PRIORITY order —
+  // earlier themes get more of the questions (weightedFocusTopics → s.topicWeights, honoured by
+  // buildPrompt's allocation so generation, and thus the banked surplus, leans to the top). Measured
+  // weak spots + untried topics trail as a low-priority tail. With NO teacher focus it's just the
+  // measured weak + untried set (original behaviour, unweighted).
+  const focus=focusTopicsFor(p,examId,subject);
+  let topics,topicWeights=null;
+  if(focus.areas.length){
+    const extras=[...weak,...uncovered].filter(t=>!focus.topics.includes(t)).slice(0,3);
+    const w=weightedFocusTopics(focus.areas,extras);topics=w.topics;topicWeights=w.weights;
+  }else{
+    topics=[...weak.slice(0,4),...uncovered.slice(0,2)];
+  }
   if(!topics.length){toast('Do a few practices first so I can spot your weak topics.');return;}
   const exam=EXAMS[examId]||EXAMS.icas;
   const s={country:ds.country||exam.country,subject,exam:examId,level:ds.level,topics,count:10,difficulty:ds.difficulty||3,style:ds.style||exam.style||'mixed',context:CFG.examContext[examId]||'',webSearch:CFG.webSearch,notes:'',examLabel:exam.label};
+  if(topicWeights)s.topicWeights=topicWeights;
   show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building your weak-spot drill…'),el('div',{class:'muted small',style:'margin-top:6px'},'Focusing on: '+topics.slice(0,5).join(', '))))));
   try{const set=await buildPracticeSet(s,[]);startSession(s,set.questions,'practice');if(set.source==='bank')toast('⚡ From your saved bank — no AI used');viewRun();}
   catch(e){alert('Couldn’t build that drill:\n\n'+(e.message||e));viewHome();}
@@ -4604,7 +4663,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.57';
+const APP_VERSION='v2.58';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

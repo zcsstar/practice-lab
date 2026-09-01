@@ -468,22 +468,38 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   - **Weak-spot practice** (`practiceWeakSpots()`): a bank-first drill weighted to the
     student's lowest-scoring practised topics + untried `examTopics()`; on the home Practise
     section and atop the Knowledge map's coverage view.
-  - **Teacher-flagged focus areas (v2.57)** — record a real teacher's "work on these" feedback so
-    it drives revision, not just the app's measured weak spots. `STUDENT_FOCUS` (next to `EXAMS`,
-    keyed by lowercased login name) holds `{subject, note, topics[]}`; `topics` are exam-strand
-    names. `focusTopicsFor(profile,examId,subject)` returns only the topics VALID for the current
-    exam+subject (intersection with `examTopics`, plus a subject gate) so they never misapply to
-    another exam/subject/student — committed in the file so they sync to every device with no
-    UI/migration. Wired in: `practiceWeakSpots()` seeds focus topics FIRST (rotated by practice
-    count so repeated drills cycle through ALL flagged areas), capped at 6 topics; `focusCard(s)`
-    renders a "🎯 Teacher's focus" banner on the home screen + Knowledge map (both branches), and
-    focus strands get a 🎯 pill in `renderKnowledgeMap` + `coverageListCard`. Howard's record maps
-    his 2026 maths-teacher feedback (Distance/Area/Volume · Sequences/Functions/Graphs · Position &
-    Transformations · Statistics & Probability · Problem solving) to the Rangitoto Maths strands. A
-    matching **Rangitoto-tagged Year-8 curriculum doc** (`nz-maths-y8-y9entrance` in
-    `DEFAULT_CURRICULUM`, `exam:'rangitoto'`) grounds his knowledge map / concept cards / formula
-    sheet on accurate content for exactly these strands (scores highest in `curriculumRefDocs` for
-    his exam, combined with the general NZ default).
+  - **Teacher-flagged focus areas (v2.57; ordered + priority-weighted v2.58)** — record a real
+    teacher's "work on these" feedback so it drives revision, not just the app's measured weak spots.
+    `STUDENT_FOCUS` (next to `EXAMS`, keyed by lowercased login name) holds `{subject, note, areas[]}`
+    where each `areas` entry is one teacher THEME in the teacher's PRIORITY order (highest first) with
+    the exam-strand `topics[]` it maps to (a legacy flat `topics[]` is still accepted).
+    `focusTopicsFor(profile,examId,subject)` returns `{areas, topics (flattened, priority order),
+    note}` restricted to strands VALID for the current exam+subject (intersection with `examTopics`,
+    plus a subject gate) so they never misapply to another exam/subject/student — committed in the
+    file so they sync to every device with no UI/migration.
+    - **Priority is WEIGHTED, not just ordered** (v2.58, from an adversarial review that caught the
+      order being cosmetic): `weightedFocusTopics(areas,extras)` gives each THEME a weight (earlier =
+      higher) split evenly among its strands — so a 2-strand theme doesn't outweigh a 1-strand
+      higher-priority one — with measured-weak/untried topics as a low-weight tail. `apportion(topics,
+      weights,count)` (largest-remainder, sums exactly to count) turns those weights into a per-topic
+      question quota. `practiceWeakSpots()` sets `s.topicWeights`; `buildPrompt` then emits an explicit
+      "TOPICS TO COVER … ALLOCATED BY PRIORITY — N questions each" line (only when `s.topicWeights` is
+      set — every other flow keeps the plain topic list). Because generation is weighted and the surplus
+      is banked, the bank fills priority-heavy and later bank-serves lean the same way. Both helpers are
+      pure + unit-tested in [weakspots.test.js](weakspots.test.js). Non-focus students keep the original
+      unweighted weak/untried drill.
+    - `focusCard(s)` renders a "🎯 Teacher's focus" banner (themes numbered 1./2./3.… when ordered +
+      labelled) on the home screen + Knowledge map (both branches); focus strands get a 🎯 pill in
+      `renderKnowledgeMap` + `coverageListCard`.
+    - Howard's record is his 2026 maths teacher's priority order — **(1)** Sequences/Functions/Graphs →
+      *Patterns & early algebra* + *Linear relationships & graphs*, **(2)** Position & Transformations →
+      *Geometry, angles & shape*, **(3)** Statistics & Probability → *Statistics & data* + *Probability*
+      — plus **(4)** Distance/Area/Volume → *Measurement, area & volume* and **(5)** Problem solving →
+      *Problem solving & reasoning* kept below as lighter revision (the earlier feedback, reconciled
+      rather than dropped). A matching **Rangitoto-tagged Year-8 curriculum doc**
+      (`nz-maths-y8-y9entrance` in `DEFAULT_CURRICULUM`, `exam:'rangitoto'`) grounds his knowledge map /
+      concept cards / formula sheet on accurate content across these strands (scores highest in
+      `curriculumRefDocs` for his exam, combined with the general NZ default).
   - **Timed mock-exam mode**: `startPaper(pk, timed)` sets a countdown (`paperMins()`,
     ~1 min/Q clamped 10–75) reusing the existing `S.limitSec` timer + auto-submit; runner
     shows a "⏱ Timed exam" pill, results show a per-topic exam report (`topicReport()`).
@@ -869,6 +885,10 @@ locally. It runs by double-clicking `index.html` or hosting it statically
    **Broken-question detection:** `node accuracy.test.js` (extracts
    `explanationSelfCorrects`/`mcConcludesOffList`/`questionBroken`; verifies the "no
    correct answer / self-correcting explanation" catch fires and never flags a sound one).
+   **Weak-spot priority weighting:** `node weakspots.test.js` (extracts `apportion`/
+   `weightedFocusTopics`/`focusTopicsFor`; verifies a teacher's ordered focus themes produce a
+   priority-weighted per-topic question allocation — earlier theme gets more, no strand-count
+   inversion — and stays gated to the matching exam+subject).
 2. **Run it:** `python -m http.server 8744` in this dir, open
    `http://localhost:8744/index.html`.
 3. **JS syntax check** without a browser:
