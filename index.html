@@ -154,6 +154,16 @@
   .ptn{flex:none;width:22px;height:22px;margin-top:6px;border-radius:50%;background:var(--brand);color:#fff;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
   .exs{font-size:16px;line-height:1.6}
   .engq .qtext{margin:6px 0 10px}
+  .rtext p.rpara{margin:0 0 10px}
+  .rtext p.rpara:last-child{margin-bottom:0}
+  .rtext p.rhead{font-family:var(--font);font-weight:700;font-size:15px;margin:14px 0 6px}
+  .rtext p.ritem{margin:0 0 4px;padding-left:10px}
+  .rtext .rpart{font-weight:700;font-family:var(--font);font-size:14px;margin:12px 0 6px}
+  .rtext .rpart:first-child{margin-top:0}
+  .rs{transition:background .25s}
+  .rs.ev{background:#fff1a8;box-shadow:0 0 0 3px #fff1a8;border-radius:4px}
+  .proof{margin-top:10px;font-size:14.5px;line-height:1.55;background:#fffbe6;border:1px solid #f1df8f;border-radius:var(--radius-ctrl);padding:10px 12px}
+  .rbar{position:sticky;top:8px;z-index:5;display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:8px 12px;margin-bottom:14px;box-shadow:var(--shadow);font-weight:600;font-size:14px}
   .flagrow{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
 
   .scorehero{text-align:center;padding:10px 0 6px}
@@ -781,7 +791,8 @@ function focusCard(s,profile){
   // English focus: the curated Daily words / Daily skills target the same gaps with no AI calls.
   const engBtns=(String(s.subject||'').toLowerCase()==='english'&&engData())?el('div',{class:'row',style:'margin-top:8px;gap:8px'},
     el('button',{class:'btn',style:'flex:1',onclick:()=>viewWords()},'📘 Daily words'),
-    el('button',{class:'btn',style:'flex:1',onclick:()=>viewSkills()},'🧩 Daily skills')):'';
+    el('button',{class:'btn',style:'flex:1',onclick:()=>viewSkills()},'🧩 Daily skills'),
+    readTexts().length?el('button',{class:'btn',style:'flex:1',onclick:()=>viewReading()},'📖 Reading tests'):''):'';
   return el('div',{class:'card',style:'border-left:4px solid var(--brand)'},
     el('h2',{style:'margin:0 0 4px'},'🎯 '+(f.title||'Teacher’s focus')+' for '+profile.name),
     f.note?el('p',{class:'sub',style:'margin:0 0 8px'},f.note):'',
@@ -2196,6 +2207,122 @@ async function viewSkill(id){
     el('div',{class:'card'},el('h2',{},'✏️ Try it · 练一练'),...s.qs.map((q,i)=>el('div',{style:i?'margin-top:18px':''},engMCQ(q,{onAnswer:ok=>{answered++;if(ok)score++;if(answered===s.qs.length)finish();}})))),
     doneSlot));
 }
+/* ----- 📖 Reading tests (v2.61) — longer texts, 6 questions each, the PROOF sentence highlighted -----
+   Curated texts in english.js DATA.reading (12: narrative, report, review, poem, procedure, persuasive,
+   biography, recount, play script, a paired text) — paragraphs of SENTENCES + 6 questions ordered easy →
+   hard (like ICAS), each with `ev` = the global indices of the sentence(s) that prove the answer
+   ("Question → Find → Prove"). Practice mode marks each answer at once and highlights its proof in the
+   text; the timed mini test (3 texts, 18 questions, READ_MIN_PER_TEXT min each) gives no feedback until
+   the end, then reviews everything and reports EARLY vs LATE accuracy — the stamina signal from his tests.
+   Progress: `english` store — kind 'reading' (per text: best/last/history) and 'readset' (per test). */
+const READ_MIN_PER_TEXT=7; // timed: minutes per text (≈1 min a question + reading time)
+const READ_TYPES={narrative:'Story · 故事',report:'Report · 说明文',review:'Review · 评论',poem:'Poem · 诗歌',procedure:'Procedure · 步骤说明',persuasive:'Persuasive · 说服性文章',recount:'Recount · 记叙',biography:'Biography · 人物传记',playscript:'Play script · 剧本',pair:'Two texts · 两篇对比'};
+const READ_SKILLS={'main-idea':'Main idea · 主旨',inference:'Inference · 推断',vocab:'Word meaning · 词义',evidence:'Evidence · 找证据',purpose:'Author’s purpose · 写作目的',structure:'Text structure · 文章结构',character:'Character · 人物',compare:'Compare · 比较','fact-opinion':'Fact or opinion · 事实或观点',figurative:'Figurative language · 修辞',sequence:'Sequence · 顺序',summary:'Summary · 概括'};
+function readTexts(){const D=engData();return (D&&Array.isArray(D.reading))?D.reading:[];}
+// Pure: every sentence of a text in reading order, with the global index that `ev` points at.
+function readSentences(t){const out=[];(t.parts||[]).forEach((p,pi)=>(p.paras||[]).forEach((para,ri)=>(para||[]).forEach(s=>out.push({part:pi,para:ri,i:out.length,s}))));return out;}
+// Pure: % right on the first half vs the second half of an answer list (late slips = stamina).
+function halfSplit(res){const n=res.length,h=Math.ceil(n/2),pc=x=>x.length?Math.round(100*x.filter(Boolean).length/x.length):null;return {early:pc(res.slice(0,h)),late:pc(res.slice(h)),n};}
+// Pure: pooled early/late % over every attempt (each text's Q1–3 vs Q4–6; each timed test's halves).
+function readStats(recs){let e=[],l=[];recs.forEach(r=>{const res=(r.kind==='reading'&&r.last&&r.last.res)||(r.kind==='readset'&&r.res)||null;if(!Array.isArray(res)||!res.length)return;const h=Math.ceil(res.length/2);e=e.concat(res.slice(0,h));l=l.concat(res.slice(h));});
+  const pc=x=>x.length?Math.round(100*x.filter(Boolean).length/x.length):null;return {early:pc(e),late:pc(l),answered:e.length+l.length};}
+// Pure: the next n texts — never-read ones first (in order), then the ones read longest ago.
+function nextReadTexts(texts,recs,n){const last={};recs.forEach(r=>{if(r.kind==='reading')last[r.text]=r.updatedAt||0;});
+  return texts.map((t,i)=>({t,i})).sort((a,b)=>(last[a.t.id]||0)-(last[b.t.id]||0)||a.i-b.i).slice(0,n).map(x=>x.t);}
+function readingMenuLine(recs){const texts=readTexts(),done=new Set(recs.filter(r=>r.kind==='reading').map(r=>r.text)).size,st=readStats(recs);
+  return done?(done+' of '+texts.length+' texts read'+(st.early!=null&&st.late!=null?' · early Qs '+st.early+'% / late Qs '+st.late+'%':'')):'Longer texts with 6 questions — find the proof for every answer';}
+async function viewReading(){
+  stopTimer();const texts=readTexts();if(!texts.length){toast('Reading tests aren’t available yet.');return viewHome();}
+  const recs=(await engRecs()).filter(r=>r.kind==='reading'||r.kind==='readset');
+  const by=new Map(recs.filter(r=>r.kind==='reading').map(r=>[r.text,r])),st=readStats(recs);
+  const doneT=texts.filter(t=>by.has(t.id)),avg=doneT.length?Math.round(doneT.reduce((s,t)=>{const r=by.get(t.id);return s+100*(r.best||0)/(r.total||6);},0)/doneT.length):null;
+  const next=nextReadTexts(texts,recs,1)[0],set=nextReadTexts(texts,recs,3);
+  show(el('div',{class:'nomath'},backBar('📖 Reading tests',viewHome),
+    el('div',{class:'card'},el('h2',{},'📖 Reading tests · 阅读小卷'),
+      el('p',{class:'sub'},'Read a longer text and answer 6 questions — then see the sentence that PROVES each answer. The later questions are harder, just like ICAS. 读一篇长一点的文章、答 6 道题，再看哪一句话证明了答案；越往后越难，和 ICAS 一样。'),
+      el('div',{class:'tiles',style:'margin-bottom:14px'},tile(doneT.length+'/'+texts.length,'Texts read'),tile(avg==null?'—':avg+'%','Best average'),tile(st.early==null?'—':st.early+'%','Early questions'),tile(st.late==null?'—':st.late+'%','Late questions')),
+      (st.early!=null&&st.late!=null&&st.early-st.late>=15)?el('div',{class:'small',style:'margin-bottom:10px;color:var(--warn)'},'Your later answers slip. Slow down and find the proof in the text for every question — right to the end. 后面的题错得多：每一题都回原文找证据，坚持到最后。'):'',
+      el('button',{class:'btn primary block lg',onclick:()=>viewReadingTest([next.id],false)},'✨ Read next: '+next.title),
+      el('button',{class:'btn block',style:'margin-top:10px',onclick:()=>viewReadingTest(set.map(t=>t.id),true)},'⏱ Mini test · '+set.length+' texts · '+set.length*6+' questions · '+set.length*READ_MIN_PER_TEXT+' min'),
+      el('p',{class:'small muted',style:'margin:10px 0 0'},'Practice: answers are marked as you go. Mini test: like a real exam — no hints until the end. 练习：每题马上对答案；小测：和考试一样，做完才看答案。')),
+    el('div',{class:'card'},el('h2',{},'All texts · 全部文章'),el('div',{class:'menu'},...texts.map(t=>{const r=by.get(t.id);
+      return menuItem(r?'✅':'📄',t.title+' · '+(READ_TYPES[t.type]||t.type),r?('Best '+r.best+' / '+r.total+' · read '+r.tries+'×'):'Not read yet',()=>viewReadingTest([t.id],false));})))));
+}
+async function viewReadingTest(ids,timed){
+  stopTimer();const all=readTexts(),texts=ids.map(id=>all.find(t=>t.id===id)).filter(Boolean);if(!texts.length)return viewReading();
+  const prev=new Map((await engRecs()).filter(r=>r.kind==='reading').map(r=>[r.text,r]));
+  const items=[];texts.forEach((t,ti)=>t.qs.forEach((q,qi)=>items.push({ti,qi,q,ans:null,reveal:null})));
+  const t0=Date.now(),limit=timed?texts.length*READ_MIN_PER_TEXT*60:0,L=i=>String.fromCharCode(65+i);
+  let finished=false,timer=null;
+  const root=el('div',{class:'nomath'}),doneSlot=el('div',{}),sentEls=texts.map(()=>[]);
+  const textCard=(t,ti)=>{
+    const sents=readSentences(t),poem=t.type==='poem',body=el('div',{class:'passage rtext'+(poem?' poem':'')});let k=0;
+    t.parts.forEach(p=>{
+      if(t.parts.length>1||(p.title&&p.title!==t.title))body.append(el('div',{class:'rpart'},p.title||''));
+      p.paras.forEach(para=>{const one=para.length===1?String(para[0]).trim():'';
+        // A short one-line paragraph ending in ? or : in a report/procedure is a heading; "• …"/"1. …" lines are list items.
+        const head=['report','procedure','persuasive','biography'].includes(t.type)&&/[?:]$/.test(one)&&one.split(/\s+/).length<=8;
+        const item=/^(•|\d+\.)\s/.test(one);
+        const pe=el('p',{class:'rpara'+(head?' rhead':item?' ritem':'')});para.forEach((s,j)=>{const sp=el('span',{class:'rs',html:engMd(s)});sentEls[ti][k++]=sp;pe.append(sp);if(j<para.length-1)pe.append(poem?el('br'):document.createTextNode(' '));});body.append(pe);});
+    });
+    const say=t.title+'. '+sents.map(x=>x.s).join(' ');
+    return el('div',{class:'card'},
+      el('div',{class:'row between',style:'align-items:center;flex-wrap:nowrap'},el('div',{},texts.length>1?el('span',{class:'pill'},'Text '+(ti+1)+' of '+texts.length):'',el('span',{class:'pill'},READ_TYPES[t.type]||t.type)),
+        el('button',{class:'iconbtn',type:'button',title:'Read it aloud',onclick:()=>speak(say)},'🔊')),
+      el('h2',{style:'margin:8px 0 10px'},t.title),body);
+  };
+  const proofEl=(t,q)=>{const sents=readSentences(t),lines=(q.ev||[]).map(i=>sents[i]).filter(Boolean).map(x=>'“'+String(x.s).replace(/\*\*/g,'')+'”');
+    return lines.length?el('div',{class:'proof'},el('b',{},'🔎 Proof · 证据: '),el('span',{},lines.join(' … '))):'';};
+  const qCard=(it,idx)=>{
+    const {ti,q}=it,t=texts[ti],opts=el('div',{class:'opts'}),fb=el('div',{});
+    it.reveal=()=>{const ok=it.ans===q.a;
+      $$('.opt',opts).forEach((b,bi)=>{b.disabled=true;b.setAttribute('aria-pressed','false');if(bi===q.a)b.classList.add('right');else if(bi===it.ans)b.classList.add('wrongpick');});
+      (q.ev||[]).forEach(i=>{const s=sentEls[ti][i];if(s)s.classList.add('ev');});
+      fb.innerHTML='';
+      fb.append(el('div',{style:'margin-top:10px'},el('span',{class:'badge '+(ok?'ok':(it.ans==null?'warn':'bad'))},ok?'✓ Correct! 答对了':(it.ans==null?'– Not answered · 没有作答':'✗ The answer is '+L(q.a)+' · 正确答案是 '+L(q.a)))),
+        proofEl(t,q),q.why?el('div',{class:'explain'},biLine(q.why,q.whyZh)):'',
+        (q.ev&&q.ev.length)?el('button',{class:'btn sm ghost',style:'margin-top:8px',onclick:()=>{const s=sentEls[ti][q.ev[0]];if(s)s.scrollIntoView({behavior:'smooth',block:'center'});}},'↑ Show it in the text · 在原文中看'):'');};
+    q.opts.forEach((o,i)=>opts.append(el('button',{class:'opt',type:'button','aria-pressed':'false',onclick:()=>{
+      if(finished)return;
+      if(!timed){if(it.ans!=null)return;it.ans=i;it.reveal();if(items.every(x=>x.ans!=null))finish(false);}
+      else{it.ans=i;$$('.opt',opts).forEach((b,bi)=>b.setAttribute('aria-pressed',String(bi===i)));tick();}
+    }},el('span',{class:'key'},L(i)),el('span',{html:engMd(o)}))));
+    const say=String(q.q||'').replace(/\*\*/g,'')+'. '+q.opts.map((o,i)=>L(i)+', '+o).join('. ');
+    return el('div',{class:'card'},el('div',{class:'row between'},el('span',{class:'pill'},'Q'+(idx+1)+' of '+items.length),el('span',{class:'pill'},READ_SKILLS[q.skill]||q.skill)),
+      el('div',{class:'bi-en'},el('div',{class:'qtext',html:engMd(q.q)}),sayBtn(say,'en')),opts,fb);
+  };
+  // Timed: a sticky bar with the countdown, answered count and Finish (built once, text updated each second).
+  const clock=el('span',{}),count=el('span',{}),bar=timed?el('div',{class:'rbar'},clock,count,el('button',{class:'btn sm primary',onclick:()=>finish(false)},'Finish · 交卷')):null;
+  const tick=()=>{if(!bar||finished)return;const left=Math.max(0,limit-Math.round((Date.now()-t0)/1000));
+    clock.textContent='⏱ '+Math.floor(left/60)+':'+String(left%60).padStart(2,'0')+' left';count.textContent=items.filter(x=>x.ans!=null).length+' / '+items.length+' answered';
+    if(left<=0)finish(true);};
+  const finish=async timedOut=>{
+    if(finished)return;finished=true;if(timer)clearInterval(timer);
+    const secs=Math.round((Date.now()-t0)/1000),now=Date.now();
+    if(timed)items.forEach(it=>it.reveal());
+    const res=items.map(it=>it.ans===it.q.a),score=res.filter(Boolean).length,h=halfSplit(res);
+    for(let ti=0;ti<texts.length;ti++){const t=texts[ti],r=items.filter(x=>x.ti===ti).map(x=>x.ans===x.q.a),sc=r.filter(Boolean).length,p=prev.get(t.id);
+      const rec=Object.assign({},p||{},{id:pid()+'|r|'+t.id,profileId:pid(),kind:'reading',text:t.id,tries:((p&&p.tries)||0)+1,best:Math.max((p&&p.best)||0,sc),total:r.length,
+        last:{score:sc,total:r.length,res:r,timed:!!timed,timeSec:texts.length===1?secs:null,at:now},history:(((p&&p.history)||[]).concat([{score:sc,timed:!!timed,at:now}])).slice(-8),updatedAt:now});
+      await dbPut('english',rec);if(!p)await engReward(3,15,'for a new reading text');}
+    if(texts.length>1)await dbPut('english',{id:pid()+'|rs|'+now,profileId:pid(),kind:'readset',ids:texts.map(t=>t.id),res,timeSec:secs,limitSec:limit,timedOut:!!timedOut,updatedAt:now});
+    scheduleDriveSync();
+    const slip=h.early!=null&&h.late!=null&&h.early-h.late>=20;
+    const sum=el('div',{class:'card',style:'text-align:center'},el('h2',{},(timedOut?'⏰ Time’s up! ':'🎉 ')+score+' / '+items.length),
+      el('p',{class:'sub'},(timed?'Time '+Math.floor(secs/60)+' min '+(secs%60)+' s · ':'')+'first half '+(h.early==null?'—':h.early+'%')+' · second half '+(h.late==null?'—':h.late+'%')),
+      slip?el('p',{class:'small',style:'color:var(--warn)'},'The later questions slipped — keep going back to the text for proof, right to the end. 后面的题错得多：每题都回原文找证据，坚持到最后。'):'',
+      timed?el('p',{class:'small muted'},'Scroll down: every answer now shows its proof sentence. 往下看：每道题都标出了证明答案的句子。'):'',
+      el('div',{class:'row',style:'justify-content:center'},el('button',{class:'btn primary',onclick:()=>viewReading()},'Back to Reading tests')));
+    if(bar)bar.remove();
+    if(timed){root.insertBefore(sum,root.children[1]||null);window.scrollTo(0,0);}else doneSlot.append(sum);
+  };
+  root.append(backBar(timed?'⏱ Reading mini test':'📖 Reading practice',viewReading));
+  if(bar)root.append(bar);
+  let qn=0;texts.forEach((t,ti)=>{root.append(textCard(t,ti));items.filter(x=>x.ti===ti).forEach(it=>root.append(qCard(it,qn++)));});
+  root.append(doneSlot);
+  show(root);
+  if(timed){tick();timer=setInterval(()=>{if(!document.body.contains(root)){clearInterval(timer);return;}tick();},1000);}
+}
 /* ----- HOME ----- */
 async function viewHome(){
   stopTimer();refreshHeaderProfile();
@@ -2226,6 +2353,7 @@ async function viewHome(){
   const secEnglish=engD?sectionCard('English','Book words and reading & grammar skills — in English and 中文, with read-aloud.',[
     menuItem('📘','Daily words',wordsMenuLine(engD,engR),()=>viewWords()),
     menuItem('🧩','Daily skills',skillsMenuLine(engD,engR),()=>viewSkills()),
+    readTexts().length?menuItem('📖','Reading tests',readingMenuLine(engR),()=>viewReading()):null,
   ]):null;
   const secProgress=sectionCard('Track progress','See how you’re going and earn rewards.',[
     menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
@@ -4546,7 +4674,7 @@ async function viewDashboard(){
     const moneyLine=el('div',{class:'small muted',style:'margin-top:8px'},'💰 🍬 '+worth+' total'+(saved?(' · saved 🍬 '+saved):'')+' · trading '+(netT>=0?'+':'')+netT+' · 🏅 '+badgeN+'/'+BADGES.length+' badges'+(gifts?(' · 🎁 '+gifts+' gift'+(gifts>1?'s':'')):''));
     // 📘/🧩 English habit — words learned/mastered/due and skill cards done (from the synced english store).
     const er=allEng.filter(r=>r.profileId===p.id),ew=er.filter(r=>r.kind==='word');
-    const engLine=(engD&&er.length)?el('div',{class:'small muted',style:'margin-top:4px'},'📘 '+ew.length+' word'+(ew.length===1?'':'s')+' learned · '+ew.filter(r=>r.mastered).length+' mastered · '+dueWordRecs(er,Date.now()).length+' due · 🧩 '+er.filter(r=>r.kind==='skill'&&r.done).length+'/'+engD.skills.length+' skills'):'';
+    const engLine=(engD&&er.length)?el('div',{class:'small muted',style:'margin-top:4px'},'📘 '+ew.length+' word'+(ew.length===1?'':'s')+' learned · '+ew.filter(r=>r.mastered).length+' mastered · '+dueWordRecs(er,Date.now()).length+' due · 🧩 '+er.filter(r=>r.kind==='skill'&&r.done).length+'/'+engD.skills.length+' skills'+(()=>{const rt=new Set(er.filter(r=>r.kind==='reading').map(r=>r.text)).size;if(!rt)return '';const st=readStats(er);return ' · 📖 '+rt+' text'+(rt>1?'s':'')+(st.early!=null&&st.late!=null?' (early Qs '+st.early+'%, late Qs '+st.late+'%)':'');})()):'';
     return el('div',{class:'card'},
       el('div',{class:'row between'},
         el('div',{class:'row',style:'gap:10px;align-items:center'},el('span',{class:'avatar',style:'background:'+colorFor(p.name)},initials(p.name)),el('div',{},el('div',{style:'font-weight:700'},esc(p.name)),el('div',{class:'small muted'},last?('Last practice: '+last.date):'No practices yet'))),
@@ -4963,7 +5091,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.60';
+const APP_VERSION='v2.61';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

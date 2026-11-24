@@ -35,7 +35,8 @@ function extract(name) {
   return src.slice(start, i);
 }
 const NAMES = ['wordKey', 'skillKey', 'newWordRec', 'applyWordReview', 'nextWordDay', 'dueWordRecs', 'nextSkill',
-  'seedNum', 'seededShuffle', 'wordReviewKinds', 'buildWordReview', 'hiWord'];
+  'seedNum', 'seededShuffle', 'wordReviewKinds', 'buildWordReview', 'hiWord',
+  'readSentences', 'halfSplit', 'readStats', 'nextReadTexts'];
 const ctx = {};
 new Function(
   src.match(/const WORD_SR_DAYS=\[[^\]]*\];/)[0] + '\n' + src.match(/const DAY_MS=\d+;/)[0] + '\n' +
@@ -166,6 +167,54 @@ const orders = new Set(words.map(id => ctx.seededShuffle(base, id).join('')));
 check('seededShuffle varies across seeds', orders.size >= 6, orders.size);
 check('hiWord bolds other endings', ctx.hiWord('She relished every bite.', { word: 'relish' }) === 'She **relished** every bite.');
 check('hiWord keeps -e words (crumble → crumbling)', ctx.hiWord('The walls were crumbling.', { word: 'crumble' }).includes('**crumbling**'));
+
+// ── 4. 📖 reading tests: content + helpers ──────────────────────────────────
+const R = D.reading;
+check('reading: 12 texts', Array.isArray(R) && R.length === 12, R && R.length);
+if (Array.isArray(R)) {
+  const TYPES = ['narrative', 'report', 'review', 'poem', 'procedure', 'persuasive', 'recount', 'biography', 'playscript', 'pair'];
+  const SKILLS = ['main-idea', 'inference', 'vocab', 'evidence', 'purpose', 'structure', 'character', 'compare', 'fact-opinion', 'figurative', 'sequence', 'summary'];
+  check('reading: ids unique', new Set(R.map(t => t.id)).size === R.length);
+  check('reading: every text type present', TYPES.every(ty => R.some(t => t.type === ty)), JSON.stringify(R.map(t => t.type)));
+  const skillCount = {};
+  const pos = [0, 0, 0, 0];
+  for (const t of R) {
+    const where = 'reading ' + t.id;
+    check(where + ': title/type', nonEmpty(t.title) && TYPES.includes(t.type), t.type);
+    check(where + ': parts (2 for a pair, else 1)', Array.isArray(t.parts) && t.parts.length === (t.type === 'pair' ? 2 : 1));
+    const sents = ctx.readSentences(t);
+    check(where + ': sentences non-empty', sents.length >= 8 && sents.every(x => nonEmpty(x.s)), sents.length);
+    const words = sents.map(x => wc(x.s)).reduce((a, b) => a + b, 0);
+    check(where + ': 240–400 words', words >= 240 && words <= 400, words);
+    if (t.type !== 'poem' && t.type !== 'playscript' && t.type !== 'procedure')
+      check(where + ': sentences end with punctuation', sents.every(x => /[.!?:…’”)\]]$/.test(x.s.trim())), JSON.stringify(sents.filter(x => !/[.!?:…’”)\]]$/.test(x.s.trim())).map(x => x.s)));
+    check(where + ': 6 questions', Array.isArray(t.qs) && t.qs.length === 6);
+    t.qs.forEach((q, i) => {
+      const w2 = where + ' Q' + (i + 1);
+      mcOk(q, w2);
+      check(w2 + ': skill known', SKILLS.includes(q.skill), q.skill);
+      check(w2 + ': bilingual why', nonEmpty(q.why) && nonEmpty(q.whyZh));
+      check(w2 + ': 1–3 proof sentences in range', Array.isArray(q.ev) && q.ev.length >= 1 && q.ev.length <= 3 && q.ev.every(k => Number.isInteger(k) && k >= 0 && k < sents.length), JSON.stringify(q.ev));
+      skillCount[q.skill] = (skillCount[q.skill] || 0) + 1;
+      if (Number.isInteger(q.a)) pos[q.a]++;
+      const bold = (q.q.match(/\*\*(.+?)\*\*/) || [])[1];
+      if (q.skill === 'vocab' && bold) check(w2 + ': the bold word is bold in its proof sentence', q.ev.some(k => sents[k] && sents[k].s.includes('**' + bold + '**')), bold);
+    });
+  }
+  for (const s of SKILLS) check('reading: skill used at least twice: ' + s, (skillCount[s] || 0) >= 2, skillCount[s] || 0);
+  check('reading: answer letters balanced (each 12–24 of 72)', pos.every(n => n >= 12 && n <= 24), JSON.stringify(pos));
+
+  // helpers
+  const t1 = { parts: [{ paras: [['a.', 'b.'], ['c.']] }, { paras: [['d.']] }] };
+  check('readSentences: global order across paras and parts', ctx.readSentences(t1).map(x => x.s + x.i).join() === 'a.0,b.1,c.2,d.3');
+  check('halfSplit: 6 → Q1–3 vs Q4–6', JSON.stringify(ctx.halfSplit([true, true, true, false, true, false])) === JSON.stringify({ early: 100, late: 33, n: 6 }));
+  check('halfSplit: odd length puts the middle in the first half', ctx.halfSplit([true, false, false]).early === 50);
+  check('halfSplit: empty → nulls', ctx.halfSplit([]).early === null && ctx.halfSplit([]).late === null);
+  const rs = ctx.readStats([{ kind: 'reading', last: { res: [true, true, true, false, false, false] } }, { kind: 'readset', res: [true, true, false, false] }, { kind: 'word' }]);
+  check('readStats pools texts and tests', rs.early === 100 && rs.late === 0 && rs.answered === 10, JSON.stringify(rs));
+  const order = ctx.nextReadTexts(R, [{ kind: 'reading', text: R[0].id, updatedAt: 5 }, { kind: 'reading', text: R[1].id, updatedAt: 2 }], 12).map(t => t.id);
+  check('nextReadTexts: unread first in order, then oldest read', order[0] === R[2].id && order[10] === R[1].id && order[11] === R[0].id, JSON.stringify(order));
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

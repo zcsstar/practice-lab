@@ -5288,6 +5288,1922 @@
           }
         ]
       }
+    ],
+    "reading": [
+      {
+        "id": "r01",
+        "title": "Nothing to Do",
+        "type": "narrative",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Nothing to Do",
+            "paras": [
+              [
+                "When Leo’s family moved from the city to a farm near Waipukurau, Leo was sure his life was over.",
+                "There was no skate park, no cinema and no fast internet.",
+                "‘There’s nothing to do here,’ he grumbled at dinner every night."
+              ],
+              [
+                "Their neighbour, Aroha, was the same age as Leo.",
+                "Every morning she waved to him as she walked past with her dog, Patch.",
+                "Leo never waved back.",
+                "He just pulled his hood over his head and stared at his phone."
+              ],
+              [
+                "Then one wet Saturday, Aroha’s mum knocked on the door.",
+                "A late storm had flooded the bottom paddock, and some newborn lambs were stuck on a muddy bank.",
+                "‘We need every pair of hands we can get,’ she said.",
+                "Leo’s dad grabbed his raincoat, and Leo **grudgingly** followed."
+              ],
+              [
+                "The rain stung his face, and his sneakers sank deep into the mud.",
+                "Aroha showed him how to hold a lamb safely, with one arm under its chest and the other under its back legs.",
+                "Together they carried six shivering lambs up to the dry shed, where the adults rubbed them with old towels.",
+                "One tiny lamb would not stop trembling, so Leo wrapped it inside his own jacket until it was warm."
+              ],
+              [
+                "By the time the sun came out, Leo was soaked and muddy.",
+                "Strangely, he did not mind at all.",
+                "‘You’re a natural farmer,’ laughed Aroha’s mum.",
+                "Leo felt a warm glow spread through his chest."
+              ],
+              [
+                "The next morning, Aroha walked past with Patch as usual.",
+                "This time, Leo was already waiting at the gate in his gumboots.",
+                "‘Can I help feed the lambs today?’ he called.",
+                "Aroha grinned and waved him over."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "Why did Aroha’s mum knock on Leo’s door?",
+            "opts": [
+              "She wanted Leo to play with Aroha.",
+              "She needed help to rescue some lambs.",
+              "She was looking for her dog, Patch.",
+              "She came to borrow a raincoat."
+            ],
+            "a": 1,
+            "ev": [
+              8,
+              9
+            ],
+            "why": "The story says a storm had flooded the paddock and lambs were stuck. Then she said, ‘We need every pair of hands we can get.’ She came to ask for help.",
+            "whyZh": "文中说暴风雨淹了牧场，小羊被困住了。接着她说“我们需要所有能帮忙的人手”。她是来求助的。"
+          },
+          {
+            "skill": "vocab",
+            "q": "Leo ‘grudgingly followed’ his dad. What does ‘grudgingly’ mean?",
+            "opts": [
+              "happily and eagerly",
+              "quietly and secretly",
+              "as fast as he could",
+              "without really wanting to"
+            ],
+            "a": 3,
+            "ev": [
+              2,
+              5,
+              10
+            ],
+            "why": "Until then Leo had refused to join in — he ‘never waved back’ and kept saying there was nothing to do. So he followed without really wanting to. That is what ‘grudgingly’ means.",
+            "whyZh": "在这之前 Leo 一直不愿意参与——他“从来不挥手回应”，还总说这里没什么可做。所以他是不情愿地跟着去的。这就是 grudgingly（勉强地、不情愿地）的意思。"
+          },
+          {
+            "skill": "character",
+            "q": "How did Leo feel about living on the farm at the start of the story?",
+            "opts": [
+              "unhappy and bored",
+              "excited and curious",
+              "scared of the animals",
+              "proud of his new home"
+            ],
+            "a": 0,
+            "ev": [
+              0,
+              2
+            ],
+            "why": "At the start Leo was ‘sure his life was over’ and grumbled, ‘There’s nothing to do here.’ He was unhappy and bored.",
+            "whyZh": "故事开头 Leo“确信自己的生活完了”，还抱怨“这里没什么可做的”。他既不开心又觉得无聊。"
+          },
+          {
+            "skill": "compare",
+            "q": "How is Leo different at the end of the story?",
+            "opts": [
+              "He hates the farm even more than before.",
+              "He is now scared of the lambs.",
+              "He wants to help, instead of ignoring Aroha.",
+              "He spends more time on his phone."
+            ],
+            "a": 2,
+            "ev": [
+              5,
+              20,
+              21
+            ],
+            "why": "At the start ‘Leo never waved back’ and stared at his phone. At the end he is ‘already waiting at the gate in his gumboots’ and asks to help feed the lambs.",
+            "whyZh": "开头“Leo 从来不挥手回应”，只顾盯着手机。到了结尾，他已经“穿着雨靴在门口等着”，还主动要求帮忙喂小羊。"
+          },
+          {
+            "skill": "inference",
+            "q": "Why did Leo ‘not mind at all’ that he was soaked and muddy?",
+            "opts": [
+              "He had enjoyed helping and felt proud.",
+              "He liked getting wet in the rain.",
+              "He knew his clothes were old.",
+              "He wanted Aroha to feel sorry for him."
+            ],
+            "a": 0,
+            "ev": [
+              17,
+              18
+            ],
+            "why": "The story doesn’t say it straight out, but Leo was praised (‘You’re a natural farmer’) and ‘felt a warm glow spread through his chest’. Helping made him feel good, so the mud didn’t matter.",
+            "whyZh": "文章没有直接说，但 Leo 被夸了（“你天生就是个农夫”），而且“心里涌起一股暖意”。帮忙让他感觉很好，所以身上的泥就无所谓了。"
+          },
+          {
+            "skill": "main-idea",
+            "q": "What is the story mainly about?",
+            "opts": [
+              "how to rescue lambs from a flood",
+              "a girl who teaches her dog tricks",
+              "why the city is better than the country",
+              "a boy who starts to enjoy his new life by helping others"
+            ],
+            "a": 3,
+            "ev": [
+              0,
+              21
+            ],
+            "why": "At the start Leo thinks ‘his life was over’; by the end he asks, ‘Can I help feed the lambs today?’ The story is about how he changes. Rescuing the lambs is just the event that changes him.",
+            "whyZh": "开头 Leo 觉得“自己的生活完了”；到结尾他却问“今天我能帮忙喂小羊吗？”故事讲的是他的转变。救小羊只是让他改变的那件事。"
+          }
+        ]
+      },
+      {
+        "id": "r02",
+        "title": "Kororā: The World’s Smallest Penguin",
+        "type": "report",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Kororā: The World’s Smallest Penguin",
+            "paras": [
+              [
+                "The kororā, or little penguin, is the smallest penguin in the world.",
+                "An adult stands only about 25 to 30 centimetres tall — about the length of a school ruler.",
+                "It weighs around one kilogram.",
+                "Kororā live along the coasts of New Zealand and southern Australia."
+              ],
+              [
+                "What do they look like?"
+              ],
+              [
+                "Kororā have slate-blue feathers on their backs and white feathers on their fronts.",
+                "This colouring is a clever **disguise**.",
+                "From above, a swimming penguin’s dark back blends in with the deep water below.",
+                "From below, its white front matches the bright sky.",
+                "This helps it hide from seals and sharks that might eat it."
+              ],
+              [
+                "What do they do all day?"
+              ],
+              [
+                "Kororā spend most of the day at sea.",
+                "They dive under the water to catch small fish, such as anchovies and pilchards.",
+                "After dark, they come ashore in small groups and waddle up the beach to their nests.",
+                "A nest might be a burrow in the sand, a gap between rocks or even a space under a boatshed.",
+                "The female usually lays two eggs, and both parents take turns to keep them warm.",
+                "At night, kororā can be very noisy, calling loudly to their partners."
+              ],
+              [
+                "How can we keep them safe?"
+              ],
+              [
+                "Today, kororā face many dangers on land.",
+                "Dogs, cats and stoats attack them, and cars can hit them when they cross coastal roads at night.",
+                "People can help by keeping dogs on a lead at the beach, driving slowly near the coast after dark and building safe nesting boxes.",
+                "With a little care, these tiny penguins can keep returning to our shores for many years to come."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "Where do kororā spend most of the day?",
+            "opts": [
+              "in their burrows",
+              "under boatsheds",
+              "at sea",
+              "on the beach"
+            ],
+            "a": 2,
+            "ev": [
+              11
+            ],
+            "why": "The report says, ‘Kororā spend most of the day at sea.’ They only come ashore after dark.",
+            "whyZh": "文中写道“小蓝企鹅白天大部分时间都在海里”，天黑后才上岸。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘This colouring is a clever disguise.’ What does ‘disguise’ mean here?",
+            "opts": [
+              "a way of hiding by looking like something else",
+              "a bright colour that warns enemies",
+              "a warm coat for cold water",
+              "a special swimming trick"
+            ],
+            "a": 0,
+            "ev": [
+              6,
+              7,
+              8
+            ],
+            "why": "The next sentences explain it: from above, the dark back ‘blends in with the deep water’, and from below, the white front ‘matches the bright sky’. The penguin hides by looking like what is around it.",
+            "whyZh": "后面几句解释了：从上面看，深色的背“和深水融为一体”；从下面看，白色的肚子“和明亮的天空一样”。企鹅靠看起来像周围的环境来隐藏自己。"
+          },
+          {
+            "skill": "structure",
+            "q": "What is the job of the headings in this report?",
+            "opts": [
+              "to tell a funny story",
+              "to give the penguins names",
+              "to show the writer’s opinion",
+              "to show what each section is about"
+            ],
+            "a": 3,
+            "ev": [
+              4,
+              10,
+              17
+            ],
+            "why": "The headings — ‘What do they look like?’, ‘What do they do all day?’ and ‘How can we keep them safe?’ — tell readers what each part is about, so information is easy to find.",
+            "whyZh": "“它们长什么样？”“它们整天都在做什么？”“我们怎样保护它们？”这些小标题告诉读者每一部分讲什么，方便查找信息。"
+          },
+          {
+            "skill": "inference",
+            "q": "Why could driving slowly near the coast after dark help kororā?",
+            "opts": [
+              "Kororā are scared of loud engines.",
+              "Kororā cross coastal roads at night.",
+              "Kororā hunt for fish near roads.",
+              "Kororā build nests in car parks."
+            ],
+            "a": 1,
+            "ev": [
+              13,
+              19
+            ],
+            "why": "The report says kororā come ashore ‘after dark’ and that cars hit them ‘when they cross coastal roads at night’. Driving slowly gives drivers time to stop.",
+            "whyZh": "文中说小蓝企鹅“天黑后”上岸，汽车会在它们“晚上穿过海边公路时”撞到它们。开慢一点，司机就来得及停车。"
+          },
+          {
+            "skill": "purpose",
+            "q": "What is the main purpose of the last section of the report?",
+            "opts": [
+              "to describe what kororā eat",
+              "to explain the dangers and how people can help",
+              "to persuade people to buy nesting boxes",
+              "to compare kororā with other penguins"
+            ],
+            "a": 1,
+            "ev": [
+              18,
+              19,
+              20
+            ],
+            "why": "The section first lists dangers (‘Dogs, cats and stoats attack them…’) and then ways ‘People can help’. It explains a problem and what we can do about it.",
+            "whyZh": "这一部分先列出危险（“狗、猫和白鼬会攻击它们……”），再说明“人们可以怎样帮忙”。它解释了问题以及我们能做什么。"
+          },
+          {
+            "skill": "summary",
+            "q": "Which is the best summary of the whole report?",
+            "opts": [
+              "Kororā are noisy birds that live under boatsheds.",
+              "Kororā eat anchovies and pilchards every day.",
+              "Kororā are tiny penguins with interesting habits that need our protection.",
+              "Kororā are the largest penguins in New Zealand."
+            ],
+            "a": 2,
+            "ev": [
+              0,
+              20
+            ],
+            "why": "A summary covers the whole text: what kororā are (‘the smallest penguin in the world’), how they live, and why they need help (‘People can help…’). The other choices are single details or wrong — they are the smallest, not the largest.",
+            "whyZh": "概括要涵盖全文：小蓝企鹅是什么（“世界上最小的企鹅”）、它们怎样生活，以及为什么需要保护（“人们可以帮忙……”）。其他选项只是单个细节，或者是错的——它们是最小的，不是最大的。"
+          }
+        ]
+      },
+      {
+        "id": "r03",
+        "title": "Camp Diary: Day Two",
+        "type": "recount",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Camp Diary: Day Two",
+            "paras": [
+              [
+                "Today was the best day of camp so far, even though it started badly.",
+                "At six o’clock, Mr Hēnare woke our cabin by playing his guitar very loudly.",
+                "Breakfast was lumpy porridge, but I was so hungry that I ate two bowls."
+              ],
+              [
+                "After breakfast, our group walked to the flying fox.",
+                "It stretched across a deep gully, and from the top platform it looked about a kilometre long.",
+                "My stomach was doing somersaults.",
+                "Sam, the camp instructor, checked our helmets and harnesses twice.",
+                "‘This wire could hold the weight of a car,’ he told us, ‘so you are perfectly safe.’"
+              ],
+              [
+                "When it was my turn, my legs felt like jelly.",
+                "I stood at the edge for ages while everyone cheered.",
+                "Finally, I closed my eyes and stepped off.",
+                "For a second I was falling, and then I was flying!",
+                "The trees rushed past in a green blur, and I screamed the whole way down.",
+                "At the bottom, I could not stop grinning."
+              ],
+              [
+                "At lunch, something funny happened.",
+                "A weka crept out of the bushes, grabbed Priya’s sandwich and ran off with it.",
+                "Mrs Lee said that weka are famous for being **cheeky** thieves.",
+                "Priya didn’t think it was funny, so I gave her half of mine."
+              ],
+              [
+                "Tonight we are having a talent show around the campfire, and the teachers will sit in the front row.",
+                "We are even allowed to stay up until nine o’clock.",
+                "I am going to tell jokes.",
+                "I’m nervous, but after the flying fox, I feel like I can do anything."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "sequence",
+            "q": "What did the writer’s group do straight after breakfast?",
+            "opts": [
+              "walked to the flying fox",
+              "had a talent show",
+              "ate lunch with Priya",
+              "listened to Mr Hēnare’s guitar"
+            ],
+            "a": 0,
+            "ev": [
+              3
+            ],
+            "why": "The diary says, ‘After breakfast, our group walked to the flying fox.’ The guitar was before breakfast, and lunch and the talent show came later.",
+            "whyZh": "日记里写着“早饭后，我们小组走到了滑索那里”。弹吉他是在早饭前，午饭和才艺表演都在后面。"
+          },
+          {
+            "skill": "figurative",
+            "q": "‘My legs felt like jelly.’ This means the writer’s legs…",
+            "opts": [
+              "were covered in sticky food",
+              "were very cold",
+              "felt weak and wobbly with fear",
+              "were sore from walking"
+            ],
+            "a": 2,
+            "ev": [
+              8,
+              9
+            ],
+            "why": "This is a simile. Jelly wobbles, so the writer means their legs were shaky because they were scared — they ‘stood at the edge for ages’ before stepping off.",
+            "whyZh": "这是一个明喻。果冻会晃来晃去，作者的意思是害怕得腿发软、发抖——所以作者在边上“站了好久”才敢跳下去。"
+          },
+          {
+            "skill": "vocab",
+            "q": "Mrs Lee said weka are ‘cheeky thieves’. What does ‘cheeky’ mean here?",
+            "opts": [
+              "very shy",
+              "bold and a bit rude",
+              "extremely fast",
+              "very hungry"
+            ],
+            "a": 1,
+            "ev": [
+              15,
+              16
+            ],
+            "why": "The weka ‘crept out’, grabbed a sandwich and ran off — bold and a bit naughty. That is what ‘cheeky’ means.",
+            "whyZh": "秧鸡“悄悄溜出来”，抢了三明治就跑——胆子大又有点无礼。这就是 cheeky 的意思。"
+          },
+          {
+            "skill": "character",
+            "q": "How did the writer feel at the bottom of the flying fox?",
+            "opts": [
+              "sick and dizzy",
+              "angry with Sam",
+              "bored and tired",
+              "thrilled and proud"
+            ],
+            "a": 3,
+            "ev": [
+              13,
+              21
+            ],
+            "why": "At the bottom the writer ‘could not stop grinning’, and later says, ‘I feel like I can do anything.’ They were thrilled and proud.",
+            "whyZh": "到了终点，作者“笑得合不拢嘴”，后来还说“我觉得自己什么都能做到”。作者既兴奋又自豪。"
+          },
+          {
+            "skill": "inference",
+            "q": "Why did the writer give Priya half of their sandwich?",
+            "opts": [
+              "because the writer was too full",
+              "because Mrs Lee told them to share",
+              "to stop the weka coming back",
+              "to cheer her up after the weka took hers"
+            ],
+            "a": 3,
+            "ev": [
+              15,
+              17
+            ],
+            "why": "The weka stole Priya’s sandwich and ‘Priya didn’t think it was funny’, so the writer shared to make her feel better. The diary never says Mrs Lee asked them to.",
+            "whyZh": "秧鸡偷走了 Priya 的三明治，“Priya 一点也不觉得好笑”，所以作者分给她一半，让她心情好一点。日记里没有说是 Mrs Lee 让分的。"
+          },
+          {
+            "skill": "summary",
+            "q": "Which sentence BEST sums up the writer’s day?",
+            "opts": [
+              "A scary challenge turned into a proud moment.",
+              "The food at camp was terrible.",
+              "A weka spoiled the whole day.",
+              "The writer spent the day practising jokes."
+            ],
+            "a": 0,
+            "ev": [
+              0,
+              21
+            ],
+            "why": "The writer calls it ‘the best day of camp so far’ and, after facing their fear on the flying fox, feels ‘like I can do anything’. The other choices are small parts of the day or not true.",
+            "whyZh": "作者说这是“营地生活到目前为止最棒的一天”，在滑索上战胜恐惧后，觉得“自己什么都能做到”。其他选项只是一天里的小部分，或者不符合事实。"
+          }
+        ]
+      },
+      {
+        "id": "r04",
+        "title": "Game Review: Ruru’s Night Flight",
+        "type": "review",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Game Review: Ruru’s Night Flight",
+            "paras": [
+              [
+                "Rating: 4 stars out of 5."
+              ],
+              [
+                "If you like puzzles and adventure, Ruru’s Night Flight is a game you will not want to put down.",
+                "You play as Ruru, a young morepork owl who must find her way home through a dark forest before the sun comes up.",
+                "Along the way, she meets friendly kiwi, grumpy wētā and a very sleepy kererū.",
+                "The game was made by a small team in Dunedin and costs $15."
+              ],
+              [
+                "The best thing about the game is how it looks.",
+                "Every level is painted in deep blues and purples, and the glowing mushrooms and glow-worms are **mesmerising**.",
+                "I often stopped playing just to stare at the screen.",
+                "The music is gentle and calm, which suits the night-time setting perfectly."
+              ],
+              [
+                "The puzzles start easy but quickly get harder.",
+                "In one level, you must move stones to block a stream so that a kiwi can cross.",
+                "In another, you have to remember the order of owl calls to open a secret door.",
+                "I had to restart some levels six or seven times, but I never felt like giving up.",
+                "Luckily, there is a hint button for when you get really stuck."
+              ],
+              [
+                "However, the game is not perfect.",
+                "There are only twelve levels, so I finished it in one weekend.",
+                "The controls can also be slow, which is annoying when you are trying to dodge a hungry stoat."
+              ],
+              [
+                "Overall, Ruru’s Night Flight is beautiful, clever and great value.",
+                "I would recommend it to anyone aged eight and over who enjoys a challenge.",
+                "I just hope the makers add more levels soon!"
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "What must Ruru do in the game?",
+            "opts": [
+              "catch a hungry stoat",
+              "collect glowing mushrooms",
+              "build a nest in a tree",
+              "find her way home before the sun comes up"
+            ],
+            "a": 3,
+            "ev": [
+              2
+            ],
+            "why": "The review says Ruru ‘must find her way home through a dark forest before the sun comes up’.",
+            "whyZh": "评论里说 Ruru“必须在太阳升起之前穿过黑暗的森林找到回家的路”。"
+          },
+          {
+            "skill": "vocab",
+            "q": "The glowing mushrooms and glow-worms are ‘mesmerising’. What does ‘mesmerising’ mean?",
+            "opts": [
+              "very scary and dangerous",
+              "so beautiful you can’t stop looking",
+              "too dark to see properly",
+              "noisy and annoying"
+            ],
+            "a": 1,
+            "ev": [
+              6,
+              7
+            ],
+            "why": "The next sentence explains it: ‘I often stopped playing just to stare at the screen.’ Something mesmerising holds your attention so you can’t look away.",
+            "whyZh": "下一句解释了：“我经常停下来，只为了盯着屏幕看。”mesmerising 指美得让人移不开眼睛。"
+          },
+          {
+            "skill": "fact-opinion",
+            "q": "Which sentence from the review is a FACT?",
+            "opts": [
+              "The best thing about the game is how it looks.",
+              "The music suits the setting perfectly.",
+              "There are only twelve levels.",
+              "It is beautiful, clever and great value."
+            ],
+            "a": 2,
+            "ev": [
+              15
+            ],
+            "why": "You can check how many levels a game has, so that is a fact. ‘The best thing’, ‘perfectly’ and ‘beautiful’ are the reviewer’s opinions.",
+            "whyZh": "游戏有多少关是可以核实的，所以那是事实。“最好的地方”“完美地”“漂亮”都是评论者的观点。"
+          },
+          {
+            "skill": "structure",
+            "q": "What is the job of the paragraph that begins ‘However, the game is not perfect’?",
+            "opts": [
+              "to describe the game’s problems",
+              "to explain how to play the first level",
+              "to describe the music",
+              "to tell the reader the price"
+            ],
+            "a": 0,
+            "ev": [
+              14,
+              15,
+              16
+            ],
+            "why": "‘However’ signals a change: after the good points, the reviewer lists the problems — only twelve levels and slow controls.",
+            "whyZh": "However（然而）表示转折：说完优点后，评论者开始列出缺点——只有十二关，操作反应慢。"
+          },
+          {
+            "skill": "compare",
+            "q": "How does the reviewer feel about the puzzles compared with the controls?",
+            "opts": [
+              "likes the controls but finds the puzzles boring",
+              "dislikes both the puzzles and the controls",
+              "likes the puzzles but finds the controls annoying",
+              "thinks the puzzles and controls are both perfect"
+            ],
+            "a": 2,
+            "ev": [
+              12,
+              16
+            ],
+            "why": "The reviewer restarted hard levels many times ‘but I never felt like giving up’ — they enjoyed the puzzles. The slow controls, though, are called ‘annoying’.",
+            "whyZh": "评论者很多关都重来了好几次，“但从没想过放弃”——说明喜欢这些谜题。而反应慢的操作却被说成“很烦人”。"
+          },
+          {
+            "skill": "inference",
+            "q": "Which player would the reviewer most likely think will NOT enjoy this game?",
+            "opts": [
+              "someone who loves adventure games",
+              "someone who gets upset by hard puzzles",
+              "someone who enjoys a challenge",
+              "someone who likes beautiful pictures"
+            ],
+            "a": 1,
+            "ev": [
+              9,
+              18
+            ],
+            "why": "The reviewer says the puzzles ‘quickly get harder’ and recommends the game to people who enjoy ‘a challenge’. A player who gets upset by hard puzzles would probably not enjoy it.",
+            "whyZh": "评论者说谜题“很快就变难了”，并把游戏推荐给喜欢“挑战”的人。一遇到难题就沮丧的玩家大概不会喜欢。"
+          }
+        ]
+      },
+      {
+        "id": "r05",
+        "title": "Make Your Own Rain Gauge",
+        "type": "procedure",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Make Your Own Rain Gauge",
+            "paras": [
+              [
+                "A rain gauge measures how much rain falls in one place.",
+                "Farmers, gardeners and weather scientists all use rain gauges to keep track of rainfall.",
+                "With this simple one, you can keep your own weather record at home."
+              ],
+              [
+                "You will need:"
+              ],
+              [
+                "• a large, clear plastic bottle with straight sides"
+              ],
+              [
+                "• a handful of small stones"
+              ],
+              [
+                "• a ruler"
+              ],
+              [
+                "• a permanent marker"
+              ],
+              [
+                "• sticky tape"
+              ],
+              [
+                "• scissors and an adult helper"
+              ],
+              [
+                "What to do:"
+              ],
+              [
+                "1. Ask an adult to cut the top off the bottle, about a third of the way down."
+              ],
+              [
+                "2. Put the small stones in the bottom of the bottle.",
+                "They will stop the gauge from blowing over in the wind."
+              ],
+              [
+                "3. Pour in water until it just covers the stones.",
+                "Draw a line at the top of the water and label it 0."
+              ],
+              [
+                "4. Tape the ruler to the side of the bottle so that its zero lines up with your line."
+              ],
+              [
+                "5. Turn the cut-off top upside down and push it into the bottle like a **funnel**.",
+                "This catches the rain and stops leaves from falling in."
+              ],
+              [
+                "6. Place your gauge outside on flat ground, away from trees and buildings.",
+                "If it is too close to a tree, drips from the leaves will give you the wrong reading."
+              ],
+              [
+                "7. Check it at the same time every day.",
+                "Write down how many millimetres of rain have fallen, then tip out the extra water so the level is back at 0."
+              ],
+              [
+                "Top tip: After a week, make a bar graph of your results to see which day was the wettest.",
+                "You can also compare your results with a friend who lives in another part of town."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "sequence",
+            "q": "What should you do straight after putting the stones in the bottle?",
+            "opts": [
+              "tape the ruler to the bottle",
+              "pour in water until it covers the stones",
+              "cut the top off the bottle",
+              "place the gauge outside"
+            ],
+            "a": 1,
+            "ev": [
+              12,
+              14
+            ],
+            "why": "Step 2 is putting in the stones, and Step 3 says, ‘Pour in water until it just covers the stones.’",
+            "whyZh": "第 2 步是放石头，第 3 步写着“倒水，直到刚好没过石头”。"
+          },
+          {
+            "skill": "evidence",
+            "q": "Why do you put small stones in the bottom of the bottle?",
+            "opts": [
+              "to stop the gauge blowing over",
+              "to make the water clean",
+              "to measure the rain",
+              "to keep insects out"
+            ],
+            "a": 0,
+            "ev": [
+              13
+            ],
+            "why": "Step 2 explains: ‘They will stop the gauge from blowing over in the wind.’",
+            "whyZh": "第 2 步解释了：“它们能防止雨量计被风吹倒。”"
+          },
+          {
+            "skill": "vocab",
+            "q": "In Step 5, the top is used ‘like a funnel’. What does a funnel do?",
+            "opts": [
+              "measures how heavy something is",
+              "keeps liquid cold",
+              "cuts plastic into pieces",
+              "guides liquid into a narrow opening"
+            ],
+            "a": 3,
+            "ev": [
+              17,
+              18
+            ],
+            "why": "The next sentence says it ‘catches the rain’. A funnel is wide at the top and narrow at the bottom, so it guides the rain into the bottle.",
+            "whyZh": "下一句说它能“接住雨水”。漏斗上宽下窄，能把雨水引进瓶子里。"
+          },
+          {
+            "skill": "purpose",
+            "q": "Why does the writer include the sentence about drips from leaves?",
+            "opts": [
+              "to describe how trees drink water",
+              "to warn that leaves are poisonous",
+              "to explain why the gauge must not be near trees",
+              "to show that the gauge needs cleaning"
+            ],
+            "a": 2,
+            "ev": [
+              19,
+              20
+            ],
+            "why": "Step 6 says to place the gauge ‘away from trees and buildings’, and the next sentence gives the reason: drips from leaves would give ‘the wrong reading’.",
+            "whyZh": "第 6 步说要把雨量计放在“远离树木和建筑物”的地方，下一句给出了原因：树叶滴下的水会让读数“不准确”。"
+          },
+          {
+            "skill": "structure",
+            "q": "Why are the instructions numbered?",
+            "opts": [
+              "because the steps must be done in order",
+              "to show how many materials you need",
+              "because every step is equally hard",
+              "to show how many days the project takes"
+            ],
+            "a": 0,
+            "ev": [
+              11,
+              15,
+              16
+            ],
+            "why": "The numbers show the order of the steps. For example, you can’t tape the ruler on (Step 4) until you have drawn the 0 line (Step 3).",
+            "whyZh": "编号表示步骤的先后顺序。比如，没画好 0 刻度线（第 3 步）之前，就不能贴尺子（第 4 步）。"
+          },
+          {
+            "skill": "inference",
+            "q": "Ana forgot to check her gauge for three rainy days. What would her next reading show?",
+            "opts": [
+              "only the rain from the last day",
+              "no rain, because the water would dry up",
+              "the wrong amount, because the stones would move",
+              "the rain from all three days added together"
+            ],
+            "a": 3,
+            "ev": [
+              15,
+              22
+            ],
+            "why": "You are told to tip out the water every day ‘so the level is back at 0’. If Ana forgot, the water would keep building up, so her reading would include the rain from all three days together.",
+            "whyZh": "说明里要求每天倒掉多余的水，“让水位回到 0”。如果 Ana 忘了倒，水会一直积累，所以她的读数会把三天的雨量都加在一起。"
+          }
+        ]
+      },
+      {
+        "id": "r06",
+        "title": "Low Tide",
+        "type": "poem",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Low Tide",
+            "paras": [
+              [
+                "When the tide slides out at the end of the bay,",
+                "the sea pulls back its blanket of blue",
+                "and leaves the rocks uncovered, wet and shining,",
+                "like a table set for breakfast,",
+                "with puddles for cups and seaweed for napkins.",
+                "Gulls arrive first, of course, the rudest guests,",
+                "shouting and **shoving** for the best seats,",
+                "while I follow Dad carefully across the slippery stones."
+              ],
+              [
+                "In every pool there is a tiny world.",
+                "Anemones close their red fists when I touch them,",
+                "then slowly open again, like flowers waking up.",
+                "A crab sidesteps under a ledge,",
+                "holding up his claws like a boxer,",
+                "daring me to come closer.",
+                "I don’t.",
+                "Instead I watch a shrimp as clear as glass",
+                "zip from shadow to shadow, quick as a thought."
+              ],
+              [
+                "We lose track of time, my dad and I,",
+                "lifting seaweed curtains to find hidden starfish,",
+                "counting periwinkles as small as peas,",
+                "until a cold, foamy wave licks my ankles",
+                "and the sea begins to whisper, ‘My turn.’",
+                "Dad checks the time and points to the shore.",
+                "One by one, the pools disappear",
+                "as the ocean takes its table back,",
+                "and the gulls fly off to find another feast."
+              ],
+              [
+                "Walking home with sandy toes and an empty bucket,",
+                "I don’t mind that we left everything behind.",
+                "Our bucket was only for looking, never for keeping.",
+                "The crab, the starfish and the sleepy anemones",
+                "belong to the sea, not to me.",
+                "Tomorrow the tide will go out again,",
+                "and the tiny world will be waiting,",
+                "as long as we leave it the way we found it."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "Who is with the speaker at the beach?",
+            "opts": [
+              "a school friend",
+              "Grandma",
+              "Dad",
+              "nobody"
+            ],
+            "a": 2,
+            "ev": [
+              7,
+              17
+            ],
+            "why": "The poem says, ‘I follow Dad carefully across the slippery stones’ and ‘We lose track of time, my dad and I’.",
+            "whyZh": "诗里写着“我小心地跟着爸爸走过湿滑的石头”和“我和爸爸都忘了时间”。"
+          },
+          {
+            "skill": "vocab",
+            "q": "The gulls are ‘shoving for the best seats’. What does ‘shoving’ mean?",
+            "opts": [
+              "singing loudly",
+              "waiting politely",
+              "flying in circles",
+              "pushing roughly"
+            ],
+            "a": 3,
+            "ev": [
+              5,
+              6
+            ],
+            "why": "The gulls are ‘the rudest guests’, shouting and trying to get ‘the best seats’. Rude guests push each other roughly — that is shoving.",
+            "whyZh": "海鸥是“最没礼貌的客人”，一边叫一边抢“最好的座位”。没礼貌的客人会互相推搡——这就是 shoving。"
+          },
+          {
+            "skill": "figurative",
+            "q": "The crab is ‘holding up his claws like a boxer’. What does this suggest about the crab?",
+            "opts": [
+              "It is ready to defend itself.",
+              "It is waving hello.",
+              "It is very sleepy.",
+              "It wants to be picked up."
+            ],
+            "a": 0,
+            "ev": [
+              12,
+              13
+            ],
+            "why": "A boxer holds up his fists, ready to fight. The crab holds up its claws and is ‘daring me to come closer’ — it is ready to defend itself.",
+            "whyZh": "拳击手举起拳头，随时准备打斗。螃蟹举起钳子，“好像在挑衅我走近一点”——它准备保护自己。"
+          },
+          {
+            "skill": "figurative",
+            "q": "Which line gives the sea a human action?",
+            "opts": [
+              "‘counting periwinkles as small as peas’",
+              "‘and the sea begins to whisper’",
+              "‘In every pool there is a tiny world’",
+              "‘Walking home with sandy toes’"
+            ],
+            "a": 1,
+            "ev": [
+              21
+            ],
+            "why": "Only people whisper and say ‘My turn’, so here the sea is described as if it were a person. This is called personification.",
+            "whyZh": "只有人才会低声说话、说“轮到我了”，所以这里把大海写得像人一样。这叫拟人。"
+          },
+          {
+            "skill": "character",
+            "q": "Which word best describes the speaker?",
+            "opts": [
+              "greedy",
+              "respectful",
+              "bored",
+              "careless"
+            ],
+            "a": 1,
+            "ev": [
+              27,
+              28,
+              30
+            ],
+            "why": "The speaker only looks at the creatures (‘only for looking, never for keeping’) and believes they ‘belong to the sea, not to me’ — that shows respect for nature. The speaker isn’t careless (they walk ‘carefully’) or bored (they ‘lose track of time’).",
+            "whyZh": "诗人只看不拿（“只是用来看的，从不用来装走”），并且认为这些小生物“属于大海，不属于我”——这表现出对大自然的尊重。诗人并不粗心（走得“很小心”），也不无聊（玩得“忘了时间”）。"
+          },
+          {
+            "skill": "main-idea",
+            "q": "What is the main message of the poem?",
+            "opts": [
+              "Rock pools are dangerous places.",
+              "Gulls are the rudest birds of all.",
+              "Enjoy nature, but leave it as you found it.",
+              "It is fun to collect sea creatures."
+            ],
+            "a": 2,
+            "ev": [
+              28,
+              33
+            ],
+            "why": "The last stanza says the bucket was ‘only for looking, never for keeping’, and the tiny world will be waiting ‘as long as we leave it the way we found it.’",
+            "whyZh": "最后一节说桶“只是用来看的，从不用来装走”，而且只要“我们让它保持原样”，这个小世界就会一直在那里。"
+          }
+        ]
+      },
+      {
+        "id": "r07",
+        "title": "The Silver Bracelet",
+        "type": "narrative",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "The Silver Bracelet",
+            "paras": [
+              [
+                "Mia was building a sandcastle at Ōrewa Beach when her spade struck something hard.",
+                "She brushed away the sand and gasped.",
+                "It was a silver bracelet, decorated with tiny blue stones that sparkled like drops of seawater."
+              ],
+              [
+                "‘Finders keepers!’ said her brother Sam.",
+                "‘You should keep it, Mia.’"
+              ],
+              [
+                "For a moment, Mia imagined wearing the bracelet to school.",
+                "Everyone would ask where she got it.",
+                "Then she noticed some words engraved on the inside: To June, with love."
+              ],
+              [
+                "Mia’s stomach twisted.",
+                "Somewhere, a person called June might be very upset.",
+                "She showed the bracelet to Mum, who suggested they ask at the surf club.",
+                "Lost things are often handed in there."
+              ],
+              [
+                "When Mia described the bracelet, the lifeguard nodded straight away.",
+                "An elderly woman had been in that morning, **retracing** her steps along the beach and searching every patch of sand.",
+                "She had left her phone number, just in case.",
+                "Mum rang the number, and a shaky voice answered."
+              ],
+              [
+                "That afternoon, June came to collect the bracelet.",
+                "When Mia placed it in her hand, June’s eyes filled with tears.",
+                "‘My husband gave me this fifty years ago,’ she said softly.",
+                "‘I thought it was gone forever.’",
+                "She hugged Mia tightly.",
+                "‘You are a very honest young lady,’ she said."
+              ],
+              [
+                "On the way home, Sam was quiet for a long time.",
+                "Behind them, the sea sparkled in the evening sun.",
+                "Then he said, ‘I’m glad you didn’t keep it.’",
+                "Mia smiled.",
+                "She did not have a bracelet to wear to school, but she felt as if she was glowing all over."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "sequence",
+            "q": "What did Mia do after she noticed the words inside the bracelet?",
+            "opts": [
+              "She showed the bracelet to Mum.",
+              "She wore it to school.",
+              "She buried it in the sand again.",
+              "She gave it to Sam."
+            ],
+            "a": 0,
+            "ev": [
+              7,
+              10
+            ],
+            "why": "After she noticed the words ‘To June, with love’, Mia ‘showed the bracelet to Mum’, who suggested asking at the surf club.",
+            "whyZh": "Mia 看到“To June, with love”这几个字以后，就“把手镯拿给妈妈看”，妈妈建议去冲浪救生俱乐部问问。"
+          },
+          {
+            "skill": "vocab",
+            "q": "The woman had been ‘retracing her steps along the beach’. What does ‘retracing her steps’ mean?",
+            "opts": [
+              "running as fast as she could",
+              "going back the way she had come",
+              "drawing pictures in the sand",
+              "counting how far she had walked"
+            ],
+            "a": 1,
+            "ev": [
+              13
+            ],
+            "why": "She was ‘searching every patch of sand’ along the beach — going back over the path she had walked, looking for the bracelet. ‘Re-’ means again.",
+            "whyZh": "她沿着海滩“仔细搜寻每一片沙地”——顺着自己走过的路再走一遍，寻找手镯。re- 表示“再一次”。"
+          },
+          {
+            "skill": "character",
+            "q": "Why did Mia decide not to keep the bracelet?",
+            "opts": [
+              "Sam told her to give it back.",
+              "She did not like the colour.",
+              "She realised its owner might be very upset.",
+              "Mum said it was too expensive."
+            ],
+            "a": 2,
+            "ev": [
+              8,
+              9
+            ],
+            "why": "After reading the words inside, ‘Mia’s stomach twisted’ and she thought, ‘Somewhere, a person called June might be very upset.’ Sam had actually told her to keep it.",
+            "whyZh": "看到手镯内侧的字后，“Mia 心里一紧”，她想到“某个叫 June 的人可能正非常难过”。其实 Sam 是叫她留下的。"
+          },
+          {
+            "skill": "evidence",
+            "q": "Which sentence BEST shows that the bracelet meant a lot to June?",
+            "opts": [
+              "‘That afternoon, June came to collect the bracelet’",
+              "‘She had left her phone number, just in case’",
+              "‘Lost things are often handed in there’",
+              "‘My husband gave me this fifty years ago’"
+            ],
+            "a": 3,
+            "ev": [
+              17,
+              18
+            ],
+            "why": "It was a gift from her husband that she had kept for fifty years, and her ‘eyes filled with tears’ when she got it back. That shows how special it was.",
+            "whyZh": "这是丈夫送她的礼物，她珍藏了五十年，拿回手镯时她“眼里含满了泪水”。这说明手镯对她意义非凡。"
+          },
+          {
+            "skill": "figurative",
+            "q": "At the end, Mia ‘felt as if she was glowing all over’. This means she…",
+            "opts": [
+              "had a fever from the sun",
+              "felt very happy and proud inside",
+              "was covered in shiny sand",
+              "was embarrassed and red-faced"
+            ],
+            "a": 1,
+            "ev": [
+              26
+            ],
+            "why": "Mia wasn’t really glowing. This figurative phrase means that doing the right thing made her feel warm, happy and proud inside.",
+            "whyZh": "Mia 并不是真的在发光。这是比喻的说法，意思是做了正确的事，让她心里暖暖的、又开心又自豪。"
+          },
+          {
+            "skill": "inference",
+            "q": "What does Sam’s comment at the end suggest?",
+            "opts": [
+              "He has changed his mind about ‘finders keepers’.",
+              "He wanted the bracelet for himself.",
+              "He was angry with June.",
+              "He thought Mia should have sold it."
+            ],
+            "a": 0,
+            "ev": [
+              3,
+              24
+            ],
+            "why": "At the start Sam said, ‘Finders keepers!’ After seeing how much the bracelet meant to June, he says, ‘I’m glad you didn’t keep it.’ He has changed his mind.",
+            "whyZh": "一开始 Sam 说“谁捡到就归谁！”看到手镯对 June 这么重要后，他说“我很高兴你没有留下它”。他改变了想法。"
+          }
+        ]
+      },
+      {
+        "id": "r08",
+        "title": "Why Does the Moon Change Shape?",
+        "type": "report",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Why Does the Moon Change Shape?",
+            "paras": [
+              [
+                "Have you ever noticed that the Moon seems to change shape?",
+                "Some nights it is a thin, curved sliver, and on other nights it is a bright, round circle.",
+                "In fact, the Moon does not really change shape at all.",
+                "It is always a ball of rock."
+              ],
+              [
+                "Where does moonlight come from?"
+              ],
+              [
+                "Unlike the Sun, the Moon does not make its own light.",
+                "We can only see it because sunlight shines on it and bounces off its surface towards Earth.",
+                "At any time, the half of the Moon that faces the Sun is lit up, while the other half is dark."
+              ],
+              [
+                "How do the phases work?"
+              ],
+              [
+                "The Moon travels around Earth, and one full trip takes about a month.",
+                "As it moves, we see different amounts of its sunlit half.",
+                "These different shapes are called the **phases** of the Moon."
+              ],
+              [
+                "At the start of the cycle is the new moon.",
+                "The sunlit side faces away from us, so the Moon is almost impossible to see.",
+                "Over the next two weeks, more and more of the lit side comes into view.",
+                "We say the Moon is waxing, which means growing.",
+                "When the whole sunlit side faces Earth, we see a full moon.",
+                "After that, the lit part gets smaller night after night, and the Moon is said to be waning.",
+                "About 29 and a half days after one new moon, the next new moon arrives and the cycle begins again."
+              ],
+              [
+                "Did you know?"
+              ],
+              [
+                "The Moon spins slowly as it travels around Earth.",
+                "Because it spins once in the time it takes to go around us, we always see the same side of the Moon."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "Why can we see the Moon?",
+            "opts": [
+              "It makes its own light.",
+              "It is covered in glowing rocks.",
+              "Earth shines a light on it.",
+              "Sunlight bounces off it towards Earth."
+            ],
+            "a": 3,
+            "ev": [
+              5,
+              6
+            ],
+            "why": "The report says the Moon ‘does not make its own light’, and that we see it because ‘sunlight shines on it and bounces off its surface towards Earth.’",
+            "whyZh": "文中说月亮“自己不会发光”，我们能看见它，是因为“阳光照在它上面，又从表面反射到地球”。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘These different shapes are called the phases of the Moon.’ What are ‘phases’?",
+            "opts": [
+              "the rocks on the Moon’s surface",
+              "times when clouds hide the Moon",
+              "the different shapes the Moon seems to have",
+              "the different colours of the Moon"
+            ],
+            "a": 2,
+            "ev": [
+              10,
+              11
+            ],
+            "why": "The sentence itself tells you: the phases are ‘these different shapes’ — the different amounts of the sunlit half that we see.",
+            "whyZh": "这句话本身就告诉你：phases（月相）就是“这些不同的形状”——也就是我们看到的被照亮部分的多少不同。"
+          },
+          {
+            "skill": "structure",
+            "q": "What is the purpose of the heading ‘Did you know?’",
+            "opts": [
+              "to ask the reader a test question",
+              "to introduce an extra interesting fact",
+              "to explain the meaning of ‘waxing’",
+              "to give the writer’s opinion"
+            ],
+            "a": 1,
+            "ev": [
+              19,
+              21
+            ],
+            "why": "‘Did you know?’ introduces a bonus fact at the end: the Moon spins, so ‘we always see the same side of the Moon.’",
+            "whyZh": "“你知道吗？”引出了文章末尾一个额外的有趣知识：月亮会自转，所以“我们总是看到月亮的同一面”。"
+          },
+          {
+            "skill": "sequence",
+            "q": "Starting from a new moon, which order of phases is correct?",
+            "opts": [
+              "new moon → waxing → full moon → waning",
+              "full moon → new moon → waxing → waning",
+              "new moon → waning → full moon → waxing",
+              "waxing → waning → new moon → full moon"
+            ],
+            "a": 0,
+            "ev": [
+              15,
+              16,
+              17
+            ],
+            "why": "The report starts with the new moon, then says the Moon is ‘waxing’ as more appears, reaches a ‘full moon’, and after that ‘is said to be waning’.",
+            "whyZh": "文章从新月讲起，接着说更多部分出现时月亮在 waxing（渐盈），然后到满月，之后就 waning（渐亏）。"
+          },
+          {
+            "skill": "compare",
+            "q": "How is a full moon different from a new moon?",
+            "opts": [
+              "It is much closer to Earth.",
+              "It is lit by the Sun, but a new moon is not.",
+              "We see all of its lit side; at a new moon we see almost none.",
+              "It is a bigger ball of rock."
+            ],
+            "a": 2,
+            "ev": [
+              13,
+              16
+            ],
+            "why": "At a new moon ‘the sunlit side faces away from us’; at a full moon ‘the whole sunlit side faces Earth’. The Moon is always half lit by the Sun, and its size does not change.",
+            "whyZh": "新月时“被照亮的一面背对着我们”；满月时“整个被照亮的一面都朝向地球”。月亮总有一半被太阳照亮，它的大小也不会变。"
+          },
+          {
+            "skill": "summary",
+            "q": "Which sentence best sums up the main idea of the report?",
+            "opts": [
+              "The Moon is a ball of rock that spins slowly.",
+              "A new moon arrives every 29 and a half days.",
+              "The Moon is brighter than the Sun at night.",
+              "The Moon seems to change shape because we see different amounts of its lit half."
+            ],
+            "a": 3,
+            "ev": [
+              2,
+              10
+            ],
+            "why": "The whole report explains that the Moon ‘does not really change shape’ — as it travels around Earth, ‘we see different amounts of its sunlit half’. The other choices are small details or untrue.",
+            "whyZh": "整篇文章都在解释：月亮“其实并没有改变形状”——它绕地球运行时，“我们看到的被照亮部分多少不同”。其他选项只是小细节，或者是错的。"
+          }
+        ]
+      },
+      {
+        "id": "r09",
+        "title": "A Garden for Our School",
+        "type": "persuasive",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "A Garden for Our School",
+            "paras": [
+              [
+                "By Sione Taufa, Room 12."
+              ],
+              [
+                "I am writing to ask Ms Walker, our principal, to start a vegetable garden at our school.",
+                "My classmates and I have been talking about this idea for weeks.",
+                "I believe it would be one of the best things that have ever happened to Pōhutukawa School."
+              ],
+              [
+                "Firstly, a garden would help us learn.",
+                "We could measure how fast our plants grow, record the weather and work out how much water each bed needs.",
+                "That is science and maths in real life, not just in books."
+              ],
+              [
+                "Secondly, a garden would help us eat more healthily.",
+                "Children are more likely to try new vegetables if they have grown them themselves.",
+                "Last year, Kōwhai School down the road grew more than 100 kilograms of vegetables and used them in its lunch programme.",
+                "Why shouldn’t we do the same?"
+              ],
+              [
+                "Thirdly, a garden would bring our school community together.",
+                "Students from every class could take turns caring for the plants, and older students could teach the juniors.",
+                "We could even hold a harvest lunch for families at the end of the year."
+              ],
+              [
+                "Some people might say that a garden costs too much money and takes too much time.",
+                "However, six parents have already offered to help on Saturday mornings, and the garden centre on Main Street has promised to donate seeds and tools.",
+                "The space behind the hall is empty and gets sun all day, so it would be **ideal** for a garden."
+              ],
+              [
+                "Ms Walker, please say yes to a school garden.",
+                "Our class would love to present our plan at the next school assembly.",
+                "Together, we can grow something amazing."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "main-idea",
+            "q": "What does Sione want Ms Walker to do?",
+            "opts": [
+              "visit Kōwhai School",
+              "start a vegetable garden at the school",
+              "give the class more science lessons",
+              "buy seeds from the garden centre"
+            ],
+            "a": 1,
+            "ev": [
+              1,
+              17
+            ],
+            "why": "Sione begins, ‘I am writing to ask Ms Walker, our principal, to start a vegetable garden at our school,’ and near the end says, ‘Ms Walker, please say yes to a school garden.’",
+            "whyZh": "Sione 一开头就写“我写这篇文章，是想请我们的校长 Walker 女士在学校开辟一个菜园”，快结尾时又说“Walker 女士，请答应建一个学校菜园吧”。"
+          },
+          {
+            "skill": "fact-opinion",
+            "q": "Which of these ideas from the text is an OPINION?",
+            "opts": [
+              "A garden would be one of the best things ever to happen to the school.",
+              "Six parents have offered to help.",
+              "The space behind the hall gets sun all day.",
+              "Kōwhai School grew over 100 kilograms of vegetables."
+            ],
+            "a": 0,
+            "ev": [
+              3
+            ],
+            "why": "‘One of the best things that have ever happened’ is what Sione believes — other people might disagree. The other three can be checked, so they are facts.",
+            "whyZh": "“发生过的最好的事情之一”是 Sione 的看法——别人可能不同意。其他三项都可以核实，所以是事实。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘…so it would be ideal for a garden.’ What does ‘ideal’ mean?",
+            "opts": [
+              "too small",
+              "dangerous",
+              "perfect",
+              "expensive"
+            ],
+            "a": 2,
+            "ev": [
+              16
+            ],
+            "why": "The space ‘is empty and gets sun all day’ — exactly what a garden needs. So ‘ideal’ means perfect for it.",
+            "whyZh": "那块地“空着，而且整天都有阳光”——正是菜园需要的条件。所以 ideal 的意思是理想的、完美的。"
+          },
+          {
+            "skill": "evidence",
+            "q": "Which part answers people who think a garden costs too much?",
+            "opts": [
+              "‘Why shouldn’t we do the same?’",
+              "‘Together, we can grow something amazing.’",
+              "‘That is science and maths in real life’",
+              "‘the garden centre … has promised to donate seeds and tools’"
+            ],
+            "a": 3,
+            "ev": [
+              14,
+              15
+            ],
+            "why": "Right after saying some people think a garden ‘costs too much money’, Sione points out that seeds and tools will be donated and parents will help, so it will not cost much.",
+            "whyZh": "Sione 先提到有人认为菜园“太花钱”，紧接着就指出种子和工具会有人捐，家长也会来帮忙，所以花不了多少钱。"
+          },
+          {
+            "skill": "structure",
+            "q": "Why does Sione use the words ‘Firstly’, ‘Secondly’ and ‘Thirdly’?",
+            "opts": [
+              "to show he is giving separate reasons, one by one",
+              "to show the order the vegetables will grow",
+              "to tell Ms Walker what to do first",
+              "to show which reason matters least"
+            ],
+            "a": 0,
+            "ev": [
+              4,
+              7,
+              11
+            ],
+            "why": "Each word starts a new reason for the garden — learning, healthy eating and bringing people together. They help the reader follow his argument.",
+            "whyZh": "这几个词各自引出一个支持建菜园的理由——学习、健康饮食和凝聚大家。它们帮助读者跟上他的论证。"
+          },
+          {
+            "skill": "purpose",
+            "q": "Why does Sione mention Kōwhai School?",
+            "opts": [
+              "to complain that Kōwhai School is better",
+              "to show that a school garden can really work",
+              "to ask Ms Walker to visit it",
+              "to explain where the garden centre is"
+            ],
+            "a": 1,
+            "ev": [
+              9,
+              10
+            ],
+            "why": "He gives Kōwhai School as a real example — it grew ‘more than 100 kilograms of vegetables’ — and then asks, ‘Why shouldn’t we do the same?’ The example proves the idea can work.",
+            "whyZh": "他举 Kōwhai 学校作为真实的例子——那所学校种出了“一百多公斤蔬菜”——接着问“我们为什么不能也这样做呢？”这个例子证明这个想法行得通。"
+          }
+        ]
+      },
+      {
+        "id": "r10",
+        "title": "Kate Sheppard: Votes for Women",
+        "type": "biography",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Kate Sheppard: Votes for Women",
+            "paras": [
+              [
+                "Today, New Zealanders aged 18 and over can vote in elections.",
+                "But in the 1880s, women were not allowed to vote in national elections.",
+                "One woman, Kate Sheppard, worked for years to change that."
+              ],
+              [
+                "Kate was born in Liverpool, England, in 1847.",
+                "As a young woman, she moved to Christchurch with her family.",
+                "She married Walter Sheppard in 1871 and had a son.",
+                "She was clever, hard-working and a talented writer.",
+                "Kate believed that women were just as able as men to make important decisions about their country."
+              ],
+              [
+                "In the late 1880s, Kate began to campaign for women’s right to vote.",
+                "She wrote letters to newspapers, gave speeches and handed out leaflets.",
+                "Many people **opposed** the idea.",
+                "Some said that women belonged at home and should not be involved in politics.",
+                "But Kate refused to give up."
+              ],
+              [
+                "Together with other women, she organised huge petitions, which are written requests signed by many people.",
+                "Women travelled from house to house and town to town collecting signatures.",
+                "In 1893, petitions signed by nearly 32,000 women were taken to Parliament.",
+                "The biggest one was made of sheets glued together into a roll about 270 metres long.",
+                "When it was unrolled in Parliament, it stretched the whole length of the debating chamber."
+              ],
+              [
+                "On 19 September 1893, a new law was signed.",
+                "New Zealand became the first self-governing country in the world where all women could vote in national elections.",
+                "Just ten weeks later, tens of thousands of women voted for the very first time.",
+                "Other countries, such as Australia and Britain, followed later."
+              ],
+              [
+                "Kate Sheppard died in 1934.",
+                "Today, her face is on the New Zealand ten-dollar note, and she is remembered as one of the country’s great leaders."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "sequence",
+            "q": "Which of these happened FIRST?",
+            "opts": [
+              "The biggest petition was collected.",
+              "A new law was signed.",
+              "Kate moved to Christchurch.",
+              "Women voted for the first time."
+            ],
+            "a": 2,
+            "ev": [
+              4
+            ],
+            "why": "Kate moved to Christchurch ‘as a young woman’, long before the 1893 petition, the new law and the first vote.",
+            "whyZh": "Kate 在“年轻的时候”就搬到了基督城，远远早于 1893 年的请愿书、新法律的签署和女性第一次投票。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘Many people opposed the idea.’ What does ‘opposed’ mean?",
+            "opts": [
+              "were excited about",
+              "did not understand",
+              "had never heard of",
+              "were against"
+            ],
+            "a": 3,
+            "ev": [
+              10,
+              11
+            ],
+            "why": "The next sentence explains it: some people said women ‘should not be involved in politics’. People who argue against an idea oppose it.",
+            "whyZh": "下一句解释了：有人说女性“不应该参与政治”。反对某个想法的人就是 oppose 它。"
+          },
+          {
+            "skill": "evidence",
+            "q": "How long was the roll made from the biggest 1893 petition?",
+            "opts": [
+              "about 32 metres",
+              "about 270 metres",
+              "about 18 metres",
+              "about 1893 metres"
+            ],
+            "a": 1,
+            "ev": [
+              16
+            ],
+            "why": "The text says the biggest petition was glued together ‘into a roll about 270 metres long’.",
+            "whyZh": "文中说最大的那份请愿书被粘成了“一卷大约 270 米长”的纸卷。"
+          },
+          {
+            "skill": "fact-opinion",
+            "q": "Which of these is a FACT about Kate Sheppard?",
+            "opts": [
+              "She died in 1934.",
+              "She was the bravest woman who ever lived.",
+              "Her campaign was the most exciting time in history.",
+              "She deserves to be on every banknote."
+            ],
+            "a": 0,
+            "ev": [
+              22
+            ],
+            "why": "You can check the year someone died, so that is a fact. ‘The bravest’, ‘the most exciting’ and ‘deserves’ are opinions that people could argue about.",
+            "whyZh": "一个人去世的年份可以核实，所以是事实。“最勇敢的”“最激动人心的”“应该”都是可以争论的观点。"
+          },
+          {
+            "skill": "purpose",
+            "q": "Why does the writer begin with ‘Today, New Zealanders aged 18 and over can vote’?",
+            "opts": [
+              "to explain how to enrol to vote",
+              "to describe Kate’s childhood",
+              "to argue that 18 is too young to vote",
+              "to show how different things were before Kate’s work"
+            ],
+            "a": 3,
+            "ev": [
+              0,
+              1
+            ],
+            "why": "The writer starts with today, then says, ‘But in the 1880s, women were not allowed to vote in national elections.’ The contrast shows how much Kate’s work changed things.",
+            "whyZh": "作者先写今天的情况，然后说“但在 19 世纪 80 年代，女性不能在全国选举中投票”。这种对比显示出 Kate 的努力带来了多大的改变。"
+          },
+          {
+            "skill": "summary",
+            "q": "Which is the best summary of Kate Sheppard’s life?",
+            "opts": [
+              "She moved from England and wrote letters to newspapers.",
+              "She collected 32,000 signatures all by herself.",
+              "She led a long campaign that helped win women the vote.",
+              "She was the first woman elected to Parliament."
+            ],
+            "a": 2,
+            "ev": [
+              2,
+              19
+            ],
+            "why": "The biography is about how Kate ‘worked for years’ for women’s votes, until New Zealand became ‘the first self-governing country in the world where all women could vote’. She did not collect the signatures alone, and the text never says she was elected.",
+            "whyZh": "这篇传记讲的是 Kate 怎样“努力了很多年”为女性争取投票权，直到新西兰成为“世界上第一个所有女性都能投票的自治国家”。签名不是她一个人收集的，文中也没有说她当选过议员。"
+          }
+        ]
+      },
+      {
+        "id": "r11",
+        "title": "The Missing Pavlova",
+        "type": "playscript",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "The Missing Pavlova",
+            "paras": [
+              [
+                "Characters: Nana, Mia (aged 10), Leo (aged 7) and Dad"
+              ],
+              [
+                "Scene: Nana’s kitchen on Christmas Day.",
+                "An empty plate sits on the bench."
+              ],
+              [
+                "NANA: (**wringing** her hands) My pavlova is gone!",
+                "I left it right here on the bench, and now there is only a plate.",
+                "Everyone is coming for lunch in an hour!"
+              ],
+              [
+                "MIA: Don’t worry, Nana.",
+                "I’ll find it."
+              ],
+              [
+                "(Mia pulls a notebook out of her pocket.)"
+              ],
+              [
+                "MIA: Detective Mia is on the case!",
+                "First, I need to look for clues."
+              ],
+              [
+                "DAD: (looking up from the newspaper) Maybe it walked away by itself.",
+                "I was reading the paper the whole time, so don’t look at me."
+              ],
+              [
+                "MIA: (rolling her eyes) Pavlovas can’t walk, Dad.",
+                "Leo, where were you ten minutes ago?"
+              ],
+              [
+                "LEO: (quickly hiding his hands behind his back) Nowhere.",
+                "I mean, outside.",
+                "I was playing cricket."
+              ],
+              [
+                "MIA: (looking at the window) It has been raining all morning."
+              ],
+              [
+                "LEO: Inside cricket, I mean."
+              ],
+              [
+                "MIA: Then why is there cream on your nose?"
+              ],
+              [
+                "LEO: (wiping his nose) That’s… sunscreen."
+              ],
+              [
+                "MIA: And why are your fingers sticky?"
+              ],
+              [
+                "LEO: (his shoulders drooping) Okay, okay.",
+                "I only had a tiny taste.",
+                "Then the dog jumped up and knocked the whole thing onto the floor!",
+                "I hid it under the table so nobody would see.",
+                "I’m sorry, Nana."
+              ],
+              [
+                "NANA: (laughing) Oh, Leo.",
+                "Why didn’t you just tell me?"
+              ],
+              [
+                "LEO: I thought you would be cross."
+              ],
+              [
+                "NANA: I would much rather have the truth than a pavlova.",
+                "And luckily, I made two."
+              ],
+              [
+                "(Nana opens the fridge and lifts out a second pavlova.)"
+              ],
+              [
+                "LEO: (grinning) Can I have the first piece?"
+              ],
+              [
+                "NANA: Only if you help me set the table."
+              ],
+              [
+                "DAD: Case closed, Detective Mia."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "structure",
+            "q": "What do the words in brackets, such as ‘(rolling her eyes)’, tell the actors?",
+            "opts": [
+              "how to move or act",
+              "which words to shout",
+              "when the play ends",
+              "what the audience should say"
+            ],
+            "a": 0,
+            "ev": [
+              13
+            ],
+            "why": "Words in brackets are stage directions. ‘(rolling her eyes)’ tells the actor playing Mia what to do while she speaks.",
+            "whyZh": "括号里的文字是舞台说明。“（翻了个白眼）”告诉演 Mia 的演员说这句话时要做什么动作。"
+          },
+          {
+            "skill": "vocab",
+            "q": "Nana is ‘wringing her hands’ when she finds the empty plate. What is she doing?",
+            "opts": [
+              "washing her hands at the sink",
+              "clapping because she is happy",
+              "twisting her hands together because she is upset",
+              "waving to the children"
+            ],
+            "a": 2,
+            "ev": [
+              3,
+              5
+            ],
+            "why": "Nana has just found her pavlova ‘gone’, and everyone is coming ‘in an hour’. People twist their hands together like this when they are worried or upset.",
+            "whyZh": "奶奶刚发现她的蛋白霜蛋糕“不见了”，而大家“一小时后”就要来了。人着急或难过的时候，会这样把两只手绞在一起。"
+          },
+          {
+            "skill": "sequence",
+            "q": "What happened just after Leo had a taste of the pavlova?",
+            "opts": [
+              "Nana made a second pavlova.",
+              "The dog knocked it onto the floor.",
+              "Mia found cream on Leo’s nose.",
+              "Leo went outside to play cricket."
+            ],
+            "a": 1,
+            "ev": [
+              24,
+              25
+            ],
+            "why": "Leo explains, ‘I only had a tiny taste.’ Then ‘the dog jumped up and knocked the whole thing onto the floor!’",
+            "whyZh": "Leo 解释说：“我只尝了一小口。”接着“狗跳了起来，把整个蛋糕撞到了地上！”"
+          },
+          {
+            "skill": "inference",
+            "q": "Why does Mia say that it has been raining all morning?",
+            "opts": [
+              "to tell Dad to bring in the washing",
+              "to explain why the pavlova melted",
+              "to suggest they eat lunch inside",
+              "to show Leo could not have been playing cricket outside"
+            ],
+            "a": 3,
+            "ev": [
+              16,
+              17,
+              18
+            ],
+            "why": "Leo says he was outside ‘playing cricket’, but Mia points out, ‘It has been raining all morning.’ She is showing that Leo’s story does not add up.",
+            "whyZh": "Leo 说他在外面“打板球”，但 Mia 指出“整个上午都在下雨”。她是在说明 Leo 的话对不上。"
+          },
+          {
+            "skill": "character",
+            "q": "How does Leo feel just before he tells the truth?",
+            "opts": [
+              "proud of what he has done",
+              "worried that he will get into trouble",
+              "angry with Mia",
+              "bored with the game"
+            ],
+            "a": 1,
+            "ev": [
+              23,
+              30
+            ],
+            "why": "His ‘shoulders drooping’ and his words ‘I thought you would be cross’ show he was afraid of getting into trouble.",
+            "whyZh": "他“耷拉着肩膀”，还说“我以为您会生气”，这些都说明他怕挨骂。"
+          },
+          {
+            "skill": "main-idea",
+            "q": "What lesson does the play mainly teach?",
+            "opts": [
+              "It is better to tell the truth than to hide a mistake.",
+              "Dogs should not be allowed in kitchens.",
+              "Pavlovas are hard to make.",
+              "Detectives always solve the case."
+            ],
+            "a": 0,
+            "ev": [
+              31
+            ],
+            "why": "Nana says, ‘I would much rather have the truth than a pavlova.’ Hiding the mistake only made Leo more worried, while telling the truth fixed everything.",
+            "whyZh": "奶奶说：“比起蛋白霜蛋糕，我更想听到实话。”隐瞒错误只会让 Leo 更担心，而说出实话让一切都好了。"
+          }
+        ]
+      },
+      {
+        "id": "r12",
+        "title": "Honey: Two Texts",
+        "type": "pair",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Text 1: Golden Hills Honey",
+            "paras": [
+              [
+                "Taste the sunshine with Golden Hills Honey!"
+              ],
+              [
+                "Our honey is made by happy bees on the green hills of Northland, where flowers bloom almost all year round.",
+                "It is thick, golden and bursting with flavour.",
+                "Children and adults love its smooth, creamy taste.",
+                "Spread it on hot toast, stir it into yoghurt or drizzle it over pancakes.",
+                "It is also perfect in a hot lemon drink on a cold winter night."
+              ],
+              [
+                "Golden Hills Honey is the tastiest honey in New Zealand.",
+                "Just ask our customers!",
+                "‘It’s the best honey I have ever eaten,’ says Mrs Rangi from Kaitāia."
+              ],
+              [
+                "Every jar is packed by hand, and we never add sugar or water.",
+                "Our bees are cared for by beekeepers with more than 30 years of experience.",
+                "Our jars come in three sizes: small, medium and family."
+              ],
+              [
+                "SPECIAL OFFER: Buy two jars and get a third jar FREE!",
+                "Hurry — this offer ends on Friday.",
+                "Find Golden Hills Honey at your local supermarket today."
+              ]
+            ]
+          },
+          {
+            "title": "Text 2: How Bees Make Honey",
+            "paras": [
+              [
+                "Honey is made by honey bees from the sweet nectar of flowers.",
+                "Making it takes a lot of teamwork."
+              ],
+              [
+                "First, worker bees fly from flower to flower, sucking up nectar with their long, tube-like tongues.",
+                "They store the nectar in a special part of their body called the honey stomach.",
+                "When a bee’s honey stomach is full, it flies back to the hive."
+              ],
+              [
+                "There, it passes the nectar to younger bees, which pass it from mouth to mouth and add natural chemicals called enzymes.",
+                "The bees then spread the nectar into the wax cells of the honeycomb.",
+                "At first, the nectar is very watery.",
+                "To dry it out, the bees fan it with their wings until it becomes thick and sticky.",
+                "Finally, they **seal** each cell with a cap of wax to keep the honey clean."
+              ],
+              [
+                "Bees make honey so that the hive has food to eat in winter, when there are few flowers.",
+                "One worker bee makes only about one-twelfth of a teaspoon of honey in her whole life.",
+                "That means it takes the life’s work of hundreds of bees to fill just one jar."
+              ]
+            ]
+          }
+        ],
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "According to Text 2, why do bees make honey?",
+            "opts": [
+              "so people can eat it on toast",
+              "to keep the hive warm",
+              "to make wax for the cells",
+              "so the hive has food in winter"
+            ],
+            "a": 3,
+            "ev": [
+              25
+            ],
+            "why": "Text 2 says, ‘Bees make honey so that the hive has food to eat in winter, when there are few flowers.’",
+            "whyZh": "第二篇文章写道：“蜜蜂酿蜜，是为了让蜂巢在花很少的冬天有东西吃。”"
+          },
+          {
+            "skill": "fact-opinion",
+            "q": "Which sentence from Text 1 is an OPINION?",
+            "opts": [
+              "Our jars come in three sizes: small, medium and family.",
+              "Golden Hills Honey is the tastiest honey in New Zealand.",
+              "Every jar is packed by hand.",
+              "This offer ends on Friday."
+            ],
+            "a": 1,
+            "ev": [
+              6
+            ],
+            "why": "‘The tastiest’ is what the sellers believe — you cannot prove it, and others may disagree. The jar sizes, the packing by hand and the end date can all be checked.",
+            "whyZh": "“最好吃的”是卖家的看法——无法证明，别人也可能不同意。罐子的尺寸、手工装罐和优惠截止日期都可以核实。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘Finally, they seal each cell with a cap of wax…’ What does ‘seal’ mean here?",
+            "opts": [
+              "close up tightly",
+              "paint a pattern on",
+              "make a hole in",
+              "clean out"
+            ],
+            "a": 0,
+            "ev": [
+              24
+            ],
+            "why": "They put ‘a cap of wax’ on each cell ‘to keep the honey clean’ — they close it up so nothing can get in.",
+            "whyZh": "它们给每个蜂房盖上“一层蜡盖”，“让蜂蜜保持干净”——就是把它封起来，什么都进不去。"
+          },
+          {
+            "skill": "purpose",
+            "q": "What is the main purpose of Text 1?",
+            "opts": [
+              "to explain how bees make honey",
+              "to describe the hills of Northland",
+              "to persuade people to buy Golden Hills Honey",
+              "to tell a story about Mrs Rangi"
+            ],
+            "a": 2,
+            "ev": [
+              12,
+              14
+            ],
+            "why": "Text 1 uses a special offer (‘Buy two jars and get a third jar FREE!’) and tells readers to find the honey ‘at your local supermarket today’. It wants you to buy.",
+            "whyZh": "第一篇文章用了促销（“买两罐送一罐！”），还叫读者“今天就去附近的超市买”。它的目的是让你购买。"
+          },
+          {
+            "skill": "compare",
+            "q": "How is Text 2 different from Text 1?",
+            "opts": [
+              "Text 2 tries to sell honey; Text 1 gives facts.",
+              "Both texts tell a story about one bee.",
+              "Text 2 gives facts; Text 1 tries to sell something.",
+              "Text 2 is mostly about pancakes."
+            ],
+            "a": 2,
+            "ev": [
+              6,
+              17
+            ],
+            "why": "Text 2 explains the steps bees follow, such as ‘worker bees fly from flower to flower’. Text 1 uses opinions like ‘the tastiest honey in New Zealand’ to sell a product.",
+            "whyZh": "第二篇文章解释了蜜蜂酿蜜的步骤，比如“工蜂从一朵花飞到另一朵花”。第一篇用“新西兰最好吃的蜂蜜”这类观点来推销产品。"
+          },
+          {
+            "skill": "compare",
+            "q": "Text 1 sells honey. Which fact from Text 2 best helps explain why a jar of honey is valuable?",
+            "opts": [
+              "Honey is made from the nectar of flowers.",
+              "Bees fly back to the hive when they are full.",
+              "Nectar is very watery at first.",
+              "It takes the life’s work of hundreds of bees to fill one jar."
+            ],
+            "a": 3,
+            "ev": [
+              26,
+              27
+            ],
+            "why": "If one bee makes only ‘about one-twelfth of a teaspoon’ in her whole life, then ‘hundreds of bees’ are needed for one jar. All that work helps explain why honey is valuable.",
+            "whyZh": "如果一只蜜蜂一生只能酿出“大约十二分之一茶匙”的蜂蜜，那么一罐蜂蜜就需要“几百只蜜蜂”的劳动。这么多的劳动正好说明了蜂蜜为什么珍贵。"
+          }
+        ]
+      }
     ]
   };
   /*END-DATA*/

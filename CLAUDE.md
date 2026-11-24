@@ -629,6 +629,23 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   section hides. **The English views' root div carries `class:'nomath'`** and `renderMath` passes
   `ignoredClasses:['nomath']`: stories contain money ("$8 … $22"), which KaTeX's `$…$` auto-render would
   otherwise turn into maths. Keep that class on any new English view.
+- **📖 Reading tests (v2.61)** — the "longer text + 6 questions + PROOF" layer (home English section,
+  the English focus card, `viewReading` → `viewReadingTest(ids, timed)`). Curated texts live in english.js
+  `DATA.reading` (12: narrative ×2, report ×2, review, poem, procedure, persuasive, biography, recount, play
+  script, a paired text; 240–400 words): `parts` → `paras` → SENTENCES, plus 6 questions ordered easy → hard
+  (like ICAS) each with `skill` and `ev` = the GLOBAL indices of the sentence(s) that prove the answer
+  (`readSentences(t)` gives that order). **Practice** marks each answer at once, highlights its proof
+  sentences (`.rs.ev`), quotes them ("🔎 Proof · 证据") and offers "↑ Show it in the text". In report/procedure/
+  persuasive/biography texts a short one-line paragraph ending in `?` or `:` renders as a heading (`.rhead`) and
+  `• …` / `1. …` lines as list items (`.ritem`) — keep list items as one-sentence paragraphs in the data. The **timed mini
+  test** (3 texts = 18 questions, `READ_MIN_PER_TEXT` 7 min each, sticky countdown bar, auto-submit at 0)
+  gives no feedback until the end, then reviews everything. Results report the score and FIRST- vs
+  SECOND-HALF accuracy (`halfSplit`) — the late-test stamina drop seen in Brendan's ICAS/PAT/SMART results;
+  the hub pools it over all attempts (`readStats`: each text's Q1–3 vs Q4–6 + each test's halves) and warns
+  when late answers slip ≥15 points. `nextReadTexts` serves never-read texts first, then the oldest. Progress
+  in the `english` store: kind `reading` (`profileId|r|id`: tries/best/last{res,timed,timeSec}/history) and
+  `readset` (`profileId|rs|ts`: the test's answer pattern + time). +3 🍬 per new text (same daily cap). The
+  parent dashboard adds texts read + early/late %. Content + helpers are tested in english.test.js.
 - **Read-aloud** — `speak(text, opts)` (Web Speech) reads a question/explanation aloud
   (`opts.lang:'zh'` → a Chinese voice via `pickZhVoice()`, since the chosen English voice can't read
   中文; `opts.rate` multiplies the speed, e.g. 0.8 to say a word slowly),
@@ -911,7 +928,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.60**). Claude suggests the next number on
+  minor on each release (currently at **v2.61**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account), the same way as the sibling personal repos: git's github.com credential
   helper is gh, which serves only the ACTIVE gh account (the work one by default), so wrap
@@ -949,7 +966,9 @@ locally. It runs by double-clicking `index.html` or hosting it statically
    **English content + logic:** `node english.test.js` (requires english.js; validates every word,
    story, question and skill card — one correct option, bilingual fields, bold forms, cloze, strict
    JSON — and extracts the Daily-words helpers: the review ladder, next day/due/next skill, the four
-   review-question builders, seeded shuffle, word highlighting).
+   review-question builders, seeded shuffle, word highlighting; plus the 📖 reading texts — 6 questions
+   each, proof-sentence indices in range, skill coverage, balanced keys — and `readSentences`/`halfSplit`/
+   `readStats`/`nextReadTexts`).
 2. **Run it:** `python -m http.server 8744` in this dir, open
    `http://localhost:8744/index.html`.
 3. **JS syntax check** without a browser:
