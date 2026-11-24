@@ -36,11 +36,11 @@ const STUDENT_FOCUS = src.match(/const STUDENT_FOCUS=\{[\s\S]*?\n\};/)[0];
 const ctx = {};
 new Function(
   EXAMS + '\n' + STUDENT_FOCUS + '\n' +
-  extract('examTopics') + '\n' + extract('focusTopicsFor') + '\n' +
+  extract('examTopics') + '\n' + extract('focusRecords') + '\n' + extract('focusTopicsFor') + '\n' +
   extract('apportion') + '\n' + extract('weightedFocusTopics') + '\n' +
-  'this.examTopics=examTopics;this.focusTopicsFor=focusTopicsFor;this.apportion=apportion;this.weightedFocusTopics=weightedFocusTopics;'
+  'this.examTopics=examTopics;this.focusRecords=focusRecords;this.focusTopicsFor=focusTopicsFor;this.apportion=apportion;this.weightedFocusTopics=weightedFocusTopics;'
 ).call(ctx);
-const { focusTopicsFor, apportion, weightedFocusTopics } = ctx;
+const { focusRecords, focusTopicsFor, apportion, weightedFocusTopics } = ctx;
 
 let pass = 0, fail = 0;
 const check = (desc, got, expected) => { if (got === expected) pass++; else { fail++; console.log(`  ✗ ${desc}\n      expected ${expected}, got ${got}`); } };
@@ -104,7 +104,23 @@ for (const N of [10, 24]) { // drill size / generation batch size
   check(`Brendan theme totals never rise down the list (${N}: ${tt.join('/')})`, tt.every((v, i) => i === 0 || tt[i - 1] >= v), true);
 }
 check('Brendan: ICAS strands never leak into Rangitoto', focusTopicsFor({ name: 'Brendan' }, 'rangitoto', 'Mathematics').topics.length, 0);
-check('Brendan: English (subject gate) => no focus', focusTopicsFor({ name: 'Brendan' }, 'icas', 'English').topics.length, 0);
+
+// ── multi-subject focus: one record per subject (Brendan = Maths + English) ──
+check('Brendan has 2 focus records (Maths, English)', JSON.stringify(focusRecords({ name: 'Brendan' }).map(r => r.subject)), JSON.stringify(['Mathematics', 'English']));
+check('Howard (single record) normalises to 1', focusRecords({ name: 'Howard' }).length, 1);
+check('unknown student => no records', focusRecords({ name: 'Unlisted' }).length, 0);
+const be = focusTopicsFor({ name: 'Brendan' }, 'icas', 'English');
+check('Brendan English resolves 5 themes under ICAS', be.areas.length, 5);
+check('Brendan English theme1 = Vocabulary', JSON.stringify(be.areas[0].topics), JSON.stringify(['Vocabulary']));
+check('Brendan English card title', be.title, 'English focus');
+check('English record never leaks into Maths', focusTopicsFor({ name: 'Brendan' }, 'icas', 'Mathematics').topics.includes('Vocabulary'), false);
+check('Brendan English strands don’t match Rangitoto English => none', focusTopicsFor({ name: 'Brendan' }, 'rangitoto', 'English').topics.length, 0);
+check('Howard + English (subject gate) => none', focusTopicsFor({ name: 'Howard' }, 'rangitoto', 'English').topics.length, 0);
+check('no subject => first record (legacy behaviour)', focusTopicsFor({ name: 'Brendan' }, 'icas', '').title, 'Maths focus');
+const bew = weightedFocusTopics(be.areas);
+const ealloc = apportion(bew.topics, bew.weights, 10);
+check('English drill: Vocabulary gets the most of 10', ealloc['Vocabulary'] === Math.max(...Object.values(ealloc)), true);
+check('English drill sums to 10', sum(ealloc), 10);
 const bg = focusTopicsFor({ name: 'Brendan' }, 'general', 'Mathematics');
 const generalMaths = ctx.examTopics('general', 'Mathematics');
 check('Brendan under General keeps only strands General has', bg.topics.length > 0 && bg.topics.every(t => generalMaths.includes(t)), true);

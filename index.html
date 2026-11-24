@@ -133,6 +133,27 @@
   .opt[aria-pressed="true"]{border-color:var(--brand);background:#e7f0ff}
   .opt .key{flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--card2);display:grid;place-items:center;font-weight:700;font-size:13px}
   .opt[aria-pressed="true"] .key{background:var(--brand);color:#fff}
+  .opt.right{border-color:var(--ok);background:var(--okbg)}
+  .opt.wrongpick{border-color:var(--bad);background:var(--badbg)}
+  .opt:disabled{cursor:default;color:inherit;opacity:1}
+  /* English — 📘 Daily words / 🧩 Daily skills */
+  .iconbtn.sm{width:auto;min-width:34px;height:34px;padding:0 7px;font-size:14px;flex:none;white-space:nowrap}
+  .bi{margin:4px 0}
+  .bi-en,.bi-zh{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+  .bi-en>div:first-child,.bi-zh>div:first-child{flex:1;min-width:0}
+  .bi-zh{color:var(--muted);font-size:14px;margin-top:4px}
+  .passage{font-family:Cambria,Georgia,'Times New Roman',serif;font-variant-numeric:lining-nums;font-size:16.5px;line-height:1.7;background:#fffdf6;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:14px 16px}
+  .passage b{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px}
+  .passage.poem{padding-left:26px}
+  .wcard{border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:14px 16px;margin-top:12px;background:#fff}
+  .wword{font-size:24px;font-weight:800;letter-spacing:-.3px}
+  .zhword{font-size:15px;color:var(--muted);margin:2px 0 6px}
+  .wsec{margin-top:14px}
+  .wsec .h{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
+  .ptrow{display:flex;gap:10px;align-items:flex-start;margin:8px 0}
+  .ptn{flex:none;width:22px;height:22px;margin-top:6px;border-radius:50%;background:var(--brand);color:#fff;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+  .exs{font-size:16px;line-height:1.6}
+  .engq .qtext{margin:6px 0 10px}
   .flagrow{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
 
   .scorehero{text-align:center;padding:10px 0 6px}
@@ -294,6 +315,9 @@
 <script src="battle.js"></script>
 <!-- Structured diagram renderer (turns a {type,...} spec into correct SVG). Classic script; Node-testable. -->
 <script src="diagram.js"></script>
+<!-- Curated English content (📘 Daily words + 🧩 Daily skills): window.PLEnglish.DATA. Classic script;
+     self-authored (no copyrighted text). If it fails to load, the English section simply hides. -->
+<script src="english.js"></script>
 <!-- PRIVATE transcribed question packs (real past papers), if present. Gitignored, never
      in the public repo; the app works fine without it (a 404 here is harmless). -->
 <script src="papers.local.js"></script>
@@ -358,7 +382,7 @@ function sanitizeSvg(s){
 function safeImage(s){s=String(s||'').trim();return /^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/i.test(s)?s:'';}
 // Build a question's figure block: a structured-diagram/SVG and/or a cropped image.
 function figureEl(it){const kids=[];if(it&&it.svg)kids.push(el('div',{html:it.svg}));const img=it&&safeImage(it.image);if(img)kids.push(el('img',{src:img,alt:'figure',loading:'lazy'}));return kids.length?el('div',{class:'figure'},...kids):'';}
-function renderMath(scope){if(window.renderMathInElement){try{renderMathInElement(scope||document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false});}catch(e){}}}
+function renderMath(scope){if(window.renderMathInElement){try{renderMathInElement(scope||document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],throwOnError:false,ignoredClasses:['nomath']});}catch(e){}}}
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('load '+src));document.head.append(s);});}
 function colorFor(str){let h=0;for(const c of String(str||'x'))h=(h*31+c.charCodeAt(0))%360;return `hsl(${h} 65% 55%)`;}
 function initials(name){return (String(name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('')||'?').toUpperCase();}
@@ -499,8 +523,8 @@ function activeProfile(){return CFG.profiles.find(p=>p.id===CFG.activeProfileId)
 function pid(){return activeProfile().id;}
 
 /* ---------- IndexedDB ---------- */
-const DB_NAME='practicelab',DB_VER=8;let _db=null;
-function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;for(const s of ['attempts','review','refs','bank','cards','trainer','trades','packs','curriculum'])if(!db.objectStoreNames.contains(s))db.createObjectStore(s,{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
+const DB_NAME='practicelab',DB_VER=9;let _db=null;
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const db=e.target.result;for(const s of ['attempts','review','refs','bank','cards','trainer','trades','packs','curriculum','english'])if(!db.objectStoreNames.contains(s))db.createObjectStore(s,{keyPath:'id'});};r.onsuccess=e=>{_db=e.target.result;res(_db);};r.onerror=e=>rej(e.target.error);});}
 function tx(store,mode='readonly'){return _db.transaction(store,mode).objectStore(store);}
 function dbAll(store){return new Promise((res,rej)=>{const out=[];const c=tx(store).openCursor();c.onsuccess=e=>{const cur=e.target.result;if(cur){out.push(cur.value);cur.continue();}else res(out);};c.onerror=e=>rej(e.target.error);});}
 function dbGet(store,id){return new Promise((res,rej)=>{const r=tx(store).get(id);r.onsuccess=()=>res(r.result||null);r.onerror=e=>rej(e.target.error);});}
@@ -653,8 +677,10 @@ function examTopics(examId,subject){const e=EXAMS[examId];return (e&&e.topics&&e
 // first), with the exam-strand `topics` it maps to. They only take effect where the strand names
 // line up with the student's exam topic list (so Howard's Rangitoto Maths strands don't misapply
 // to another exam). `subject` gates them to one subject. An optional `title` replaces the card's
-// default "Teacher's focus" heading (use it when the list isn't from a teacher). (A legacy flat
-// `topics` array is also accepted.)
+// default "Teacher's focus" heading (use it when the list isn't from a teacher); an optional `exam`
+// says which exam's strand names the record uses (the home card renders it under that exam). A
+// student may have ONE record or an ARRAY of records, one per subject (e.g. Maths + English).
+// (A legacy flat `topics` array is also accepted.)
 const STUDENT_FOCUS={
   // Howard — Year 8 (Year 9 entrance) Maths. His maths teacher's (2026) PRIORITY ORDER to work on.
   // The top 3 are the teacher's latest ordered focus; the last 2 were flagged earlier as lighter
@@ -668,28 +694,42 @@ const STUDENT_FOCUS={
       {label:'Distance, area & volume',topics:['Measurement, area & volume']},
       {label:'Problem solving',topics:['Problem solving & reasoning']}
     ]},
-  // Brendan — Year 5 ICAS Maths. NOT a teacher list: drawn from his 2026 test results (ICAS + school
-  // maths), ordered by where the marks were lost. Number & algebra are already strong, so they're left
-  // out (the drill's low-weight tail still touches them). Strand names are the ICAS ones; the last
-  // theme is a stretch for the top-end puzzles.
-  brendan:{subject:'Mathematics',title:'Maths focus',
-    note:'From your 2026 ICAS and school maths tests. Your number and algebra are already strong — these are where marks slipped. Work from the top down; the last one is a stretch goal.',
-    areas:[
-      {label:'Area, perimeter, volume & reading scales',topics:['Measurement']},
-      {label:'Reflections, folding & shape patterns',topics:['Geometry & shape']},
-      {label:'Graphs, tables & listing every arrangement',topics:['Data & graphs','Chance & probability']},
-      {label:'Calendar & time',topics:['Time']},
-      {label:'Fractions of amounts',topics:['Fractions & decimals']},
-      {label:'Tricky puzzles: work backwards, odd & even (stretch)',topics:['Problem solving','Logic & reasoning']}
-    ]}
+  // Brendan — Year 5 ICAS, Maths + English. NOT teacher lists: drawn from his 2026 test results
+  // (ICAS + school), ordered by where the marks were lost. Maths: number & algebra are already strong,
+  // so they're left out (the drill's low-weight tail still touches them); the last theme is a stretch
+  // for the top-end puzzles. English: the writer's craft is already a strength, so it's left out.
+  brendan:[
+    {subject:'Mathematics',exam:'icas',title:'Maths focus',
+      note:'From your 2026 ICAS and school maths tests. Your number and algebra are already strong — these are where marks slipped. Work from the top down; the last one is a stretch goal.',
+      areas:[
+        {label:'Area, perimeter, volume & reading scales',topics:['Measurement']},
+        {label:'Reflections, folding & shape patterns',topics:['Geometry & shape']},
+        {label:'Graphs, tables & listing every arrangement',topics:['Data & graphs','Chance & probability']},
+        {label:'Calendar & time',topics:['Time']},
+        {label:'Fractions of amounts',topics:['Fractions & decimals']},
+        {label:'Tricky puzzles: work backwards, odd & even (stretch)',topics:['Problem solving','Logic & reasoning']}
+      ]},
+    {subject:'English',exam:'icas',title:'English focus',
+      note:'From your 2026 ICAS and school reading tests. You’re already good at spotting how writers write — these are where marks slipped. 📘 Daily words and 🧩 Daily skills help with every one.',
+      areas:[
+        {label:'Book words — work out the meaning from the clues',topics:['Vocabulary']},
+        {label:'Main idea, summing up & linking ideas',topics:['Reading comprehension']},
+        {label:'Reading between the lines — feelings & reasons',topics:['Inference']},
+        {label:'Grammar words — parts of speech & clauses',topics:['Grammar & punctuation']},
+        {label:'Reviews, poems & other text types',topics:['Text types']}
+      ]}
+  ]
 };
-// The teacher-focus for a profile, restricted to what's VALID for the given exam+subject
-// (intersection with the exam's topic list, so a mismatched exam/subject yields none). Returns
-// {areas (ordered, each {label,topics}), topics (flattened, priority order), note}.
+// A student's focus records as an array (a record may be stored alone or as an array, one per subject).
+function focusRecords(profile){const f=profile&&STUDENT_FOCUS[String(profile.name||'').toLowerCase().trim()];return !f?[]:(Array.isArray(f)?f:[f]);}
+// The focus for a profile + subject, restricted to what's VALID for the given exam+subject
+// (intersection with the exam's topic list, so a mismatched exam/subject yields none). With no
+// subject given, the first record applies (legacy single-record behaviour). Returns
+// {areas (ordered, each {label,topics}), topics (flattened, priority order), note, title}.
 function focusTopicsFor(profile,examId,subject){
-  const f=profile&&STUDENT_FOCUS[String(profile.name||'').toLowerCase().trim()];
+  const recs=focusRecords(profile);
+  const f=subject?recs.find(r=>!r.subject||r.subject.toLowerCase()===String(subject).toLowerCase()):recs[0];
   if(!f)return {topics:[],note:'',title:'',areas:[]};
-  if(f.subject&&subject&&f.subject.toLowerCase()!==String(subject).toLowerCase())return {topics:[],note:'',title:'',areas:[]};
   const known=examTopics(examId,subject),ok=t=>!known.length||known.includes(t);
   let areas=Array.isArray(f.areas)?f.areas.map(a=>({label:a.label||'',topics:(a.topics||[]).filter(ok)}))
     :[{label:'',topics:(f.topics||[]).filter(ok)}];
@@ -731,17 +771,29 @@ function weightedFocusTopics(areas,extras){
 // number them 1., 2., 3. Text children are passed RAW — el() escapes them (never esc() here).
 function focusCard(s,profile){
   profile=profile||activeProfile();
-  const f=focusTopicsFor(profile,EXAMS[s.exam]?s.exam:'icas',s.subject);
+  const examId=EXAMS[s.exam]?s.exam:'icas';
+  const f=focusTopicsFor(profile,examId,s.subject);
   if(!f.topics.length)return null;
   const numbered=f.areas.length>1&&f.areas.every(a=>a.label); // ordered priority list
   const areaEls=f.areas.map((a,i)=>el('div',{style:'margin:6px 0'},
     a.label?el('div',{style:'font-weight:600;margin-bottom:3px'},(numbered?(i+1)+'. ':'')+a.label):'',
     el('div',{class:'row',style:'gap:6px;flex-wrap:wrap'},...a.topics.map(t=>el('span',{class:'pill'},t)))));
+  // English focus: the curated Daily words / Daily skills target the same gaps with no AI calls.
+  const engBtns=(String(s.subject||'').toLowerCase()==='english'&&engData())?el('div',{class:'row',style:'margin-top:8px;gap:8px'},
+    el('button',{class:'btn',style:'flex:1',onclick:()=>viewWords()},'📘 Daily words'),
+    el('button',{class:'btn',style:'flex:1',onclick:()=>viewSkills()},'🧩 Daily skills')):'';
   return el('div',{class:'card',style:'border-left:4px solid var(--brand)'},
     el('h2',{style:'margin:0 0 4px'},'🎯 '+(f.title||'Teacher’s focus')+' for '+profile.name),
     f.note?el('p',{class:'sub',style:'margin:0 0 8px'},f.note):'',
     ...areaEls,
-    el('button',{class:'btn primary block',style:'margin-top:12px',onclick:()=>practiceWeakSpots()},'🎯 Practise these now'));
+    el('button',{class:'btn primary block',style:'margin-top:12px',onclick:()=>practiceWeakSpots(s.subject,examId)},'🎯 Practise these now'),
+    engBtns);
+}
+// Home: one focus card per subject the student has a focus record for (e.g. Maths + English).
+// Each record is shown under its own exam (record.exam) so its strand names resolve.
+function focusCardsFor(profile){
+  const ds=defaultSettingsFor(profile);
+  return focusRecords(profile).map(r=>focusCard(Object.assign({},ds,{subject:r.subject||ds.subject,exam:(r.exam&&EXAMS[r.exam])?r.exam:ds.exam}),profile)).filter(Boolean);
 }
 
 /* ============================================================ AI generation ============================================================ */
@@ -1622,9 +1674,11 @@ async function practiceTopic(topic){
 }
 // Targeted "weak spots" drill: bias the question set toward the active student's
 // lowest-scoring practised topics + topics in the exam they haven't tried yet.
-async function practiceWeakSpots(){
+async function practiceWeakSpots(subjectArg,examArg){
   const p=activeProfile(),ds=defaultSettingsFor(p);
-  const subject=ds.subject||'Mathematics',examId=EXAMS[ds.exam]?ds.exam:'icas';
+  // A focus card passes its own subject/exam (e.g. the English card); otherwise the saved defaults.
+  const subject=(typeof subjectArg==='string'&&subjectArg)||ds.subject||'Mathematics';
+  const examId=(typeof examArg==='string'&&EXAMS[examArg])?examArg:(EXAMS[ds.exam]?ds.exam:'icas');
   const attempts=(await dbAll('attempts')).filter(a=>a.profileId===pid()&&a.subject===subject);
   const stat={};attempts.forEach(a=>(a.results||[]).forEach(r=>{const t=r.topic||'General';(stat[t]=stat[t]||{n:0,c:0}).n++;if(r.status==='correct')stat[t].c++;}));
   const weak=Object.keys(stat).filter(t=>stat[t].n>=2&&stat[t].c/stat[t].n<0.8).sort((a,b)=>(stat[a].c/stat[a].n)-(stat[b].c/stat[b].n));
@@ -1916,6 +1970,7 @@ function viewGuide(){
       step(4,'⏱️','Track & rehearse','The Knowledge map shows your topic coverage and lets you learn each skill (with a Formula sheet); difficulty adjusts as you improve; and a Timed exam on a real paper rehearses the actual sitting.')),
     el('div',{class:'card'},el('h2',{},'💡 Tips'),
       tip('🔥','Build a daily streak and hit the daily goal.'),
+      tip('📘','English: 📘 Daily words teaches 3 “book words” a day from a short story (they come back for review after 1, 3, 7 and 14 days), and 🧩 Daily skills teaches one grammar or reading skill — all in English and 中文, with 🔊 read-aloud.'),
       tip('🎴','Finishing practices earns collectible cards — then battle with them.'),
       tip('🖨️','Print a worksheet from any results screen for off-screen practice.'),
       tip('✅','In Settings, “Double-check answers” and “AI-mark written answers” improve accuracy.'),
@@ -1927,6 +1982,219 @@ function viewGuide(){
       tip('📊','A daily market makes some card types worth more (hot) and others less (cold) — a simple taste of supply & demand and buy-low, sell-high.'),
       tip('🧮','The Shopkeeper’s Challenge turns discounts, interest and profit into quick money-maths for a little candy bonus.')),
     el('div',{class:'row'},el('button',{class:'btn primary',onclick:home},'Got it — let’s go'))));
+}
+/* ----- English: 📘 Daily words + 🧩 Daily skills (v2.60) -----
+   Curated, self-authored content in english.js (window.PLEnglish.DATA): 20 days × 3 Tier-2 "book
+   words" (a short story per day; per word a guess-from-context question, a bilingual explanation,
+   word parts, examples, synonyms/antonyms and a cloze sentence) + 16 grammar / reading-skill cards.
+   NO AI calls. Progress is per student in the `english` store (DB v9): one record per learned word
+   (`profileId|w|word`: Leitner box on WORD_SR_DAYS, dueAt, right/wrong, mastered) and per finished
+   skill card (`profileId|s|id`: score/best), Drive-synced (newest updatedAt wins). Every explanation
+   is bilingual — English for the child, 中文 for a parent — with 🔊 read-aloud (Chinese lines use a
+   zh voice). Days 1–12 are the same words Brendan's printed holiday workbook uses. */
+function engData(){const P=(typeof PLEnglish!=='undefined')?PLEnglish:null;const D=P&&P.DATA;return (D&&Array.isArray(D.days)&&D.days.length&&D.words&&Array.isArray(D.skills))?D:null;}
+async function engRecs(){return (await dbAll('english')).filter(r=>r.profileId===pid());}
+const WORD_SR_DAYS=[1,3,7,14]; // a learned word comes back after 1, 3, 7, 14 days; 4 right in a row = mastered
+const DAY_MS=86400000;
+function wordKey(profileId,w){return profileId+'|w|'+w;}
+function skillKey(profileId,s){return profileId+'|s|'+s;}
+function localDay(ts){const d=ts==null?new Date():new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function newWordRec(profileId,w,day,guessRight,now){return {id:wordKey(profileId,w),profileId,kind:'word',word:w,day,box:0,right:0,wrong:0,guessRight:!!guessRight,mastered:false,learnedAt:now,dueAt:now+WORD_SR_DAYS[0]*DAY_MS,updatedAt:now};}
+// Pure: one review answer → the word's next state (Leitner ladder on WORD_SR_DAYS; wrong → back to day 1).
+function applyWordReview(rec,correct,now){
+  const r=Object.assign({box:0,right:0,wrong:0},rec);
+  if(correct){r.right++;r.box=Math.min(WORD_SR_DAYS.length,(r.box||0)+1);
+    if(r.box>=WORD_SR_DAYS.length){r.mastered=true;r.dueAt=null;}else r.dueAt=now+WORD_SR_DAYS[r.box]*DAY_MS;}
+  else{r.wrong++;r.box=0;r.mastered=false;r.dueAt=now+WORD_SR_DAYS[0]*DAY_MS;}
+  r.updatedAt=now;return r;}
+// Pure: the first day whose words aren't all learned yet (null once every day is done).
+function nextWordDay(data,recs){const got=new Set(recs.filter(r=>r.kind==='word').map(r=>r.word));const d=data.days.find(x=>x.words.some(w=>!got.has(w)));return d?d.day:null;}
+function dueWordRecs(recs,now){return recs.filter(r=>r.kind==='word'&&!r.mastered&&r.dueAt!=null&&r.dueAt<=now).sort((a,b)=>a.dueAt-b.dueAt);}
+function nextSkill(data,recs){const done=new Set(recs.filter(r=>r.kind==='skill'&&r.done).map(r=>r.skill));return data.skills.find(s=>!done.has(s.id))||null;}
+function seedNum(seed){let h=0;for(const ch of String(seed))h=(h*31+ch.charCodeAt(0))>>>0;return h;}
+// Pure: deterministic (seeded) shuffle — a review question keeps one option order while on screen.
+function seededShuffle(arr,seed){let h=(seedNum(seed)^2166136261)>>>0||1;const a=arr.slice();
+  for(let i=a.length-1;i>0;i--){h^=h<<13;h>>>=0;h^=h>>>17;h^=h<<5;h>>>=0;const j=h%(i+1);const t=a[i];a[i]=a[j];a[j]=t;}return a;}
+// Pure: the review styles a word supports — ICAS's four vocabulary item types.
+function wordReviewKinds(w){const k=['meaning','cloze'],syn=w.syn&&w.syn[0],dis=w.dis||[];
+  if(syn&&dis.length>=3)k.push('syn');if(w.ant&&w.ant[0]&&syn&&dis.length>=2)k.push('ant');return k;}
+// Pure: one review question {kind,prompt,context,opts,a} for a word.
+function buildWordReview(w,kind,seed){
+  let prompt,context='',opts,correct;
+  if(kind==='cloze'){prompt='Which word best fills the gap?';context=w.cloze.s;opts=w.cloze.opts.slice();correct=w.cloze.opts[w.cloze.a];}
+  else if(kind==='syn'){prompt='Which word is closest in meaning to “'+w.word+'”?';correct=w.syn[0];opts=[w.syn[0],(w.ant&&w.ant[0])||w.dis[2],w.dis[0],w.dis[1]];}
+  else if(kind==='ant'){prompt='Which word means the opposite of “'+w.word+'”?';correct=w.ant[0];opts=[w.ant[0],w.syn[0],w.dis[0],w.dis[1]];}
+  else{kind='meaning';prompt='What does “'+w.word+'” mean in this sentence?';const ex=w.ex||[];context=ex.length?ex[seedNum(seed)%ex.length]:'';opts=w.guess.opts.slice();correct=w.guess.opts[w.guess.a];}
+  const sh=seededShuffle(opts,seed);return {kind,prompt,context,opts:sh,a:sh.indexOf(correct)};}
+// Pure: bold the word (any ending: relish → relished) inside a sentence.
+function hiWord(s,w){const stem=String(w&&w.word||'').toLowerCase().replace(/e$/,'');if(stem.length<3)return String(s||'');
+  return String(s||'').replace(new RegExp('\\b('+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]*)','gi'),'**$1**');}
+function engMd(s){return esc(String(s||'')).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
+function sayBtn(text,lang){return el('button',{class:'iconbtn sm',type:'button',title:lang==='zh'?'朗读中文':'Read aloud',onclick:e=>{e.preventDefault();e.stopPropagation();speak(text,{lang:lang||'en'});}},lang==='zh'?'🔊中':'🔊');}
+// English line (for the child) + muted Chinese line (for a parent), each with its own 🔊.
+function biLine(en,zh){return el('div',{class:'bi'},
+  el('div',{class:'bi-en'},el('div',{html:engMd(en)}),sayBtn(en,'en')),
+  zh?el('div',{class:'bi-zh'},el('div',{html:engMd(zh)}),sayBtn(zh,'zh')):'');}
+// A little 🍬 for daily English (same economy as practices), capped per student per day on this device.
+const ENG_CANDY_CAP=8;
+async function engReward(candy,xp,why){
+  let st={};try{st=JSON.parse(localStorage.getItem('practicelab.engReward')||'{}')||{};}catch(e){}
+  const today=localDay(),k=pid()+'|'+today,used=st[k]||0,give=Math.max(0,Math.min(candy,ENG_CANDY_CAP-used));
+  const keep={};for(const kk in st)if(kk.endsWith('|'+today))keep[kk]=st[kk];keep[k]=used+give;
+  try{localStorage.setItem('practicelab.engReward',JSON.stringify(keep));}catch(e){}
+  if(!give&&!xp)return;
+  try{await trainerAdd(xp||0,give);scheduleDriveSync();}catch(e){}
+  if(give)toast('+'+give+' 🍬 '+why);
+}
+// One multiple-choice question that marks itself on the first tap, then shows bilingual feedback.
+// q = {q, opts, a, why?, whyZh?}; after(ok) may return extra feedback nodes; onAnswer(ok) records it.
+function engMCQ(q,{after,onAnswer}={}){
+  const opts=el('div',{class:'opts'}),fb=el('div',{});let done=false;const L=i=>String.fromCharCode(65+i);
+  q.opts.forEach((o,i)=>opts.append(el('button',{class:'opt',type:'button',onclick:()=>{
+    if(done)return;done=true;const ok=i===q.a;
+    $$('.opt',opts).forEach((b,bi)=>{b.disabled=true;if(bi===q.a)b.classList.add('right');else if(bi===i)b.classList.add('wrongpick');});
+    fb.append(el('div',{style:'margin-top:10px'},el('span',{class:'badge '+(ok?'ok':'bad')},ok?'✓ Correct! 答对了':'✗ The answer is '+L(q.a)+' · 正确答案是 '+L(q.a))));
+    if(q.why)fb.append(el('div',{class:'explain'},biLine(q.why,q.whyZh)));
+    const extra=after&&after(ok);if(extra)fb.append(extra);
+    if(onAnswer)Promise.resolve().then(()=>onAnswer(ok)).catch(e=>console.warn('english save',e));
+  }},el('span',{class:'key'},L(i)),el('span',{html:engMd(o)}))));
+  const say=String(q.q||'').replace(/\*\*/g,'')+'. '+q.opts.map((o,i)=>L(i)+', '+o).join('. ');
+  return el('div',{class:'engq'},el('div',{class:'bi-en'},el('div',{class:'qtext',html:engMd(q.q)}),sayBtn(say,'en')),opts,fb);}
+// The full word card: meaning, word parts, watch-outs, examples, similar / opposite words.
+function wordCardEl(w){
+  const sec=(h,...kids)=>el('div',{class:'wsec'},el('div',{class:'h'},h),...kids);
+  return el('div',{class:'wcard'},
+    el('div',{class:'row between',style:'align-items:center;flex-wrap:nowrap'},
+      el('div',{},el('div',{class:'wword'},w.word),el('div',{class:'small muted'},w.syll+' · '+w.pos+' · '+w.zh)),
+      el('button',{class:'iconbtn',type:'button',title:'Say the word',onclick:()=>speak(w.word+'. '+w.word+'.',{rate:0.8})},'🔊')),
+    sec('Meaning · 意思',biLine(w.def,w.defZh)),
+    w.parts?sec('Word parts · 拆词',biLine(w.parts,w.partsZh)):'',
+    w.note?sec('Watch out · 注意',biLine(w.note,w.noteZh)):'',
+    sec('Examples · 例句',...(w.ex||[]).map(s=>el('div',{class:'bi-en',style:'margin:4px 0'},el('div',{html:engMd(hiWord(s,w))}),sayBtn(s,'en')))),
+    sec('Similar · 近义词',el('div',{},(w.syn||[]).join(', ')),
+      (w.ant&&w.ant.length)?el('div',{style:'margin-top:6px'},el('b',{},'Opposite · 反义词: '),w.ant.join(', ')):''));}
+function wordMiniEl(w){return el('div',{class:'wcard'},
+  el('div',{class:'row between',style:'align-items:center;flex-wrap:nowrap'},el('div',{},el('b',{style:'font-size:18px'},w.word),el('span',{class:'small muted'},'  '+w.pos+' · '+w.zh)),
+    el('button',{class:'iconbtn sm',type:'button',title:'Say the word',onclick:()=>speak(w.word,{rate:0.8})},'🔊')),
+  biLine(w.def,w.defZh),
+  el('div',{class:'small',style:'margin-top:6px'},'Similar: '+(w.syn||[]).join(', ')+((w.ant&&w.ant.length)?'  ·  Opposite: '+w.ant.join(', '):'')));}
+function wordsMenuLine(D,recs){const due=dueWordRecs(recs,Date.now()).length,next=nextWordDay(D,recs);
+  if(due)return '🔁 '+due+' word'+(due>1?'s':'')+' to review'+(next?' · then Day '+next:'');
+  if(next){const d=D.days.find(x=>x.day===next);return 'Day '+next+': '+d.words.join(' · ');}
+  return 'All '+Object.keys(D.words).length+' words learned — keep reviewing';}
+function skillsMenuLine(D,recs){const s=nextSkill(D,recs),done=recs.filter(r=>r.kind==='skill'&&r.done).length;
+  return s?('Next: '+s.title+' ('+done+' of '+D.skills.length+' done)'):('All '+D.skills.length+' skills done — revisit any');}
+async function viewWords(){
+  stopTimer();const D=engData();if(!D){toast('English lessons aren’t available.');return viewHome();}
+  const recs=await engRecs(),words=recs.filter(r=>r.kind==='word'),now=Date.now();
+  const due=dueWordRecs(recs,now),next=nextWordDay(D,recs),total=Object.keys(D.words).length;
+  const mastered=words.filter(r=>r.mastered).length,today=localDay(),learnedToday=words.filter(r=>localDay(r.learnedAt)===today).length;
+  const nd=next?D.days.find(d=>d.day===next):null;
+  const learnBtn=nd?el('button',{class:'btn primary block lg',onclick:()=>viewWordDay(next)},(learnedToday>=3?'➕ Learn 3 more · Day ':'✨ Learn today’s words · Day ')+next):el('div',{class:'small',style:'color:var(--ok)'},'🎉 You’ve learned every word! Keep reviewing to master them.');
+  const reviewBtn=due.length?el('button',{class:'btn block',style:'margin-top:10px',onclick:()=>viewWordReview()},'🔁 Review '+due.length+' word'+(due.length>1?'s':'')+' now'):el('div',{class:'small muted',style:'margin-top:10px'},'No reviews due — words come back after 1, 3, 7 and 14 days.');
+  const got=new Set(words.map(r=>r.word)),daysDone=D.days.filter(d=>d.words.every(w=>got.has(w)));
+  show(el('div',{class:'nomath'},backBar('📘 Daily words',viewHome),
+    el('div',{class:'card'},el('h2',{},'📘 Daily words · 每日单词'),
+      el('p',{class:'sub'},'Three “book words” a day. Read the short story, guess each word from the clues, then check. Words come back after 1, 3, 7 and 14 days so they stick. 每天 3 个书面词：先读短文、根据线索猜词义，再看讲解。'),
+      el('div',{class:'tiles',style:'margin-bottom:14px'},tile(words.length+'/'+total,'Learned'),tile(mastered,'Mastered'),tile(due.length,'Due now'),tile(learnedToday,'Today')),
+      learnedToday>=3?el('div',{class:'small',style:'margin-bottom:10px;color:var(--ok)'},'✓ Today’s 3 words are done — great! 今天的 3 个单词已完成。'):'',
+      nd?el('div',{class:'small muted',style:'margin-bottom:8px'},'Day '+next+' · '+nd.title+': '+nd.words.join(', ')):'',
+      learnBtn,reviewBtn,
+      words.length?el('button',{class:'btn ghost block',style:'margin-top:10px',onclick:()=>viewWordList()},'📚 My words ('+words.length+')'):''),
+    daysDone.length?el('div',{class:'card'},el('h2',{},'Days done · 已学'),el('div',{class:'menu'},...daysDone.slice().reverse().map(d=>menuItem('✅','Day '+d.day+' · '+d.title,d.words.join(' · '),()=>viewWordDay(d.day))))):''));
+}
+async function viewWordDay(n){
+  stopTimer();const D=engData(),day=D&&D.days.find(d=>d.day===n);if(!day)return viewWords();
+  const had=new Set((await engRecs()).filter(r=>r.kind==='word').map(r=>r.word)),wasDone=day.words.every(w=>had.has(w));
+  const W=day.words.map(id=>D.words[id]).filter(Boolean),total=W.length+day.qs.length,doneSlot=el('div',{});
+  let answered=0;
+  const finish=async()=>{
+    if(!wasDone)await engReward(3,15,'for Day '+n+'’s words');
+    doneSlot.append(el('div',{class:'card',style:'text-align:center'},el('h2',{},'🎉 Day '+n+' done! 完成！'),
+      el('p',{class:'sub'},'These words come back for a quick review tomorrow. 明天会复习这些单词。'),
+      el('button',{class:'btn primary',onclick:()=>viewWords()},'Back to Daily words')));};
+  const tick=()=>{answered++;if(answered===total)finish();};
+  const typeName={narrative:'story',report:'report',review:'review',diary:'diary entry',letter:'letter',poem:'poem'}[day.type]||'text';
+  const story=el('div',{class:'card'},
+    el('div',{class:'row between',style:'align-items:center;flex-wrap:nowrap'},el('h2',{style:'margin:0'},'📖 '+day.title),
+      el('button',{class:'iconbtn',type:'button',title:'Read it aloud',onclick:()=>speak(day.title+'. '+day.passage)},'🔊')),
+    el('p',{class:'sub',style:'margin:6px 0 10px'},'Read the '+typeName+'. Look for clue words near each bold word. 读短文，在粗体词附近找线索。'),
+    el('div',{class:'passage'+(day.type==='poem'?' poem':''),html:engMd(day.passage)}));
+  const wcards=W.map((w,i)=>el('div',{class:'card'},
+    el('div',{class:'row between'},el('span',{class:'pill'},'Word '+(i+1)+' of '+W.length),el('span',{class:'pill'},'Guess first! 先猜一猜')),
+    engMCQ({q:w.guess.q,opts:w.guess.opts,a:w.guess.a},{
+      after:()=>el('div',{},el('div',{class:'explain'},el('div',{class:'h'},'The clue · 线索'),biLine(w.guess.clue,w.guess.clueZh)),wordCardEl(w)),
+      onAnswer:async ok=>{if(!had.has(w.word)){had.add(w.word);await dbPut('english',newWordRec(pid(),w.word,n,ok,Date.now()));scheduleDriveSync();}tick();}})));
+  const qcard=el('div',{class:'card'},el('h2',{},'🧠 Story questions · 阅读理解'),
+    ...day.qs.map((q,i)=>el('div',{style:i?'margin-top:18px':''},engMCQ(q,{onAnswer:()=>tick()}))));
+  show(el('div',{class:'nomath'},backBar('📘 Day '+n,viewWords),story,...wcards,qcard,doneSlot));
+}
+async function viewWordReview(){
+  stopTimer();const D=engData();if(!D)return viewHome();
+  const due=dueWordRecs(await engRecs(),Date.now()).filter(r=>D.words[r.word]).slice(0,12);
+  if(!due.length){toast('No words to review right now.');return viewWords();}
+  const kindLabel={meaning:'Meaning in a sentence · 句中词义',cloze:'Fill the gap · 选词填空',syn:'Similar meaning · 近义词',ant:'Opposite · 反义词'};
+  let i=0,right=0;const host=el('div',{});
+  const render=async()=>{host.innerHTML='';
+    if(i>=due.length){if(right)await engReward(right,right*2,'for your word review');
+      host.append(el('div',{class:'card',style:'text-align:center'},el('h2',{},'🔁 Review done! '+right+' / '+due.length),
+        el('p',{class:'sub'},right===due.length?'Every word remembered! 全部记住了！':'The words you missed come back tomorrow. 答错的单词明天再复习。'),
+        el('button',{class:'btn primary',onclick:()=>viewWords()},'Back to Daily words')));return;}
+    const rec=due[i],w=D.words[rec.word],kinds=wordReviewKinds(w),kind=kinds[((rec.right||0)+(rec.wrong||0)+seedNum(rec.word))%kinds.length];
+    const R=buildWordReview(w,kind,rec.word+'|'+(rec.right||0)+'|'+(rec.wrong||0)),nextSlot=el('div',{});
+    host.append(el('div',{class:'card'},
+      el('div',{class:'row between'},el('span',{class:'pill'},'Word '+(i+1)+' of '+due.length),el('span',{class:'pill'},kindLabel[R.kind])),
+      R.context?el('div',{class:'passage',style:'margin:6px 0 12px'},el('div',{class:'bi-en'},el('div',{html:engMd(R.kind==='cloze'?R.context:hiWord(R.context,w))}),sayBtn(R.context.replace(/_{2,}/g,'blank'),'en'))):'',
+      engMCQ({q:R.prompt,opts:R.opts,a:R.a},{after:()=>wordMiniEl(w),onAnswer:async ok=>{if(ok)right++;
+        await dbPut('english',applyWordReview(rec,ok,Date.now()));scheduleDriveSync();
+        nextSlot.append(el('button',{class:'btn primary block',style:'margin-top:14px',onclick:()=>{i++;render();window.scrollTo(0,0);}},i+1<due.length?'Next word →':'Finish'));}}),
+      nextSlot));};
+  await render();
+  show(el('div',{class:'nomath'},backBar('🔁 Word review',viewWords),host));
+}
+async function viewWordList(){
+  const D=engData();if(!D)return viewHome();
+  const by=new Map((await engRecs()).filter(r=>r.kind==='word').map(r=>[r.word,r])),now=Date.now();
+  const cards=D.days.filter(d=>d.words.some(w=>by.has(w))).map(d=>el('div',{class:'card'},el('h2',{},'Day '+d.day+' · '+d.title),
+    el('div',{class:'menu'},...d.words.filter(w=>by.has(w)&&D.words[w]).map(id=>{const w=D.words[id],r=by.get(id);
+      const st=r.mastered?'⭐ Mastered':((r.dueAt!=null&&r.dueAt<=now)?'🔁 Due now':'Next review '+localDay(r.dueAt));
+      return menuItem('🔤',w.word+' · '+w.zh,st,()=>viewWordCard(id));}))));
+  show(el('div',{class:'nomath'},backBar('📚 My words',viewWords),...cards));
+}
+function viewWordCard(id){const D=engData(),w=D&&D.words[id];if(!w)return viewWords();show(el('div',{class:'nomath'},backBar('📘 '+w.word,()=>viewWordList()),el('div',{class:'card'},wordCardEl(w))));}
+async function viewSkills(){
+  stopTimer();const D=engData();if(!D){toast('English lessons aren’t available.');return viewHome();}
+  const recs=await engRecs(),by=new Map(recs.filter(r=>r.kind==='skill').map(r=>[r.skill,r])),next=nextSkill(D,recs);
+  const item=s=>{const r=by.get(s.id),isNext=next&&next.id===s.id;
+    return menuItem(r?'✅':(isNext?'👉':'🧩'),s.title+' · '+s.titleZh,r?('Done — best '+r.best+' / '+s.qs.length):(isNext?'Today’s skill':'Not done yet'),()=>viewSkill(s.id));};
+  show(el('div',{class:'nomath'},backBar('🧩 Daily skills',viewHome),
+    el('div',{class:'card'},el('h2',{},'🧩 Daily skills · 每日知识点'),
+      el('p',{class:'sub'},'One grammar or reading skill a day: a short lesson with examples (English + 中文, with read-aloud), then 3 quick questions.'),
+      next?el('button',{class:'btn primary block lg',onclick:()=>viewSkill(next.id)},'✨ Today’s skill: '+next.title):el('div',{class:'small',style:'color:var(--ok)'},'🎉 All '+D.skills.length+' skills done — revisit any to practise again.')),
+    el('div',{class:'card'},el('h2',{},'✍️ Grammar · 语法'),el('div',{class:'menu'},...D.skills.filter(s=>s.kind==='grammar').map(item))),
+    el('div',{class:'card'},el('h2',{},'📖 Reading · 阅读'),el('div',{class:'menu'},...D.skills.filter(s=>s.kind==='reading').map(item)))));
+}
+async function viewSkill(id){
+  stopTimer();const D=engData(),s=D&&D.skills.find(x=>x.id===id);if(!s)return viewSkills();
+  const prev=(await engRecs()).find(r=>r.kind==='skill'&&r.skill===id),doneSlot=el('div',{});
+  let answered=0,score=0;
+  const finish=async()=>{const now=Date.now();
+    const rec=prev?Object.assign({},prev,{done:true,score,best:Math.max(prev.best||0,score),tries:(prev.tries||1)+1,updatedAt:now})
+      :{id:skillKey(pid(),id),profileId:pid(),kind:'skill',skill:id,done:true,score,best:score,tries:1,updatedAt:now};
+    await dbPut('english',rec);scheduleDriveSync();if(!prev)await engReward(3,15,'for a new skill');
+    const nx=nextSkill(D,await engRecs()),perfect=score===s.qs.length;
+    doneSlot.append(el('div',{class:'card',style:'text-align:center'},el('h2',{},'🎉 '+score+' / '+s.qs.length+(perfect?' — perfect!':'')),
+      el('p',{class:'sub'},perfect?'You’ve got this skill. 掌握了！':'Read the explanations above, then try again another day. 看看上面的讲解，改天再练一次。'),
+      el('div',{class:'row',style:'justify-content:center'},nx?el('button',{class:'btn primary',onclick:()=>viewSkill(nx.id)},'Next skill →'):'',el('button',{class:'btn',onclick:()=>viewSkills()},'All skills'))));};
+  show(el('div',{class:'nomath'},backBar('🧩 '+s.title,viewSkills),
+    el('div',{class:'card'},el('span',{class:'pill'},s.kind==='grammar'?'✍️ Grammar · 语法':'📖 Reading · 阅读'),
+      el('h2',{style:'margin-top:6px'},s.title),el('div',{class:'zhword'},s.titleZh),
+      el('div',{class:'wsec'},el('div',{class:'h'},'The idea · 要点'),biLine(s.idea,s.ideaZh)),
+      el('div',{class:'wsec'},el('div',{class:'h'},'How it works · 怎么做'),...s.points.map((p,i)=>el('div',{class:'ptrow'},el('span',{class:'ptn'},String(i+1)),el('div',{style:'flex:1;min-width:0'},biLine(p.en,p.zh)))))),
+    el('div',{class:'card'},el('h2',{},'Examples · 例子'),...s.examples.map(x=>el('div',{class:'wsec'},el('div',{class:'bi-en'},el('div',{class:'exs',html:engMd(x.en)}),sayBtn(x.en,'en')),biLine(x.note,x.noteZh)))),
+    el('div',{class:'card'},el('h2',{},'💡 Tip · 小窍门'),biLine(s.tip,s.tipZh)),
+    el('div',{class:'card'},el('h2',{},'✏️ Try it · 练一练'),...s.qs.map((q,i)=>el('div',{style:i?'margin-top:18px':''},engMCQ(q,{onAnswer:ok=>{answered++;if(ok)score++;if(answered===s.qs.length)finish();}})))),
+    doneSlot));
 }
 /* ----- HOME ----- */
 async function viewHome(){
@@ -1942,7 +2210,8 @@ async function viewHome(){
   const goal=CFG.dailyGoal||10;
   const doneToday=attempts.filter(a=>a.date===todayISO()).reduce((s,a)=>s+(a.count||0),0);
   const goalPct=Math.min(100,Math.round(doneToday/goal*100));
-  const homeFocus=focusCard(defaultSettingsFor(activeProfile())); // teacher-flagged focus areas (null if none)
+  const homeFocus=focusCardsFor(activeProfile()); // focus areas, one card per subject (empty if none)
+  const engD=engData(),engR=engD?await engRecs():[];
   const tiles=el('div',{class:'tiles'},tile(attempts.length,'Practices'),tile(avg+'%','Avg score'),tile(dueN||review.length,dueN?'Due now':'To review'),tile(el('span',{class:'streak'},'🔥 '+streak),'Day streak'));
   const goalCard=el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:8px'},el('b',{},'🎯 Today’s goal'),el('span',{class:'small muted'},doneToday+' / '+goal+' questions'+(doneToday>=goal?' · done! 🎉':''))),el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+goalPct+'%;background:'+(doneToday>=goal?'var(--ok)':'var(--brand)')})));
   // Grouped into meaningful sections (each its own card) so the home screen scans easily:
@@ -1954,6 +2223,10 @@ async function viewHome(){
     menuItem('📓','Mistakes notebook',dueN?`🔁 ${dueN} due for review now`:(review.length?`${review.length} saved · spaced out, check back soon`:'Nothing to revise — nice!'),()=>review.length?viewReview():toast('No mistakes saved yet.')),
     menuItem('🗄️','Question bank',bankN?`${bankN} saved — practise with no AI`:'Pre-generate questions to save AI calls',()=>viewBank()),
   ]);
+  const secEnglish=engD?sectionCard('English','Book words and reading & grammar skills — in English and 中文, with read-aloud.',[
+    menuItem('📘','Daily words',wordsMenuLine(engD,engR),()=>viewWords()),
+    menuItem('🧩','Daily skills',skillsMenuLine(engD,engR),()=>viewSkills()),
+  ]):null;
   const secProgress=sectionCard('Track progress','See how you’re going and earn rewards.',[
     menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
     attempts.length?menuItem('📚','Past questions','Revisit any question — study it or practise similar',()=>viewAllQuestions()):null,
@@ -1975,6 +2248,7 @@ async function viewHome(){
     driveBanner,
     homeFocus,
     secPractise,
+    secEnglish,
     secProgress,
     secContent
   ));
@@ -4251,6 +4525,7 @@ async function viewDashboard(){
   const allReview=(await dbAll('review')).filter(r=>!r.mastered);
   const allTrainer=(await dbAll('trainer')).map(normTrainer);
   const allTradesD=await dbAll('trades');
+  const engD=engData(),allEng=engD?await dbAll('english'):[];
   const students=CFG.profiles.filter(p=>!isParentName(p.name));
   const list=students.length?students:CFG.profiles;
   const cards=list.map(p=>{
@@ -4269,6 +4544,9 @@ async function viewDashboard(){
     const netT=tradeNetFor(p.id,allTradesD),gifts=(vault&&vault.stats&&vault.stats.gifts)||0;
     const badgeN=earnedBadges(vault,{netTrade:netT}).filter(b=>b.got).length;
     const moneyLine=el('div',{class:'small muted',style:'margin-top:8px'},'💰 🍬 '+worth+' total'+(saved?(' · saved 🍬 '+saved):'')+' · trading '+(netT>=0?'+':'')+netT+' · 🏅 '+badgeN+'/'+BADGES.length+' badges'+(gifts?(' · 🎁 '+gifts+' gift'+(gifts>1?'s':'')):''));
+    // 📘/🧩 English habit — words learned/mastered/due and skill cards done (from the synced english store).
+    const er=allEng.filter(r=>r.profileId===p.id),ew=er.filter(r=>r.kind==='word');
+    const engLine=(engD&&er.length)?el('div',{class:'small muted',style:'margin-top:4px'},'📘 '+ew.length+' word'+(ew.length===1?'':'s')+' learned · '+ew.filter(r=>r.mastered).length+' mastered · '+dueWordRecs(er,Date.now()).length+' due · 🧩 '+er.filter(r=>r.kind==='skill'&&r.done).length+'/'+engD.skills.length+' skills'):'';
     return el('div',{class:'card'},
       el('div',{class:'row between'},
         el('div',{class:'row',style:'gap:10px;align-items:center'},el('span',{class:'avatar',style:'background:'+colorFor(p.name)},initials(p.name)),el('div',{},el('div',{style:'font-weight:700'},esc(p.name)),el('div',{class:'small muted'},last?('Last practice: '+last.date):'No practices yet'))),
@@ -4276,6 +4554,7 @@ async function viewDashboard(){
       el('div',{class:'tiles',style:'margin-top:12px'},tile(at.length,'Practices'),tile(avg+'%','Avg score'),tile(toReview,'To review'),tile(weak?weak.pct+'%':'—','Weakest')),
       weak?el('div',{class:'small muted',style:'margin-top:8px'},'Focus area: '+weak.t+' ('+weak.pct+'%)'):'',
       moneyLine,
+      engLine,
       el('div',{class:'row',style:'margin-top:12px;gap:8px;flex-wrap:wrap'},
         el('button',{class:'btn sm primary',onclick:()=>openStudent(p.id,viewHome)},'Open'),
         el('button',{class:'btn sm',onclick:()=>openStudent(p.id,viewHistory)},'📈 Progress'),
@@ -4440,10 +4719,14 @@ function refreshSpeakBar(){
 }
 function speakPauseToggle(){const sy=window.speechSynthesis;if(!sy)return;try{if(sy.paused)sy.resume();else if(sy.speaking)sy.pause();}catch(e){}setTimeout(refreshSpeakBar,30);}
 function speakStop(){try{window.speechSynthesis&&window.speechSynthesis.cancel();}catch(e){}refreshSpeakBar();}
-function speak(text){const sy=window.speechSynthesis;if(!sy)return toast('Read-aloud isn’t supported on this device.');
+// A Chinese voice for 中文 lines (prefers Mandarin zh-CN; the chosen English voice can't read Chinese).
+function pickZhVoice(){const vs=plVoices();return vs.find(v=>/^zh[-_](CN|Hans)/i.test(v.lang))||vs.find(v=>/^(zh|cmn)/i.test(v.lang))||null;}
+// opts.lang 'zh' → a Chinese voice; opts.rate multiplies the user's speed (e.g. 0.8 to say a word slowly).
+function speak(text,opts){opts=opts||{};const sy=window.speechSynthesis;if(!sy)return toast('Read-aloud isn’t supported on this device.');
   try{sy.cancel();const u=new SpeechSynthesisUtterance(plainMath(String(text||'')).replace(/\*+/g,''));
-    u.rate=CFG.voiceRate||0.95;u.pitch=(CFG.voicePitch!=null?CFG.voicePitch:1);u.lang='en-NZ';
-    const v=pickVoice();if(v){u.voice=v;u.lang=v.lang;}
+    u.rate=(CFG.voiceRate||0.95)*(opts.rate||1);u.pitch=(CFG.voicePitch!=null?CFG.voicePitch:1);
+    if(opts.lang==='zh'){u.lang='zh-CN';const zv=pickZhVoice();if(zv){u.voice=zv;u.lang=zv.lang;}else if(!speak._zhWarned){speak._zhWarned=true;toast('No Chinese voice on this device — add one in the system settings.');}}
+    else{u.lang='en-NZ';const v=pickVoice();if(v){u.voice=v;u.lang=v.lang;}}
     u.onstart=u.onend=u.onpause=u.onresume=u.onerror=refreshSpeakBar;
     sy.speak(u);
     if(_speakTimer)clearInterval(_speakTimer);_speakTimer=setInterval(refreshSpeakBar,400);
@@ -4508,8 +4791,8 @@ async function sendSummaryEmail(a,isTest=false){
 }
 
 /* ============================================================ Export / import / clear ============================================================ */
-async function exportData(){const data={exportedAt:new Date().toISOString(),profiles:CFG.profiles,attempts:await dbAll('attempts'),review:await dbAll('review'),refs:(await dbAll('refs')).map(r=>({...r})),bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades')};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=el('a',{href:url,download:'practice-lab-backup-'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);toast('Backup downloaded');}
-async function importData(obj){if(Array.isArray(obj.profiles))obj.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();if(obj.attempts)for(const a of obj.attempts)await dbPut('attempts',a);if(obj.review)for(const r of obj.review)await dbPut('review',r);if(obj.refs)for(const r of obj.refs)await dbPut('refs',r);if(obj.bank)for(const b of obj.bank)await dbPut('bank',b);if(obj.cards)for(const c of obj.cards)await dbPut('cards',c);if(obj.trainer)for(const t of obj.trainer)await dbPut('trainer',t);if(obj.trades)for(const t of obj.trades)await dbPut('trades',t);toast('Data imported ✓');}
+async function exportData(){const data={exportedAt:new Date().toISOString(),profiles:CFG.profiles,attempts:await dbAll('attempts'),review:await dbAll('review'),refs:(await dbAll('refs')).map(r=>({...r})),bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),english:await dbAll('english')};const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=el('a',{href:url,download:'practice-lab-backup-'+todayISO()+'.json'});document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);toast('Backup downloaded');}
+async function importData(obj){if(Array.isArray(obj.profiles))obj.profiles.forEach(p=>{if(!CFG.profiles.find(x=>x.id===p.id))CFG.profiles.push(p);});saveCfg();if(obj.attempts)for(const a of obj.attempts)await dbPut('attempts',a);if(obj.review)for(const r of obj.review)await dbPut('review',r);if(obj.refs)for(const r of obj.refs)await dbPut('refs',r);if(obj.bank)for(const b of obj.bank)await dbPut('bank',b);if(obj.cards)for(const c of obj.cards)await dbPut('cards',c);if(obj.trainer)for(const t of obj.trainer)await dbPut('trainer',t);if(obj.trades)for(const t of obj.trades)await dbPut('trades',t);if(obj.english)for(const r of obj.english)await dbPut('english',r);toast('Data imported ✓');}
 async function clearAll(){if(!confirm('Delete '+activeProfile().name+'’s practices and review items on this device? This cannot be undone.'))return;for(const a of (await dbAll('attempts')).filter(a=>a.profileId===pid()))await dbDel('attempts',a.id);for(const r of (await dbAll('review')).filter(r=>r.profileId===pid()))await dbDel('review',r.id);CFG.cleared=CFG.cleared||{};const now=Date.now();CFG.cleared['attempts:'+pid()]=now;CFG.cleared['review:'+pid()]=now;saveCfg();scheduleDriveSync();toast('History cleared');viewHome();}
 
 /* ============================================================ Google Drive ============================================================ */
@@ -4522,7 +4805,7 @@ async function driveSyncNow(){if(!driveToken)return;try{const fileId=await drive
 // extracted text + tags travel; the PDF/image stays on the device that imported
 // it (where grounding/pre-generation happens). Keeps the sync blob light.
 const refsLite=(await dbAll('refs')).map(({dataB64,...r})=>r);
-const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),curriculum:await dbAll('curriculum'),packsDeleted:CFG.packsDeleted||{},refsDeleted:CFG.refsDeleted||{},cleared:CFG.cleared||{},blocked:CFG.blocked||{},profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
+const merged={attempts:await dbAll('attempts'),review:await dbAll('review'),refs:refsLite,bank:await dbAll('bank'),cards:await dbAll('cards'),trainer:await dbAll('trainer'),trades:await dbAll('trades'),packs:await dbAll('packs'),curriculum:await dbAll('curriculum'),english:await dbAll('english'),packsDeleted:CFG.packsDeleted||{},refsDeleted:CFG.refsDeleted||{},cleared:CFG.cleared||{},blocked:CFG.blocked||{},profiles:CFG.profiles,settings:pickSyncSettings(),settingsAt:CFG.settingsAt||0,savedAt:new Date().toISOString()};const meta={name:'practice-lab.json',mimeType:'application/json'};if(!fileId)meta.parents=['appDataFolder'];const b='pl'+Math.random().toString(36).slice(2);const body=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(merged)}\r\n--${b}--`;const wr=await fetch('https://www.googleapis.com/upload/drive/v3/files'+(fileId?'/'+fileId:'')+'?uploadType=multipart',{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+b},body});if(!wr.ok)throw new Error('drive save '+wr.status);}catch(e){console.warn('drive sync',e);}}
 async function mergeRemote(remote){
   // Shared settings: newest explicit edit wins (e.g. parent turns on email summaries).
   if(remote.settings&&(remote.settingsAt||0)>(CFG.settingsAt||0)){applySyncSettings(remote.settings);CFG.settingsAt=remote.settingsAt;saveCfg();try{initEmailJS();}catch(e){}}
@@ -4580,6 +4863,8 @@ async function mergeRemote(remote){
   const lpk=new Map((await dbAll('packs')).map(p=>[p.id,p]));for(const p of(remote.packs||[])){const td=tomb[p.id];if(td&&td>=(p.updatedAt||0))continue;const cur=lpk.get(p.id);if(!cur||(p.updatedAt||0)>(cur.updatedAt||0))await dbPut('packs',p);}
   // Knowledge-map curriculum (shared, AI-generated): merge by id, newer updatedAt wins (keeps the copy with more concept cards filled in).
   const lcm=new Map((await dbAll('curriculum')).map(c=>[c.id,c]));for(const c of(remote.curriculum||[])){const cur=lcm.get(c.id);if(!cur||(c.updatedAt||0)>(cur.updatedAt||0))await dbPut('curriculum',c);}
+  // English progress (📘 words / 🧩 skills, per student): merge by id, the newest updatedAt wins.
+  const leng=new Map((await dbAll('english')).map(r=>[r.id,r]));for(const r of(remote.english||[])){const cur=leng.get(r.id);if(!cur||(r.updatedAt||0)>(cur.updatedAt||0))await dbPut('english',r);}
   try{for(const p of CFG.profiles)await mergeReviewDuplicates(p.id);}catch(e){} // merging remote review items can reintroduce same-question dupes across devices
   await reconcileProfiles();
 }
@@ -4678,7 +4963,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.59';
+const APP_VERSION='v2.60';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

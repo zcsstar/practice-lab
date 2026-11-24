@@ -7,7 +7,7 @@ family (multiple children), starting with NZ maths (ICAS primary + Rangitoto
 College extension), but generalised to any country / subject / exam / level.
 
 The app is [index.html](index.html) plus a small number of sibling static files
-([parse.js](parse.js), [battle.js](battle.js), [diagram.js](diagram.js)). No build step, no dependencies installed
+([parse.js](parse.js), [battle.js](battle.js), [diagram.js](diagram.js), [english.js](english.js)). No build step, no dependencies installed
 locally. It runs by double-clicking `index.html` or hosting it statically
 (GitHub Pages). Setup instructions for the user are in [SETUP.md](SETUP.md).
 
@@ -34,7 +34,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   `packsDeleted`/`refsDeleted` (tombstones), `cleared` (`"store:profileId"→ts`
   for Clear-bank/Clear-history) and `blocked` (`"profileId|qhash"→ts` for the
   "remove this question everywhere" block-list) — see Drive sync.
-- **IndexedDB** (`practicelab`, **v8**), stores:
+- **IndexedDB** (`practicelab`, **v9**), stores:
   - `attempts` — every completed practice (full question + result snapshot)
   - `review` — wrong/unsure questions for spaced revision (`mastered` after 2
     correct re-answers; carry a `dueAt` for spaced repetition — see Mistakes notebook)
@@ -45,6 +45,8 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   - `packs` — SHARED transcribed real past-paper packs (see Past papers)
   - `curriculum` — SHARED AI-generated knowledge-point trees + concept cards, keyed
     by `country|subject|exam|level` (see Knowledge map)
+  - `english` — per-student 📘 Daily-words / 🧩 Daily-skills progress (v2.60, DB **v9**): one record
+    per learned word (`profileId|w|word`) and per finished skill card (`profileId|s|id`) — see English
   - Per-student stores are tagged with `profileId`; `packs`/`curriculum` are shared.
     `dbGet(store,id)` fetches one record by key.
 - **Profiles** — `CFG.profiles[]` + `activeProfileId`. Header chip switches
@@ -510,6 +512,18 @@ locally. It runs by double-clicking `index.html` or hosting it statically
       solving* + *Logic & reasoning*. Number & algebra are deliberately absent (already strong). Under
       the General exam only the shared strands (Measurement, Fractions & decimals, Problem solving)
       apply. Keep test SCORES out of the committed file (public repo) — only the focus areas.
+    - **One record per subject (v2.60).** A `STUDENT_FOCUS` value may be a single record or an ARRAY
+      of records (one per subject); `focusRecords(profile)` normalises it. `focusTopicsFor(profile,
+      exam, subject)` picks the record whose `subject` matches (no subject → the first record, the
+      legacy behaviour). An optional `exam` on a record names the exam whose strand names it uses;
+      the home screen renders one card per record via `focusCardsFor(profile)` under that exam, and
+      each card's button calls `practiceWeakSpots(subject, exam)` (both args optional — no args =
+      the saved defaults, as before). Brendan has Maths + an **English** record (ICAS English
+      strands, from his 2026 ICAS + school reading results): **(1)** book words from context →
+      *Vocabulary*, **(2)** main idea / summing up / linking → *Reading comprehension*, **(3)**
+      reading between the lines → *Inference*, **(4)** grammar terms → *Grammar & punctuation*,
+      **(5)** reviews & poems → *Text types*. The English card also links to 📘 Daily words and
+      🧩 Daily skills.
   - **Timed mock-exam mode**: `startPaper(pk, timed)` sets a countdown (`paperMins()`,
     ~1 min/Q clamped 10–75) reusing the existing `S.limitSec` timer + auto-submit; runner
     shows a "⏱ Timed exam" pill, results show a per-topic exam report (`topicReport()`).
@@ -587,7 +601,37 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   - **`el()` escaping gotcha:** string children are inserted via `createTextNode`
     (already XSS-safe) — do NOT wrap child text in `esc()` (double-encodes, e.g.
     "Data &amp; graphs"). `esc()` is only for `{html:...}` / attribute strings.
-- **Read-aloud** — `speak()` (Web Speech) reads a question/explanation aloud,
+- **English — 📘 Daily words + 🧩 Daily skills (v2.60)** — a curated, NO-AI English layer (home
+  "English" section; all students). Content lives in [english.js](english.js)
+  (`window.PLEnglish.DATA`; self-authored, NZ spelling; the block between `/*BEGIN-DATA*/` and
+  `/*END-DATA*/` is STRICT JSON because the printed holiday workbook's Python generator in
+  `Kids/学习资料/2026假期数学/_source` reads days 1–12 from it): **20 days × 3 Tier-2 "book words"**
+  (each day a 60–110-word story/report/review/diary/letter/poem with the 3 words in bold + 2 questions:
+  a vocab item and a rotating reading skill; each word: form, pos, syllables, 中文, def/defZh,
+  parts/partsZh, note/noteZh, a guess-from-context MC with a bilingual clue, 2 examples, syn/ant,
+  3 unrelated distractors, a cloze) and **16 skill cards** (8 grammar: parts of speech → clauses →
+  contractions → tenses → punctuation; 8 reading: main idea → evidence → inference → words in context
+  → purpose → characters → comparing texts → figurative language & text types), each with points,
+  3 examples, a tip and 3 MC questions — EVERY explanation bilingual (English for the child, 中文 for a
+  parent). Flow: `viewWords` (hub: learned/mastered/due tiles, "Learn today's words · Day N", review,
+  word list) → `viewWordDay(n)` (story + 🔊, then each word: guess → clue + full `wordCardEl`, then the
+  2 story questions; learning a word files `newWordRec` due in 1 day) → `viewWordReview` (due words,
+  one ICAS-style item each, rotating `wordReviewKinds` = meaning-in-a-sentence / cloze / synonym /
+  antonym built by `buildWordReview` with a `seededShuffle` (the style is offset by the word, so one
+  session mixes all four); `applyWordReview` walks the Leitner
+  ladder `WORD_SR_DAYS` [1,3,7,14] — 4 right in a row = mastered, wrong → back to day 1); `viewSkills`
+  / `viewSkill(id)` (lesson + 3 questions → `profileId|s|id` with score/best). `engMCQ` is the shared
+  self-marking question widget; `biLine(en, zh)` renders an English line + muted Chinese line, each with
+  its own 🔊 (`sayBtn`). Small 🍬 rewards via `engReward` (day done +3, review +1 per right word, new
+  skill +3; capped at `ENG_CANDY_CAP` 8/student/day on the device). The parent dashboard shows each
+  student's words learned/mastered/due + skills done. Pure helpers + every content rule are tested in
+  [english.test.js](english.test.js). If english.js fails to load, `engData()` is null and the
+  section hides. **The English views' root div carries `class:'nomath'`** and `renderMath` passes
+  `ignoredClasses:['nomath']`: stories contain money ("$8 … $22"), which KaTeX's `$…$` auto-render would
+  otherwise turn into maths. Keep that class on any new English view.
+- **Read-aloud** — `speak(text, opts)` (Web Speech) reads a question/explanation aloud
+  (`opts.lang:'zh'` → a Chinese voice via `pickZhVoice()`, since the chosen English voice can't read
+  中文; `opts.rate` multiplies the speed, e.g. 0.8 to say a word slowly),
   using `plainMath()` to strip LaTeX/markdown. 🔊 buttons in runner + results.
   A floating control bar (`#speakbar`, `refreshSpeakBar`/`speakPauseToggle`/
   `speakStop`) auto-appears while speaking with Pause⇄Resume + Stop, and hides when
@@ -867,11 +911,14 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.59**). Claude suggests the next number on
+  minor on each release (currently at **v2.60**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
-  work account) — headless method: `git push "https://x-access-token:$(gh auth token
-  --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach
-  the desktop from this environment). Packs/refs are gitignored (copyright); committed
+  work account), the same way as the sibling personal repos: git's github.com credential
+  helper is gh, which serves only the ACTIVE gh account (the work one by default), so wrap
+  the push — `gh auth switch --hostname github.com --user zcsstar` → `git push origin main`
+  → switch back to `chi-vetlinkpro` (in a trap/finally). Never put a token in the URL or
+  read one out with `gh auth token` (global no-secret-extraction rule). Repo-local identity
+  is `Chi Zhang <zcsstar.nz@gmail.com>`. Packs/refs are gitignored (copyright); committed
   files are `index.html` + sibling scripts + docs.
   - **Deploy = GitHub Pages (branch `main`, `/`).** A committed **`.nojekyll`** (v2.42) makes
     Pages serve files STATICALLY — do NOT remove it; without it Pages runs legacy Jekyll, which
@@ -898,7 +945,11 @@ locally. It runs by double-clicking `index.html` or hosting it statically
    **Weak-spot priority weighting:** `node weakspots.test.js` (extracts `apportion`/
    `weightedFocusTopics`/`focusTopicsFor`; verifies a teacher's ordered focus themes produce a
    priority-weighted per-topic question allocation — earlier theme gets more, no strand-count
-   inversion — and stays gated to the matching exam+subject).
+   inversion — and stays gated to the matching exam+subject; also the per-subject records).
+   **English content + logic:** `node english.test.js` (requires english.js; validates every word,
+   story, question and skill card — one correct option, bilingual fields, bold forms, cloze, strict
+   JSON — and extracts the Daily-words helpers: the review ladder, next day/due/next skill, the four
+   review-question builders, seeded shuffle, word highlighting).
 2. **Run it:** `python -m http.server 8744` in this dir, open
    `http://localhost:8744/index.html`.
 3. **JS syntax check** without a browser:
