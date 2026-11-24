@@ -647,13 +647,14 @@ const EXAMS={
 };
 function examTopics(examId,subject){const e=EXAMS[examId];return (e&&e.topics&&e.topics[subject])||[];}
 
-// Teacher-flagged focus areas per student (from real teacher feedback — recorded here so they
-// survive across devices and drive the weak-spot drill + Knowledge map). Keyed by lowercased login
-// name. Each `areas` entry is one teacher theme, listed in the teacher's PRIORITY order (highest
+// Focus areas per student — from real teacher feedback or from the student's test results —
+// recorded here so they survive across devices and drive the weak-spot drill + Knowledge map. Keyed
+// by lowercased login name. Each `areas` entry is one theme, listed in PRIORITY order (highest
 // first), with the exam-strand `topics` it maps to. They only take effect where the strand names
 // line up with the student's exam topic list (so Howard's Rangitoto Maths strands don't misapply
-// to another exam). `subject` gates them to one subject. (A legacy flat `topics` array is also
-// accepted.)
+// to another exam). `subject` gates them to one subject. An optional `title` replaces the card's
+// default "Teacher's focus" heading (use it when the list isn't from a teacher). (A legacy flat
+// `topics` array is also accepted.)
 const STUDENT_FOCUS={
   // Howard — Year 8 (Year 9 entrance) Maths. His maths teacher's (2026) PRIORITY ORDER to work on.
   // The top 3 are the teacher's latest ordered focus; the last 2 were flagged earlier as lighter
@@ -666,6 +667,20 @@ const STUDENT_FOCUS={
       {label:'Statistics & probability',topics:['Statistics & data','Probability']},
       {label:'Distance, area & volume',topics:['Measurement, area & volume']},
       {label:'Problem solving',topics:['Problem solving & reasoning']}
+    ]},
+  // Brendan — Year 5 ICAS Maths. NOT a teacher list: drawn from his 2026 test results (ICAS + school
+  // maths), ordered by where the marks were lost. Number & algebra are already strong, so they're left
+  // out (the drill's low-weight tail still touches them). Strand names are the ICAS ones; the last
+  // theme is a stretch for the top-end puzzles.
+  brendan:{subject:'Mathematics',title:'Maths focus',
+    note:'From your 2026 ICAS and school maths tests. Your number and algebra are already strong — these are where marks slipped. Work from the top down; the last one is a stretch goal.',
+    areas:[
+      {label:'Area, perimeter, volume & reading scales',topics:['Measurement']},
+      {label:'Reflections, folding & shape patterns',topics:['Geometry & shape']},
+      {label:'Graphs, tables & listing every arrangement',topics:['Data & graphs','Chance & probability']},
+      {label:'Calendar & time',topics:['Time']},
+      {label:'Fractions of amounts',topics:['Fractions & decimals']},
+      {label:'Tricky puzzles: work backwards, odd & even (stretch)',topics:['Problem solving','Logic & reasoning']}
     ]}
 };
 // The teacher-focus for a profile, restricted to what's VALID for the given exam+subject
@@ -673,14 +688,14 @@ const STUDENT_FOCUS={
 // {areas (ordered, each {label,topics}), topics (flattened, priority order), note}.
 function focusTopicsFor(profile,examId,subject){
   const f=profile&&STUDENT_FOCUS[String(profile.name||'').toLowerCase().trim()];
-  if(!f)return {topics:[],note:'',areas:[]};
-  if(f.subject&&subject&&f.subject.toLowerCase()!==String(subject).toLowerCase())return {topics:[],note:'',areas:[]};
+  if(!f)return {topics:[],note:'',title:'',areas:[]};
+  if(f.subject&&subject&&f.subject.toLowerCase()!==String(subject).toLowerCase())return {topics:[],note:'',title:'',areas:[]};
   const known=examTopics(examId,subject),ok=t=>!known.length||known.includes(t);
   let areas=Array.isArray(f.areas)?f.areas.map(a=>({label:a.label||'',topics:(a.topics||[]).filter(ok)}))
     :[{label:'',topics:(f.topics||[]).filter(ok)}];
   areas=areas.filter(a=>a.topics.length);
   const topics=[];areas.forEach(a=>a.topics.forEach(t=>{if(!topics.includes(t))topics.push(t);}));
-  return {topics,note:f.note||'',areas};
+  return {topics,note:f.note||'',title:f.title||'',areas};
 }
 // Apportion `count` questions across `topics` by relative `weights` (largest-remainder, so the
 // per-topic counts sum to exactly `count`). Zero-weight / rounded-to-0 topics are omitted. Pure +
@@ -723,7 +738,7 @@ function focusCard(s,profile){
     a.label?el('div',{style:'font-weight:600;margin-bottom:3px'},(numbered?(i+1)+'. ':'')+a.label):'',
     el('div',{class:'row',style:'gap:6px;flex-wrap:wrap'},...a.topics.map(t=>el('span',{class:'pill'},t)))));
   return el('div',{class:'card',style:'border-left:4px solid var(--brand)'},
-    el('h2',{style:'margin:0 0 4px'},'🎯 Teacher’s focus for '+profile.name),
+    el('h2',{style:'margin:0 0 4px'},'🎯 '+(f.title||'Teacher’s focus')+' for '+profile.name),
     f.note?el('p',{class:'sub',style:'margin:0 0 8px'},f.note):'',
     ...areaEls,
     el('button',{class:'btn primary block',style:'margin-top:12px',onclick:()=>practiceWeakSpots()},'🎯 Practise these now'));
@@ -4663,7 +4678,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.58';
+const APP_VERSION='v2.59';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

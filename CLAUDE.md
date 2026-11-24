@@ -490,7 +490,9 @@ locally. It runs by double-clicking `index.html` or hosting it statically
       unweighted weak/untried drill.
     - `focusCard(s)` renders a "🎯 Teacher's focus" banner (themes numbered 1./2./3.… when ordered +
       labelled) on the home screen + Knowledge map (both branches); focus strands get a 🎯 pill in
-      `renderKnowledgeMap` + `coverageListCard`.
+      `renderKnowledgeMap` + `coverageListCard`. A record may carry an optional `title` (returned by
+      `focusTopicsFor`) that replaces the "Teacher's focus" heading — for a list that isn't from a
+      teacher (e.g. Brendan's "🎯 Maths focus for Brendan").
     - Howard's record is his 2026 maths teacher's priority order — **(1)** Sequences/Functions/Graphs →
       *Patterns & early algebra* + *Linear relationships & graphs*, **(2)** Position & Transformations →
       *Geometry, angles & shape*, **(3)** Statistics & Probability → *Statistics & data* + *Probability*
@@ -500,6 +502,14 @@ locally. It runs by double-clicking `index.html` or hosting it statically
       (`nz-maths-y8-y9entrance` in `DEFAULT_CURRICULUM`, `exam:'rangitoto'`) grounds his knowledge map /
       concept cards / formula sheet on accurate content across these strands (scores highest in
       `curriculumRefDocs` for his exam, combined with the general NZ default).
+    - Brendan's record (Year 5, **ICAS** strand names) is NOT a teacher list: it was drawn from his 2026
+      ICAS + school maths results, ordered by where the marks were lost — **(1)** area/perimeter/volume/
+      scales → *Measurement*, **(2)** reflections/folding/shape patterns → *Geometry & shape*, **(3)**
+      graphs/tables/listing arrangements → *Data & graphs* + *Chance & probability*, **(4)** calendar →
+      *Time*, **(5)** fractions of amounts → *Fractions & decimals*, **(6)** stretch puzzles → *Problem
+      solving* + *Logic & reasoning*. Number & algebra are deliberately absent (already strong). Under
+      the General exam only the shared strands (Measurement, Fractions & decimals, Problem solving)
+      apply. Keep test SCORES out of the committed file (public repo) — only the focus areas.
   - **Timed mock-exam mode**: `startPaper(pk, timed)` sets a countdown (`paperMins()`,
     ~1 min/Q clamped 10–75) reusing the existing `S.limitSec` timer + auto-submit; runner
     shows a "⏱ Timed exam" pill, results show a per-topic exam report (`topicReport()`).
@@ -857,7 +867,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.56**). Claude suggests the next number on
+  minor on each release (currently at **v2.59**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account) — headless method: `git push "https://x-access-token:$(gh auth token
   --user zcsstar)@github.com/zcsstar/practice-lab.git" main` (the GCM popup can't reach

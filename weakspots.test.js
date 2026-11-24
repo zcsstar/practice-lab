@@ -87,7 +87,28 @@ check('theme2 (Position) NOT less than theme3 (Stats/Prob) — inversion fixed',
 // ── focus gating still holds ─────────────────────────────────────────────────
 check('icas (strand names mismatch) => no focus', focusTopicsFor({ name: 'Howard' }, 'icas', 'Mathematics').topics.length, 0);
 check('English (subject gate) => no focus', focusTopicsFor({ name: 'Howard' }, 'rangitoto', 'English').topics.length, 0);
-check('non-focus student => no focus', focusTopicsFor({ name: 'Brendan' }, 'rangitoto', 'Mathematics').areas.length, 0);
+check('non-focus student => no focus', focusTopicsFor({ name: 'Unlisted' }, 'icas', 'Mathematics').areas.length, 0);
+check('Howard keeps the default "Teacher’s focus" heading (no title)', hf.title, '');
+
+// ── integration: Brendan's test-derived ICAS focus (6 themes, own title) ─────
+const bf = focusTopicsFor({ name: 'Brendan' }, 'icas', 'Mathematics');
+check('Brendan resolves 6 themes under ICAS', bf.areas.length, 6);
+check('Brendan theme1 = Measurement', JSON.stringify(bf.areas[0].topics), JSON.stringify(['Measurement']));
+check('Brendan card title (not a teacher list)', bf.title, 'Maths focus');
+const bw = weightedFocusTopics(bf.areas, ['Number & place value', 'Money']); // + low-weight tail
+for (const N of [10, 24]) { // drill size / generation batch size
+  const al = apportion(bw.topics, bw.weights, N);
+  const tt = bf.areas.map(a => a.topics.reduce((s, t) => s + (al[t] || 0), 0));
+  check(`Brendan alloc sums to ${N}`, sum(al), N);
+  check(`Brendan Measurement gets the most of ${N}`, tt[0] === Math.max(...tt), true);
+  check(`Brendan theme totals never rise down the list (${N}: ${tt.join('/')})`, tt.every((v, i) => i === 0 || tt[i - 1] >= v), true);
+}
+check('Brendan: ICAS strands never leak into Rangitoto', focusTopicsFor({ name: 'Brendan' }, 'rangitoto', 'Mathematics').topics.length, 0);
+check('Brendan: English (subject gate) => no focus', focusTopicsFor({ name: 'Brendan' }, 'icas', 'English').topics.length, 0);
+const bg = focusTopicsFor({ name: 'Brendan' }, 'general', 'Mathematics');
+const generalMaths = ctx.examTopics('general', 'Mathematics');
+check('Brendan under General keeps only strands General has', bg.topics.length > 0 && bg.topics.every(t => generalMaths.includes(t)), true);
+check('Brendan under General still leads with Measurement', bg.topics[0], 'Measurement');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
