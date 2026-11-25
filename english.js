@@ -5343,11 +5343,11 @@
             "q": "Why did Aroha’s mum knock on Leo’s door?",
             "opts": [
               "She wanted Leo to play with Aroha.",
-              "She needed help to rescue some lambs.",
               "She was looking for her dog, Patch.",
-              "She came to borrow a raincoat."
+              "She came to borrow a raincoat.",
+              "She needed help to rescue some lambs."
             ],
-            "a": 1,
+            "a": 3,
             "ev": [
               8,
               9
@@ -5412,12 +5412,12 @@
             "skill": "inference",
             "q": "Why did Leo ‘not mind at all’ that he was soaked and muddy?",
             "opts": [
-              "He had enjoyed helping and felt proud.",
               "He liked getting wet in the rain.",
+              "He had enjoyed helping and felt proud.",
               "He knew his clothes were old.",
               "He wanted Aroha to feel sorry for him."
             ],
-            "a": 0,
+            "a": 1,
             "ev": [
               17,
               18
@@ -5498,11 +5498,11 @@
             "q": "Where do kororā spend most of the day?",
             "opts": [
               "in their burrows",
-              "under boatsheds",
               "at sea",
+              "under boatsheds",
               "on the beach"
             ],
-            "a": 2,
+            "a": 1,
             "ev": [
               11
             ],
@@ -5513,12 +5513,12 @@
             "skill": "vocab",
             "q": "‘This colouring is a clever disguise.’ What does ‘disguise’ mean here?",
             "opts": [
-              "a way of hiding by looking like something else",
               "a bright colour that warns enemies",
               "a warm coat for cold water",
-              "a special swimming trick"
+              "a special swimming trick",
+              "a way of hiding by looking like something else"
             ],
-            "a": 0,
+            "a": 3,
             "ev": [
               6,
               7,
@@ -5533,10 +5533,10 @@
             "opts": [
               "to tell a funny story",
               "to give the penguins names",
-              "to show the writer’s opinion",
-              "to show what each section is about"
+              "to show what each section is about",
+              "to show the writer’s opinion"
             ],
-            "a": 3,
+            "a": 2,
             "ev": [
               4,
               10,
@@ -5550,11 +5550,11 @@
             "q": "Why could driving slowly near the coast after dark help kororā?",
             "opts": [
               "Kororā are scared of loud engines.",
-              "Kororā cross coastal roads at night.",
               "Kororā hunt for fish near roads.",
-              "Kororā build nests in car parks."
+              "Kororā build nests in car parks.",
+              "Kororā cross coastal roads at night."
             ],
-            "a": 1,
+            "a": 3,
             "ev": [
               13,
               19
@@ -5566,12 +5566,12 @@
             "skill": "purpose",
             "q": "What is the main purpose of the last section of the report?",
             "opts": [
-              "to describe what kororā eat",
               "to explain the dangers and how people can help",
+              "to describe what kororā eat",
               "to persuade people to buy nesting boxes",
               "to compare kororā with other penguins"
             ],
-            "a": 1,
+            "a": 0,
             "ev": [
               18,
               19,
@@ -5584,12 +5584,12 @@
             "skill": "summary",
             "q": "Which is the best summary of the whole report?",
             "opts": [
+              "Kororā are tiny penguins with interesting habits that need our protection.",
               "Kororā are noisy birds that live under boatsheds.",
               "Kororā eat anchovies and pilchards every day.",
-              "Kororā are tiny penguins with interesting habits that need our protection.",
               "Kororā are the largest penguins in New Zealand."
             ],
-            "a": 2,
+            "a": 0,
             "ev": [
               0,
               20
@@ -5648,12 +5648,12 @@
             "skill": "sequence",
             "q": "What did the writer’s group do straight after breakfast?",
             "opts": [
-              "walked to the flying fox",
               "had a talent show",
               "ate lunch with Priya",
+              "walked to the flying fox",
               "listened to Mr Hēnare’s guitar"
             ],
-            "a": 0,
+            "a": 2,
             "ev": [
               3
             ],
@@ -5666,10 +5666,10 @@
             "opts": [
               "were covered in sticky food",
               "were very cold",
-              "felt weak and wobbly with fear",
-              "were sore from walking"
+              "were sore from walking",
+              "felt weak and wobbly with fear"
             ],
-            "a": 2,
+            "a": 3,
             "ev": [
               8,
               9
@@ -5699,11 +5699,11 @@
             "q": "How did the writer feel at the bottom of the flying fox?",
             "opts": [
               "sick and dizzy",
+              "thrilled and proud",
               "angry with Sam",
-              "bored and tired",
-              "thrilled and proud"
+              "bored and tired"
             ],
-            "a": 3,
+            "a": 1,
             "ev": [
               13,
               21
@@ -5717,10 +5717,10 @@
             "opts": [
               "because the writer was too full",
               "because Mrs Lee told them to share",
-              "to stop the weka coming back",
-              "to cheer her up after the weka took hers"
+              "to cheer her up after the weka took hers",
+              "to stop the weka coming back"
             ],
-            "a": 3,
+            "a": 2,
             "ev": [
               15,
               17
@@ -5732,12 +5732,12 @@
             "skill": "summary",
             "q": "Which sentence BEST sums up the writer’s day?",
             "opts": [
-              "A scary challenge turned into a proud moment.",
               "The food at camp was terrible.",
+              "A scary challenge turned into a proud moment.",
               "A weka spoiled the whole day.",
               "The writer spent the day practising jokes."
             ],
-            "a": 0,
+            "a": 1,
             "ev": [
               0,
               21
@@ -5796,12 +5796,12 @@
             "skill": "evidence",
             "q": "What must Ruru do in the game?",
             "opts": [
+              "find her way home before the sun comes up",
               "catch a hungry stoat",
               "collect glowing mushrooms",
-              "build a nest in a tree",
-              "find her way home before the sun comes up"
+              "build a nest in a tree"
             ],
-            "a": 3,
+            "a": 0,
             "ev": [
               2
             ],
@@ -5813,11 +5813,11 @@
             "q": "The glowing mushrooms and glow-worms are ‘mesmerising’. What does ‘mesmerising’ mean?",
             "opts": [
               "very scary and dangerous",
-              "so beautiful you can’t stop looking",
               "too dark to see properly",
+              "so beautiful you can’t stop looking",
               "noisy and annoying"
             ],
-            "a": 1,
+            "a": 2,
             "ev": [
               6,
               7
@@ -5829,12 +5829,12 @@
             "skill": "fact-opinion",
             "q": "Which sentence from the review is a FACT?",
             "opts": [
+              "There are only twelve levels.",
               "The best thing about the game is how it looks.",
               "The music suits the setting perfectly.",
-              "There are only twelve levels.",
               "It is beautiful, clever and great value."
             ],
-            "a": 2,
+            "a": 0,
             "ev": [
               15
             ],
@@ -5845,12 +5845,12 @@
             "skill": "structure",
             "q": "What is the job of the paragraph that begins ‘However, the game is not perfect’?",
             "opts": [
-              "to describe the game’s problems",
               "to explain how to play the first level",
               "to describe the music",
+              "to describe the game’s problems",
               "to tell the reader the price"
             ],
-            "a": 0,
+            "a": 2,
             "ev": [
               14,
               15,
@@ -5881,11 +5881,11 @@
             "q": "Which player would the reviewer most likely think will NOT enjoy this game?",
             "opts": [
               "someone who loves adventure games",
-              "someone who gets upset by hard puzzles",
               "someone who enjoys a challenge",
-              "someone who likes beautiful pictures"
+              "someone who likes beautiful pictures",
+              "someone who gets upset by hard puzzles"
             ],
-            "a": 1,
+            "a": 3,
             "ev": [
               9,
               18
@@ -5988,12 +5988,12 @@
             "skill": "evidence",
             "q": "Why do you put small stones in the bottom of the bottle?",
             "opts": [
-              "to stop the gauge blowing over",
               "to make the water clean",
               "to measure the rain",
+              "to stop the gauge blowing over",
               "to keep insects out"
             ],
-            "a": 0,
+            "a": 2,
             "ev": [
               13
             ],
@@ -6004,12 +6004,12 @@
             "skill": "vocab",
             "q": "In Step 5, the top is used ‘like a funnel’. What does a funnel do?",
             "opts": [
+              "guides liquid into a narrow opening",
               "measures how heavy something is",
               "keeps liquid cold",
-              "cuts plastic into pieces",
-              "guides liquid into a narrow opening"
+              "cuts plastic into pieces"
             ],
-            "a": 3,
+            "a": 0,
             "ev": [
               17,
               18
@@ -6021,12 +6021,12 @@
             "skill": "purpose",
             "q": "Why does the writer include the sentence about drips from leaves?",
             "opts": [
+              "to explain why the gauge must not be near trees",
               "to describe how trees drink water",
               "to warn that leaves are poisonous",
-              "to explain why the gauge must not be near trees",
               "to show that the gauge needs cleaning"
             ],
-            "a": 2,
+            "a": 0,
             "ev": [
               19,
               20
@@ -6038,12 +6038,12 @@
             "skill": "structure",
             "q": "Why are the instructions numbered?",
             "opts": [
-              "because the steps must be done in order",
               "to show how many materials you need",
+              "because the steps must be done in order",
               "because every step is equally hard",
               "to show how many days the project takes"
             ],
-            "a": 0,
+            "a": 1,
             "ev": [
               11,
               15,
@@ -6131,11 +6131,11 @@
             "q": "Who is with the speaker at the beach?",
             "opts": [
               "a school friend",
-              "Grandma",
               "Dad",
+              "Grandma",
               "nobody"
             ],
-            "a": 2,
+            "a": 1,
             "ev": [
               7,
               17
@@ -6149,10 +6149,10 @@
             "opts": [
               "singing loudly",
               "waiting politely",
-              "flying in circles",
-              "pushing roughly"
+              "pushing roughly",
+              "flying in circles"
             ],
-            "a": 3,
+            "a": 2,
             "ev": [
               5,
               6
@@ -6164,12 +6164,12 @@
             "skill": "figurative",
             "q": "The crab is ‘holding up his claws like a boxer’. What does this suggest about the crab?",
             "opts": [
-              "It is ready to defend itself.",
               "It is waving hello.",
+              "It is ready to defend itself.",
               "It is very sleepy.",
               "It wants to be picked up."
             ],
-            "a": 0,
+            "a": 1,
             "ev": [
               12,
               13
@@ -6182,11 +6182,11 @@
             "q": "Which line gives the sea a human action?",
             "opts": [
               "‘counting periwinkles as small as peas’",
-              "‘and the sea begins to whisper’",
               "‘In every pool there is a tiny world’",
+              "‘and the sea begins to whisper’",
               "‘Walking home with sandy toes’"
             ],
-            "a": 1,
+            "a": 2,
             "ev": [
               21
             ],
@@ -6198,11 +6198,11 @@
             "q": "Which word best describes the speaker?",
             "opts": [
               "greedy",
-              "respectful",
               "bored",
-              "careless"
+              "careless",
+              "respectful"
             ],
-            "a": 1,
+            "a": 3,
             "ev": [
               27,
               28,
@@ -6217,10 +6217,10 @@
             "opts": [
               "Rock pools are dangerous places.",
               "Gulls are the rudest birds of all.",
-              "Enjoy nature, but leave it as you found it.",
-              "It is fun to collect sea creatures."
+              "It is fun to collect sea creatures.",
+              "Enjoy nature, but leave it as you found it."
             ],
-            "a": 2,
+            "a": 3,
             "ev": [
               28,
               33
@@ -6288,12 +6288,12 @@
             "skill": "sequence",
             "q": "What did Mia do after she noticed the words inside the bracelet?",
             "opts": [
-              "She showed the bracelet to Mum.",
               "She wore it to school.",
               "She buried it in the sand again.",
-              "She gave it to Sam."
+              "She gave it to Sam.",
+              "She showed the bracelet to Mum."
             ],
-            "a": 0,
+            "a": 3,
             "ev": [
               7,
               10
@@ -6340,10 +6340,10 @@
             "opts": [
               "‘That afternoon, June came to collect the bracelet’",
               "‘She had left her phone number, just in case’",
-              "‘Lost things are often handed in there’",
-              "‘My husband gave me this fifty years ago’"
+              "‘My husband gave me this fifty years ago’",
+              "‘Lost things are often handed in there’"
             ],
-            "a": 3,
+            "a": 2,
             "ev": [
               17,
               18
@@ -6371,12 +6371,12 @@
             "skill": "inference",
             "q": "What does Sam’s comment at the end suggest?",
             "opts": [
-              "He has changed his mind about ‘finders keepers’.",
               "He wanted the bracelet for himself.",
               "He was angry with June.",
+              "He has changed his mind about ‘finders keepers’.",
               "He thought Mia should have sold it."
             ],
-            "a": 0,
+            "a": 2,
             "ev": [
               3,
               24
@@ -6442,11 +6442,11 @@
             "q": "Why can we see the Moon?",
             "opts": [
               "It makes its own light.",
+              "Sunlight bounces off it towards Earth.",
               "It is covered in glowing rocks.",
-              "Earth shines a light on it.",
-              "Sunlight bounces off it towards Earth."
+              "Earth shines a light on it."
             ],
-            "a": 3,
+            "a": 1,
             "ev": [
               5,
               6
@@ -6460,10 +6460,10 @@
             "opts": [
               "the rocks on the Moon’s surface",
               "times when clouds hide the Moon",
-              "the different shapes the Moon seems to have",
-              "the different colours of the Moon"
+              "the different colours of the Moon",
+              "the different shapes the Moon seems to have"
             ],
-            "a": 2,
+            "a": 3,
             "ev": [
               10,
               11
@@ -6475,12 +6475,12 @@
             "skill": "structure",
             "q": "What is the purpose of the heading ‘Did you know?’",
             "opts": [
-              "to ask the reader a test question",
               "to introduce an extra interesting fact",
+              "to ask the reader a test question",
               "to explain the meaning of ‘waxing’",
               "to give the writer’s opinion"
             ],
-            "a": 1,
+            "a": 0,
             "ev": [
               19,
               21
@@ -6512,10 +6512,10 @@
             "opts": [
               "It is much closer to Earth.",
               "It is lit by the Sun, but a new moon is not.",
-              "We see all of its lit side; at a new moon we see almost none.",
-              "It is a bigger ball of rock."
+              "It is a bigger ball of rock.",
+              "We see all of its lit side; at a new moon we see almost none."
             ],
-            "a": 2,
+            "a": 3,
             "ev": [
               13,
               16
@@ -6527,12 +6527,12 @@
             "skill": "summary",
             "q": "Which sentence best sums up the main idea of the report?",
             "opts": [
+              "The Moon seems to change shape because we see different amounts of its lit half.",
               "The Moon is a ball of rock that spins slowly.",
               "A new moon arrives every 29 and a half days.",
-              "The Moon is brighter than the Sun at night.",
-              "The Moon seems to change shape because we see different amounts of its lit half."
+              "The Moon is brighter than the Sun at night."
             ],
-            "a": 3,
+            "a": 0,
             "ev": [
               2,
               10
@@ -6594,11 +6594,11 @@
             "q": "What does Sione want Ms Walker to do?",
             "opts": [
               "visit Kōwhai School",
-              "start a vegetable garden at the school",
               "give the class more science lessons",
+              "start a vegetable garden at the school",
               "buy seeds from the garden centre"
             ],
-            "a": 1,
+            "a": 2,
             "ev": [
               1,
               17
@@ -6610,12 +6610,12 @@
             "skill": "fact-opinion",
             "q": "Which of these ideas from the text is an OPINION?",
             "opts": [
-              "A garden would be one of the best things ever to happen to the school.",
               "Six parents have offered to help.",
               "The space behind the hall gets sun all day.",
-              "Kōwhai School grew over 100 kilograms of vegetables."
+              "Kōwhai School grew over 100 kilograms of vegetables.",
+              "A garden would be one of the best things ever to happen to the school."
             ],
-            "a": 0,
+            "a": 3,
             "ev": [
               3
             ],
@@ -6626,12 +6626,12 @@
             "skill": "vocab",
             "q": "‘…so it would be ideal for a garden.’ What does ‘ideal’ mean?",
             "opts": [
+              "perfect",
               "too small",
               "dangerous",
-              "perfect",
               "expensive"
             ],
-            "a": 2,
+            "a": 0,
             "ev": [
               16
             ],
@@ -6642,12 +6642,12 @@
             "skill": "evidence",
             "q": "Which part answers people who think a garden costs too much?",
             "opts": [
+              "‘the garden centre … has promised to donate seeds and tools’",
               "‘Why shouldn’t we do the same?’",
               "‘Together, we can grow something amazing.’",
-              "‘That is science and maths in real life’",
-              "‘the garden centre … has promised to donate seeds and tools’"
+              "‘That is science and maths in real life’"
             ],
-            "a": 3,
+            "a": 0,
             "ev": [
               14,
               15
@@ -6659,12 +6659,12 @@
             "skill": "structure",
             "q": "Why does Sione use the words ‘Firstly’, ‘Secondly’ and ‘Thirdly’?",
             "opts": [
-              "to show he is giving separate reasons, one by one",
               "to show the order the vegetables will grow",
               "to tell Ms Walker what to do first",
+              "to show he is giving separate reasons, one by one",
               "to show which reason matters least"
             ],
-            "a": 0,
+            "a": 2,
             "ev": [
               4,
               7,
@@ -6677,12 +6677,12 @@
             "skill": "purpose",
             "q": "Why does Sione mention Kōwhai School?",
             "opts": [
-              "to complain that Kōwhai School is better",
               "to show that a school garden can really work",
+              "to complain that Kōwhai School is better",
               "to ask Ms Walker to visit it",
               "to explain where the garden centre is"
             ],
-            "a": 1,
+            "a": 0,
             "ev": [
               9,
               10
@@ -6745,12 +6745,12 @@
             "skill": "sequence",
             "q": "Which of these happened FIRST?",
             "opts": [
+              "Kate moved to Christchurch.",
               "The biggest petition was collected.",
               "A new law was signed.",
-              "Kate moved to Christchurch.",
               "Women voted for the first time."
             ],
-            "a": 2,
+            "a": 0,
             "ev": [
               4
             ],
@@ -6761,12 +6761,12 @@
             "skill": "vocab",
             "q": "‘Many people opposed the idea.’ What does ‘opposed’ mean?",
             "opts": [
+              "were against",
               "were excited about",
               "did not understand",
-              "had never heard of",
-              "were against"
+              "had never heard of"
             ],
-            "a": 3,
+            "a": 0,
             "ev": [
               10,
               11
@@ -6779,11 +6779,11 @@
             "q": "How long was the roll made from the biggest 1893 petition?",
             "opts": [
               "about 32 metres",
-              "about 270 metres",
               "about 18 metres",
-              "about 1893 metres"
+              "about 1893 metres",
+              "about 270 metres"
             ],
-            "a": 1,
+            "a": 3,
             "ev": [
               16
             ],
@@ -6794,12 +6794,12 @@
             "skill": "fact-opinion",
             "q": "Which of these is a FACT about Kate Sheppard?",
             "opts": [
-              "She died in 1934.",
               "She was the bravest woman who ever lived.",
               "Her campaign was the most exciting time in history.",
+              "She died in 1934.",
               "She deserves to be on every banknote."
             ],
-            "a": 0,
+            "a": 2,
             "ev": [
               22
             ],
@@ -6810,12 +6810,12 @@
             "skill": "purpose",
             "q": "Why does the writer begin with ‘Today, New Zealanders aged 18 and over can vote’?",
             "opts": [
+              "to show how different things were before Kate’s work",
               "to explain how to enrol to vote",
               "to describe Kate’s childhood",
-              "to argue that 18 is too young to vote",
-              "to show how different things were before Kate’s work"
+              "to argue that 18 is too young to vote"
             ],
-            "a": 3,
+            "a": 0,
             "ev": [
               0,
               1
@@ -6828,11 +6828,11 @@
             "q": "Which is the best summary of Kate Sheppard’s life?",
             "opts": [
               "She moved from England and wrote letters to newspapers.",
-              "She collected 32,000 signatures all by herself.",
               "She led a long campaign that helped win women the vote.",
+              "She collected 32,000 signatures all by herself.",
               "She was the first woman elected to Parliament."
             ],
-            "a": 2,
+            "a": 1,
             "ev": [
               2,
               19
@@ -6940,12 +6940,12 @@
             "skill": "structure",
             "q": "What do the words in brackets, such as ‘(rolling her eyes)’, tell the actors?",
             "opts": [
-              "how to move or act",
               "which words to shout",
               "when the play ends",
-              "what the audience should say"
+              "what the audience should say",
+              "how to move or act"
             ],
-            "a": 0,
+            "a": 3,
             "ev": [
               13
             ],
@@ -6957,11 +6957,11 @@
             "q": "Nana is ‘wringing her hands’ when she finds the empty plate. What is she doing?",
             "opts": [
               "washing her hands at the sink",
-              "clapping because she is happy",
               "twisting her hands together because she is upset",
+              "clapping because she is happy",
               "waving to the children"
             ],
-            "a": 2,
+            "a": 1,
             "ev": [
               3,
               5
@@ -6974,11 +6974,11 @@
             "q": "What happened just after Leo had a taste of the pavlova?",
             "opts": [
               "Nana made a second pavlova.",
-              "The dog knocked it onto the floor.",
               "Mia found cream on Leo’s nose.",
-              "Leo went outside to play cricket."
+              "Leo went outside to play cricket.",
+              "The dog knocked it onto the floor."
             ],
-            "a": 1,
+            "a": 3,
             "ev": [
               24,
               25
@@ -6991,11 +6991,11 @@
             "q": "Why does Mia say that it has been raining all morning?",
             "opts": [
               "to tell Dad to bring in the washing",
+              "to show Leo could not have been playing cricket outside",
               "to explain why the pavlova melted",
-              "to suggest they eat lunch inside",
-              "to show Leo could not have been playing cricket outside"
+              "to suggest they eat lunch inside"
             ],
-            "a": 3,
+            "a": 1,
             "ev": [
               16,
               17,
@@ -7009,11 +7009,11 @@
             "q": "How does Leo feel just before he tells the truth?",
             "opts": [
               "proud of what he has done",
-              "worried that he will get into trouble",
               "angry with Mia",
+              "worried that he will get into trouble",
               "bored with the game"
             ],
-            "a": 1,
+            "a": 2,
             "ev": [
               23,
               30
@@ -7025,12 +7025,12 @@
             "skill": "main-idea",
             "q": "What lesson does the play mainly teach?",
             "opts": [
-              "It is better to tell the truth than to hide a mistake.",
               "Dogs should not be allowed in kitchens.",
+              "It is better to tell the truth than to hide a mistake.",
               "Pavlovas are hard to make.",
               "Detectives always solve the case."
             ],
-            "a": 0,
+            "a": 1,
             "ev": [
               31
             ],
@@ -7109,10 +7109,10 @@
             "opts": [
               "so people can eat it on toast",
               "to keep the hive warm",
-              "to make wax for the cells",
-              "so the hive has food in winter"
+              "so the hive has food in winter",
+              "to make wax for the cells"
             ],
-            "a": 3,
+            "a": 2,
             "ev": [
               25
             ],
@@ -7123,12 +7123,12 @@
             "skill": "fact-opinion",
             "q": "Which sentence from Text 1 is an OPINION?",
             "opts": [
-              "Our jars come in three sizes: small, medium and family.",
               "Golden Hills Honey is the tastiest honey in New Zealand.",
+              "Our jars come in three sizes: small, medium and family.",
               "Every jar is packed by hand.",
               "This offer ends on Friday."
             ],
-            "a": 1,
+            "a": 0,
             "ev": [
               6
             ],
@@ -7139,12 +7139,12 @@
             "skill": "vocab",
             "q": "‘Finally, they seal each cell with a cap of wax…’ What does ‘seal’ mean here?",
             "opts": [
-              "close up tightly",
               "paint a pattern on",
+              "close up tightly",
               "make a hole in",
               "clean out"
             ],
-            "a": 0,
+            "a": 1,
             "ev": [
               24
             ],
@@ -7155,12 +7155,12 @@
             "skill": "purpose",
             "q": "What is the main purpose of Text 1?",
             "opts": [
+              "to persuade people to buy Golden Hills Honey",
               "to explain how bees make honey",
               "to describe the hills of Northland",
-              "to persuade people to buy Golden Hills Honey",
               "to tell a story about Mrs Rangi"
             ],
-            "a": 2,
+            "a": 0,
             "ev": [
               12,
               14
@@ -7174,10 +7174,10 @@
             "opts": [
               "Text 2 tries to sell honey; Text 1 gives facts.",
               "Both texts tell a story about one bee.",
-              "Text 2 gives facts; Text 1 tries to sell something.",
-              "Text 2 is mostly about pancakes."
+              "Text 2 is mostly about pancakes.",
+              "Text 2 gives facts; Text 1 tries to sell something."
             ],
-            "a": 2,
+            "a": 3,
             "ev": [
               6,
               17
@@ -7190,17 +7190,1122 @@
             "q": "Text 1 sells honey. Which fact from Text 2 best helps explain why a jar of honey is valuable?",
             "opts": [
               "Honey is made from the nectar of flowers.",
+              "It takes the life’s work of hundreds of bees to fill one jar.",
               "Bees fly back to the hive when they are full.",
-              "Nectar is very watery at first.",
-              "It takes the life’s work of hundreds of bees to fill one jar."
+              "Nectar is very watery at first."
             ],
-            "a": 3,
+            "a": 1,
             "ev": [
               26,
               27
             ],
             "why": "If one bee makes only ‘about one-twelfth of a teaspoon’ in her whole life, then ‘hundreds of bees’ are needed for one jar. All that work helps explain why honey is valuable.",
             "whyZh": "如果一只蜜蜂一生只能酿出“大约十二分之一茶匙”的蜂蜜，那么一罐蜂蜜就需要“几百只蜜蜂”的劳动。这么多的劳动正好说明了蜂蜜为什么珍贵。"
+          }
+        ]
+      },
+      {
+        "id": "r13",
+        "title": "Which Spoon Gets Hot First?",
+        "type": "science",
+        "topic": "Heat · 热传递",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Which Spoon Gets Hot First?",
+            "paras": [
+              [
+                "Have you ever stirred a pot of hot soup and felt the handle of the spoon grow warm?",
+                "Room 12 wanted to find out why some spoons warm up faster than others.",
+                "We predicted that a metal spoon would warm up first, because metal pots get hot so quickly."
+              ],
+              [
+                "How did we test it?"
+              ],
+              [
+                "We used four spoons of the same size and shape, all 20 centimetres long: a copper spoon, a steel spoon, a plastic spoon and a wooden spoon.",
+                "We stuck a small blob of butter near the top of each one.",
+                "Then our teacher stood all four spoons in the same jug of hot water, and we started the timer.",
+                "We checked the butter every 30 seconds.",
+                "To keep the test fair, every spoon had the same amount of butter and stood in the same water.",
+                "The only thing we changed was the material."
+              ],
+              [
+                "What did we find?"
+              ],
+              [
+                "The table shows how long each blob of butter took to melt."
+              ],
+              [
+                "What does it mean?"
+              ],
+              [
+                "Scientists call the energy that makes things hot thermal energy.",
+                "Thermal energy always moves from a warmer place to a cooler place, never the other way round.",
+                "The hot water warmed the bottom of each spoon, and the thermal energy travelled up towards the butter.",
+                "Materials that let heat travel through them easily are called **conductors**.",
+                "Metals such as copper and steel are good conductors, so the butter on them melted first.",
+                "Wood and plastic are insulators: they slow heat down, which is why many pot handles are made from them.",
+                "Thermal energy keeps moving until both things are the same temperature, which is why a mug of hot chocolate slowly cools down to room temperature."
+              ]
+            ]
+          }
+        ],
+        "data": {
+          "after": 4,
+          "kind": "table",
+          "title": "Time for the butter to melt",
+          "head": [
+            "Spoon (20 cm long)",
+            "Time for the butter to melt"
+          ],
+          "rows": [
+            [
+              "copper spoon",
+              "2 minutes"
+            ],
+            [
+              "steel spoon",
+              "7 minutes"
+            ],
+            [
+              "plastic spoon",
+              "did not melt in 15 minutes"
+            ],
+            [
+              "wooden spoon",
+              "did not melt in 15 minutes"
+            ]
+          ]
+        },
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "What did the class stick near the top of each spoon?",
+            "opts": [
+              "a thermometer",
+              "a small blob of butter",
+              "a drop of hot water",
+              "a square of chocolate"
+            ],
+            "a": 1,
+            "ev": [
+              5
+            ],
+            "why": "The report says, ‘We stuck a small blob of butter near the top of each one.’ When the butter melted, the class knew the heat had reached the top.",
+            "whyZh": "文中说：“我们在每样东西靠近顶端的地方粘了一小块黄油。”黄油一化，就说明热量已经传到了顶端。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘Materials that let heat travel through them easily are called conductors.’ What are conductors in this text?",
+            "opts": [
+              "materials that keep things cold",
+              "people who lead a band or an orchestra",
+              "materials that heat can pass through easily",
+              "materials that melt in hot water"
+            ],
+            "a": 2,
+            "ev": [
+              16
+            ],
+            "why": "The sentence explains the word: conductors ‘let heat travel through them easily’, like copper and steel. A conductor can also be a person who leads an orchestra, but not in this text.",
+            "whyZh": "句子本身就解释了这个词：导体（conductor）“让热量很容易通过”，比如铜和钢。conductor 也可以指乐队指挥，但在这篇文章里不是这个意思。"
+          },
+          {
+            "skill": "data",
+            "q": "Look at the table. How long did the butter on the steel spoon take to melt?",
+            "opts": [
+              "7 minutes",
+              "2 minutes",
+              "15 minutes",
+              "It did not melt."
+            ],
+            "a": 0,
+            "ev": [],
+            "rows": [
+              1
+            ],
+            "why": "The steel spoon row of the table says 7 minutes. (2 minutes was the copper spoon.)",
+            "whyZh": "表格中“钢勺”那一行写着 7 分钟。（2 分钟是铜勺的结果。）"
+          },
+          {
+            "skill": "data",
+            "q": "Which two spoons did not let enough heat through to melt the butter within 15 minutes?",
+            "opts": [
+              "the copper spoon and the steel spoon",
+              "the plastic spoon and the wooden spoon",
+              "the steel spoon and the plastic spoon",
+              "the copper spoon and the wooden spoon"
+            ],
+            "a": 1,
+            "ev": [],
+            "rows": [
+              2,
+              3
+            ],
+            "why": "The last two rows of the table say the butter on the plastic spoon and the wooden spoon ‘did not melt in 15 minutes’.",
+            "whyZh": "表格最后两行：塑料勺和木勺上的黄油“15 分钟内没有融化”。"
+          },
+          {
+            "skill": "predict",
+            "q": "The class then tests an aluminium spoon, which is another metal, in the same way. What is most likely to happen?",
+            "opts": [
+              "The butter does not melt at all.",
+              "The butter melts more slowly than on the wooden spoon.",
+              "The hot water turns cold straight away.",
+              "The butter melts within a few minutes."
+            ],
+            "a": 3,
+            "ev": [
+              17
+            ],
+            "why": "Aluminium is a metal, and the text says metals are good conductors. So heat should reach the butter quickly, as it did on the copper and steel spoons.",
+            "whyZh": "铝也是金属，文中说金属是热的良导体，所以热量会很快传到黄油那里，就像铜勺和钢勺一样。"
+          },
+          {
+            "skill": "conclude",
+            "q": "Which conclusion do the results support best?",
+            "opts": [
+              "Longer spoons always warm up faster.",
+              "Heat moves from cooler places to warmer places.",
+              "Plastic lets heat through more easily than steel.",
+              "Heat travels through metals faster than through wood or plastic."
+            ],
+            "a": 3,
+            "ev": [
+              9
+            ],
+            "rows": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "why": "The material was the only thing that changed. The butter melted on both metals but not on the wood or the plastic, so heat moves faster through metals. All the spoons were the same size and shape, and heat moves from warmer to cooler, not the other way.",
+            "whyZh": "实验只改变了材料：两种金属上的黄油都化了，木头和塑料上的没化，所以热在金属里传得更快。所有勺子大小、形状都一样；而且热是从热处流向冷处，不是反过来。"
+          }
+        ]
+      },
+      {
+        "id": "r14",
+        "title": "Grip or Slip? Investigating Friction",
+        "type": "science",
+        "topic": "Friction · 摩擦力",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Grip or Slip? Investigating Friction",
+            "paras": [
+              [
+                "Why does a skateboard roll easily along a smooth footpath but stop quickly on grass?",
+                "The answer is a force called friction.",
+                "Friction is at work every time you walk, ride a bike or rub your hands together to warm them."
+              ],
+              [
+                "Friction is a force that **opposes** movement when two surfaces rub against each other.",
+                "It pushes against the direction something is moving, so it slows things down and can make them stop.",
+                "Rough surfaces usually make more friction than smooth ones, because their tiny bumps catch on each other.",
+                "Without friction, you could not even hold a cup, because it would slide out of your fingers."
+              ],
+              [
+                "How did Room 8 test it?"
+              ],
+              [
+                "Room 8 let the same toy car roll down the same ramp onto four different surfaces, from the roughest to the smoothest: sandpaper, carpet, wood and tiles.",
+                "They kept the ramp at the same height for every test.",
+                "They released the car from the same spot each time instead of pushing it.",
+                "Then they measured how far it rolled along each surface before it stopped.",
+                "They did each test three times and worked out the average distance."
+              ],
+              [
+                "The bar graph shows their results."
+              ],
+              [
+                "Is friction useful?"
+              ],
+              [
+                "Friction is often helpful.",
+                "Bike brakes press against the wheels so that friction slows the bike down, and the deep tread on tractor tyres grips muddy paddocks.",
+                "Shoes with rubber soles grip the floor, which stops us from slipping.",
+                "Sometimes friction gets in the way, so people try to reduce it.",
+                "We oil squeaky hinges and keep playground slides smooth so that things can move easily.",
+                "Air and water can also push against moving objects, which is called air resistance and water resistance.",
+                "That is why a cyclist crouches low on a racing bike."
+              ]
+            ]
+          }
+        ],
+        "data": {
+          "after": 4,
+          "kind": "bar",
+          "title": "How far the toy car rolled (cm)",
+          "unit": " cm",
+          "bars": [
+            {
+              "label": "sandpaper",
+              "value": 20
+            },
+            {
+              "label": "carpet",
+              "value": 55
+            },
+            {
+              "label": "wood",
+              "value": 150
+            },
+            {
+              "label": "tiles",
+              "value": 190
+            }
+          ]
+        },
+        "qs": [
+          {
+            "skill": "main-idea",
+            "q": "What is this text mainly about?",
+            "opts": [
+              "how to build a fast toy car",
+              "why grass is better than footpaths for skateboarding",
+              "what friction is, how it was tested and how we use it",
+              "how bike brakes are made"
+            ],
+            "a": 2,
+            "ev": [
+              1
+            ],
+            "why": "The text explains what friction is, describes Room 8’s test, then shows where friction helps or gets in the way. The other options are only small details, or are not in the text at all.",
+            "whyZh": "文章先解释什么是摩擦力，再介绍 8 班的实验，最后讲摩擦力在生活中什么时候有用、什么时候碍事。其他选项只是小细节，或者文中根本没有。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘Friction is a force that opposes movement.’ What does opposes mean here?",
+            "opts": [
+              "works against",
+              "speeds up",
+              "measures",
+              "copies"
+            ],
+            "a": 0,
+            "ev": [
+              3,
+              4
+            ],
+            "why": "The next sentence explains it: friction ‘pushes against the direction something is moving’. To oppose something is to work against it.",
+            "whyZh": "下一句解释了：摩擦力“朝着物体运动的相反方向推”。oppose 的意思就是“对抗、阻碍”。"
+          },
+          {
+            "skill": "data",
+            "q": "On which surface did the car roll the shortest distance?",
+            "opts": [
+              "carpet",
+              "wood",
+              "tiles",
+              "sandpaper"
+            ],
+            "a": 3,
+            "ev": [],
+            "rows": [
+              0
+            ],
+            "why": "The sandpaper bar is the shortest: the car rolled only 20 cm. Sandpaper is the roughest surface, so it made the most friction.",
+            "whyZh": "砂纸那一栏最短：小车只滚了 20 厘米。砂纸最粗糙，摩擦力最大。"
+          },
+          {
+            "skill": "data",
+            "q": "How much further did the car roll on the tiles than on the carpet?",
+            "opts": [
+              "245 cm",
+              "55 cm",
+              "190 cm",
+              "135 cm"
+            ],
+            "a": 3,
+            "ev": [],
+            "rows": [
+              1,
+              3
+            ],
+            "why": "Tiles 190 cm − carpet 55 cm = 135 cm. ‘How much further’ means find the difference, so subtract.",
+            "whyZh": "瓷砖 190 厘米 − 地毯 55 厘米 = 135 厘米。“多滚了多远”是求差，用减法。"
+          },
+          {
+            "skill": "predict",
+            "q": "Room 8 tests a doormat that is smoother than sandpaper but rougher than carpet. How far will the car most likely roll?",
+            "opts": [
+              "more than 190 cm",
+              "between 20 cm and 55 cm",
+              "exactly 150 cm",
+              "between 150 cm and 190 cm"
+            ],
+            "a": 1,
+            "ev": [
+              5
+            ],
+            "rows": [
+              0,
+              1
+            ],
+            "why": "A rougher surface makes more friction, so the car stops sooner. The doormat is rougher than carpet (55 cm) but smoother than sandpaper (20 cm), so the distance should fall between them.",
+            "whyZh": "越粗糙摩擦力越大，小车停得越早。门垫比地毯（55 厘米）粗糙、比砂纸（20 厘米）光滑，所以距离应该在两者之间。"
+          },
+          {
+            "skill": "conclude",
+            "q": "Which conclusion is best supported by the investigation?",
+            "opts": [
+              "The rougher the surface, the shorter the distance the car rolled.",
+              "Heavier cars always roll further than light cars.",
+              "There is no friction at all on smooth tiles.",
+              "The car rolled furthest on the roughest surface."
+            ],
+            "a": 0,
+            "ev": [
+              5
+            ],
+            "rows": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "why": "From sandpaper (roughest) to tiles (smoothest), the distance keeps growing: 20, 55, 150, 190 cm. Only the surface changed, so roughness made the difference. The tiles still have some friction — the car did stop.",
+            "whyZh": "从最粗糙的砂纸到最光滑的瓷砖，距离不断增加：20、55、150、190 厘米。实验只改变了表面，所以差别来自粗糙程度。瓷砖上也有摩擦力——小车最后还是停下来了。"
+          }
+        ]
+      },
+      {
+        "id": "r15",
+        "title": "Changes in the Kitchen",
+        "type": "science",
+        "topic": "Physical & chemical change · 物理变化与化学变化",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Changes in the Kitchen",
+            "paras": [
+              [
+                "A kitchen is a great place to watch materials change.",
+                "Scientists sort these changes into two groups: physical changes and chemical changes."
+              ],
+              [
+                "What is a physical change?"
+              ],
+              [
+                "In a physical change, a material changes its shape or its state, but no new substance is made.",
+                "When chocolate melts, it is still chocolate, and it sets hard again in the fridge.",
+                "Water is the same: liquid water can freeze into ice, and ice can melt back into water.",
+                "Freezing juice into ice blocks and dissolving sugar in tea are physical changes too.",
+                "Many physical changes are easy to undo."
+              ],
+              [
+                "What is a chemical change?"
+              ],
+              [
+                "In a chemical change, the particles of a material are rearranged to make a new substance with different properties.",
+                "A cake is a good example: once the runny batter is baked, it becomes a spongy cake that can never turn back into batter.",
+                "Burning wood in a fire is another chemical change, because the wood turns into ash and smoke.",
+                "Most chemical changes are very hard to **reverse**.",
+                "You can look for clues that a chemical change has happened: bubbles of gas, a new colour, a new smell, or the mixture becoming hotter or colder by itself."
+              ],
+              [
+                "What did Room 5 observe?"
+              ],
+              [
+                "Room 5 tried five kitchen changes and wrote down what they observed."
+              ],
+              [
+                "Cooks use chemical changes every day, even if they do not call them that.",
+                "Chemical changes are useful outside the kitchen too, such as the burning of fuel in a car engine.",
+                "Next time you make toast, look closely: you are watching chemistry happen."
+              ]
+            ]
+          }
+        ],
+        "data": {
+          "after": 6,
+          "kind": "table",
+          "title": "Room 5’s kitchen observations",
+          "head": [
+            "Change",
+            "What we observed"
+          ],
+          "rows": [
+            [
+              "melting chocolate",
+              "It became runny, then set hard again in the fridge."
+            ],
+            [
+              "frying an egg",
+              "The clear part turned white and solid, and it did not change back."
+            ],
+            [
+              "mixing vinegar and baking soda",
+              "It fizzed with bubbles, and the mixture felt colder."
+            ],
+            [
+              "freezing orange juice",
+              "It became solid ice blocks, which melted again later."
+            ],
+            [
+              "toasting bread",
+              "The bread turned brown and crisp, and it smelled different."
+            ]
+          ]
+        },
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "What happens in a physical change?",
+            "opts": [
+              "A brand-new substance is always made.",
+              "The material always gets hotter.",
+              "The material disappears completely.",
+              "A material changes shape or state, but no new substance is made."
+            ],
+            "a": 3,
+            "ev": [
+              3
+            ],
+            "why": "The text says that in a physical change ‘a material changes its shape or its state, but no new substance is made’.",
+            "whyZh": "文中说：物理变化中“材料改变了形状或状态，但没有产生新物质”。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘Most chemical changes are very hard to reverse.’ What does reverse mean here?",
+            "opts": [
+              "speed up",
+              "undo, or change back",
+              "see clearly",
+              "repeat again"
+            ],
+            "a": 1,
+            "ev": [
+              10,
+              12
+            ],
+            "why": "The cake example helps: a baked cake ‘can never turn back into batter’. To reverse a change is to undo it and go back to how things were.",
+            "whyZh": "蛋糕的例子可以帮忙：烤好的蛋糕“再也变不回面糊”。reverse 就是“撤销、变回原样”。"
+          },
+          {
+            "skill": "data",
+            "q": "According to the table, which change made bubbles of gas?",
+            "opts": [
+              "melting chocolate",
+              "freezing orange juice",
+              "mixing vinegar and baking soda",
+              "toasting bread"
+            ],
+            "a": 2,
+            "ev": [],
+            "rows": [
+              2
+            ],
+            "why": "The table says that mixing vinegar and baking soda ‘fizzed with bubbles’. Bubbles of gas are a clue that a new substance has formed.",
+            "whyZh": "表格写着：醋和小苏打混合后“冒出气泡”。产生气体是生成了新物质的线索。"
+          },
+          {
+            "skill": "data",
+            "q": "How many of the five changes in the table are chemical changes?",
+            "opts": [
+              "3",
+              "2",
+              "4",
+              "5"
+            ],
+            "a": 0,
+            "ev": [],
+            "rows": [
+              1,
+              2,
+              4
+            ],
+            "why": "Frying the egg (a new white solid formed), vinegar and baking soda (bubbles, colder) and toasting bread (new colour and smell) are chemical changes. Melting chocolate and freezing juice are physical: they are still chocolate and juice, and both changed back.",
+            "whyZh": "煎鸡蛋（生成了白色的固体新物质）、醋加小苏打（冒泡、变凉）、烤面包（变色、气味不同）是化学变化；融化巧克力和冻橙汁是物理变化——它们仍然是巧克力和橙汁，而且都能变回去。所以一共 3 个。"
+          },
+          {
+            "skill": "predict",
+            "q": "With an adult’s help, Ana heats a spoonful of white sugar in a pan until it turns brown and smells like caramel. What is the best prediction?",
+            "opts": [
+              "It has become a new substance, so it will not turn back into white sugar.",
+              "It will turn back into white sugar when it cools down.",
+              "It is a physical change, just like melting chocolate.",
+              "Nothing has changed except the temperature."
+            ],
+            "a": 0,
+            "ev": [
+              13
+            ],
+            "why": "A new colour and a new smell are clues of a chemical change. Caramel is a new substance, so — like a baked cake — it will not turn back into white sugar.",
+            "whyZh": "变色、出现新气味都是化学变化的线索。焦糖是新物质，就像烤好的蛋糕一样，变不回白糖了。"
+          },
+          {
+            "skill": "conclude",
+            "q": "Which reason best explains why frying an egg is a chemical change?",
+            "opts": [
+              "The egg gets hot in the pan.",
+              "The egg changes shape when it is cracked.",
+              "A new substance forms, and the egg cannot change back.",
+              "The egg can be cooled down again."
+            ],
+            "a": 2,
+            "ev": [
+              9
+            ],
+            "rows": [
+              1
+            ],
+            "why": "The clear part became a new white, solid substance, and it did not change back — both are clues of a chemical change. Getting hot alone does not prove a chemical change: melting chocolate gets hot too.",
+            "whyZh": "蛋清变成了白色的固体新物质，而且变不回去——这两点都是化学变化的线索。光是变热不能证明是化学变化，融化巧克力也会变热。"
+          }
+        ]
+      },
+      {
+        "id": "r16",
+        "title": "Where Does the Hillside Go?",
+        "type": "science",
+        "topic": "Erosion · 侵蚀",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Where Does the Hillside Go?",
+            "paras": [
+              [
+                "After a heavy storm, many rivers in New Zealand turn the colour of milky coffee.",
+                "The brown colour comes from soil that the rain has washed off the land.",
+                "Where has all that soil come from, and can we stop it?"
+              ],
+              [
+                "What is erosion?"
+              ],
+              [
+                "Erosion is the wearing away and carrying away of rock and soil by water, wind or ice.",
+                "Rain loosens soil on a hillside, and the water flowing downhill carries it into streams.",
+                "The faster and stronger the water flows, the more soil it can carry.",
+                "When the water slows down, on the inside of a bend or where a river meets the sea, it drops, or **deposits**, the soil.",
+                "Waves do the same along the coast, slowly wearing away cliffs and moving sand along beaches.",
+                "Over thousands or even millions of years, erosion can carve out whole valleys."
+              ],
+              [
+                "Do plants make a difference?"
+              ],
+              [
+                "With their teachers, a Year 6 class collected water from the banks of three streams the day after the same storm.",
+                "One stream drained bare land that had just been cleared, one drained grassy farm pasture, and one drained native bush.",
+                "They filled a 10-litre bucket from each stream and measured how many grams of soil were in it."
+              ],
+              [
+                "Plant roots spread through the soil and hold it together like a net.",
+                "Without roots, the soil is loose and easily washed away.",
+                "Leaves soften the rain before it hits the ground, and fallen leaves and branches cover and protect the soil.",
+                "That is why farmers often plant trees on steep, slippery slopes and along stream banks.",
+                "Keeping soil on the land helps farms grow food and keeps rivers and beaches clean."
+              ]
+            ]
+          }
+        ],
+        "data": {
+          "after": 4,
+          "kind": "bar",
+          "title": "Soil in a 10-litre bucket of stream water (grams)",
+          "unit": " g",
+          "bars": [
+            {
+              "label": "bare land",
+              "value": 40
+            },
+            {
+              "label": "pasture",
+              "value": 12
+            },
+            {
+              "label": "native bush",
+              "value": 3
+            }
+          ]
+        },
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "What is erosion?",
+            "opts": [
+              "the wearing away and carrying away of rock and soil",
+              "the growing of new plants on bare land",
+              "rain falling from storm clouds",
+              "the building of new hills by farmers"
+            ],
+            "a": 0,
+            "ev": [
+              4
+            ],
+            "why": "The text gives the definition: ‘Erosion is the wearing away and carrying away of rock and soil by water, wind or ice.’",
+            "whyZh": "文中直接给出了定义：侵蚀（erosion）就是“水、风或冰把岩石和土壤磨损并带走”。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘When the water slows down … it drops, or deposits, the soil.’ What does deposits mean here?",
+            "opts": [
+              "washes away",
+              "digs up",
+              "cleans",
+              "leaves behind"
+            ],
+            "a": 3,
+            "ev": [
+              7
+            ],
+            "why": "The text explains the word itself: the water ‘drops, or deposits, the soil’. To deposit something is to put it down or leave it behind.",
+            "whyZh": "文中自己解释了：水流变慢时，会把泥土“放下”（drops），也就是 deposits（沉积）。deposit 在这里就是“放下、留下”。"
+          },
+          {
+            "skill": "data",
+            "q": "How many grams of soil were in the bucket from the native bush stream?",
+            "opts": [
+              "12 grams",
+              "3 grams",
+              "40 grams",
+              "0 grams"
+            ],
+            "a": 1,
+            "ev": [],
+            "rows": [
+              2
+            ],
+            "why": "The native bush bar shows 3 grams.",
+            "whyZh": "“原生林（native bush）”那一栏是 3 克。"
+          },
+          {
+            "skill": "data",
+            "q": "About how many times as much soil was in the water from the bare land as in the water from the native bush?",
+            "opts": [
+              "about 3 times",
+              "about 37 times",
+              "about 13 times",
+              "about 40 times"
+            ],
+            "a": 2,
+            "ev": [],
+            "rows": [
+              0,
+              2
+            ],
+            "why": "Bare land 40 g ÷ native bush 3 g ≈ 13. ‘How many times as much’ means divide; 37 is the difference (40 − 3), not how many times.",
+            "whyZh": "裸地的泥土大约是原生林的 13 倍（40 ÷ 3 ≈ 13）。“是几倍”用除法；37 是两者的差（40 − 3），不是倍数。"
+          },
+          {
+            "skill": "predict",
+            "q": "A farmer plants trees all over the bare land. Years later, after another storm of the same size, what will most likely happen?",
+            "opts": [
+              "There will be more than 40 grams of soil in each bucket.",
+              "The stream will stop flowing.",
+              "There will be much less than 40 grams of soil in each bucket from that stream.",
+              "The amount of soil will stay exactly the same."
+            ],
+            "a": 2,
+            "ev": [
+              14
+            ],
+            "rows": [
+              0
+            ],
+            "why": "Tree roots will hold the soil together like a net, so much less soil will wash into the stream, moving towards the bush stream’s 3 grams.",
+            "whyZh": "树根会像网一样把土抓住，冲进小溪的泥土会少很多，逐渐接近原生林的 3 克。"
+          },
+          {
+            "skill": "conclude",
+            "q": "Which conclusion do the class’s results support best?",
+            "opts": [
+              "Pasture holds soil better than native bush.",
+              "The more plants cover the land, the less soil the rain washes away.",
+              "Storms only erode bare land.",
+              "Streams in native bush flow the fastest."
+            ],
+            "a": 1,
+            "ev": [
+              11
+            ],
+            "rows": [
+              0,
+              1,
+              2
+            ],
+            "why": "All three streams had the same storm. The soil went down as plant cover went up: bare land 40 g, pasture 12 g, native bush 3 g. Pasture and bush still lost some soil, so storms erode covered land too, just less.",
+            "whyZh": "三条溪经历的是同一场暴雨。植被越多，泥土越少：裸地 40 克、牧场 12 克、原生林 3 克。牧场和原生林也有泥土被冲走，说明有植被的地方也会被侵蚀，只是少得多。"
+          }
+        ]
+      },
+      {
+        "id": "r17",
+        "title": "Will It Light Up?",
+        "type": "science",
+        "topic": "Electric circuits · 电路",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "Will It Light Up?",
+            "paras": [
+              [
+                "Every time you switch on a torch, you are using an electric circuit.",
+                "A simple circuit is a closed loop that joins a battery, wires and something that runs on electricity, such as a bulb or a buzzer.",
+                "Each part of a circuit is called a **component**."
+              ],
+              [
+                "How does a circuit work?"
+              ],
+              [
+                "The battery pushes electric charge around the loop, through the wires and the bulb, and back to the battery.",
+                "Electric charge can only flow when the loop is complete, with no gaps.",
+                "A switch opens or closes a gap in the circuit, so it turns the bulb off and on.",
+                "Materials that let electricity flow through them are called conductors, and materials that stop it are called insulators.",
+                "Scientists draw circuits using simple symbols instead of pictures, so that anyone can read them."
+              ],
+              [
+                "What did Room 3 test?"
+              ],
+              [
+                "Room 3 built a circuit with a battery, a bulb and three wires, but they left a gap between the ends of two of the wires.",
+                "They placed different materials across the gap, one at a time, to see whether the bulb would light."
+              ],
+              [
+                "All metals conduct electricity, and copper is one of the best, which is why electrical wires have copper inside them.",
+                "The plastic coating around a wire is an insulator that keeps the electricity in the wire and keeps our fingers safe.",
+                "Graphite surprised the class: it is not a metal, but it still let electricity through.",
+                "Pencil lead is graphite mixed with clay, and it made the bulb glow only dimly, so Room 3 called pencil lead a weak conductor.",
+                "Never test materials using a wall socket, because mains electricity is strong enough to seriously hurt you."
+              ]
+            ]
+          }
+        ],
+        "data": {
+          "after": 4,
+          "kind": "table",
+          "title": "Testing materials in the gap",
+          "head": [
+            "Material in the gap",
+            "Did the bulb light?"
+          ],
+          "rows": [
+            [
+              "steel paper clip",
+              "yes — brightly"
+            ],
+            [
+              "aluminium foil",
+              "yes — brightly"
+            ],
+            [
+              "10-cent coin",
+              "yes — brightly"
+            ],
+            [
+              "plastic ruler",
+              "no"
+            ],
+            [
+              "rubber eraser",
+              "no"
+            ],
+            [
+              "pencil lead (graphite)",
+              "yes — dimly"
+            ],
+            [
+              "wooden ice-block stick",
+              "no"
+            ]
+          ]
+        },
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "What does a switch do in a circuit?",
+            "opts": [
+              "It stores the electricity.",
+              "It makes the bulb brighter.",
+              "It opens or closes a gap, turning the bulb off and on.",
+              "It joins the battery to the wall socket."
+            ],
+            "a": 2,
+            "ev": [
+              6
+            ],
+            "why": "The text says, ‘A switch opens or closes a gap in the circuit, so it turns the bulb off and on.’",
+            "whyZh": "开关（switch）可以在电路上断开或接上一个缺口：断开时电流过不去，灯灭；接上时电路接通，灯亮。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘Each part of a circuit is called a component.’ What does component mean here?",
+            "opts": [
+              "a kind of battery",
+              "the electricity that flows",
+              "a gap in the wires",
+              "one of the parts that a circuit is made of"
+            ],
+            "a": 3,
+            "ev": [
+              2
+            ],
+            "why": "The sentence defines it: each part of a circuit — the battery, a wire, the bulb or a switch — is a component.",
+            "whyZh": "句子本身就是定义：电路的每一个部分——电池、导线、灯泡、开关——都叫元件（component）。"
+          },
+          {
+            "skill": "data",
+            "q": "Which material made the bulb glow only dimly?",
+            "opts": [
+              "pencil lead (graphite)",
+              "aluminium foil",
+              "steel paper clip",
+              "plastic ruler"
+            ],
+            "a": 0,
+            "ev": [],
+            "rows": [
+              5
+            ],
+            "why": "The table says pencil lead (graphite): ‘yes — dimly’. It let only a little electricity through.",
+            "whyZh": "表格写着：铅笔芯（石墨）——“亮了，但很暗”。它只让一点点电流通过。"
+          },
+          {
+            "skill": "data",
+            "q": "How many of the seven materials let electricity flow through them?",
+            "opts": [
+              "3",
+              "2",
+              "4",
+              "7"
+            ],
+            "a": 2,
+            "ev": [],
+            "rows": [
+              0,
+              1,
+              2,
+              5
+            ],
+            "why": "Four lit the bulb: the paper clip, the foil and the coin (brightly) and the pencil lead (dimly). A dim glow still counts — some electricity flowed.",
+            "whyZh": "有 4 种让灯泡亮了：回形针、铝箔、硬币（很亮），还有铅笔芯（很暗）。暗也算——说明有电流通过。"
+          },
+          {
+            "skill": "predict",
+            "q": "Tama puts a steel key across the gap. What will most likely happen?",
+            "opts": [
+              "The bulb will not light, because keys are too small.",
+              "The bulb will light, because steel is a metal and conducts electricity.",
+              "The bulb will light only dimly, like graphite.",
+              "The battery will stop working."
+            ],
+            "a": 1,
+            "ev": [
+              12
+            ],
+            "rows": [
+              0
+            ],
+            "why": "The text says all metals conduct electricity, and the steel paper clip lit the bulb brightly. A steel key is also steel, so the bulb should light.",
+            "whyZh": "文中说所有金属都导电，钢制回形针也让灯泡很亮。钢钥匙也是钢做的，所以灯泡应该会亮。"
+          },
+          {
+            "skill": "conclude",
+            "q": "Which statement do Room 3’s results support best?",
+            "opts": [
+              "All the metals they tested were conductors, and so was graphite.",
+              "Only metals can ever conduct electricity.",
+              "Plastic is a good conductor.",
+              "The bulb lit even when nothing was in the gap."
+            ],
+            "a": 0,
+            "ev": [
+              14
+            ],
+            "rows": [
+              0,
+              1,
+              2,
+              5
+            ],
+            "why": "Every metal (clip, foil, coin) lit the bulb, and pencil lead (graphite) — which is not a metal — lit it dimly. So ‘only metals conduct’ is wrong, and the plastic, rubber and wood did not conduct.",
+            "whyZh": "所有金属（回形针、铝箔、硬币）都让灯泡亮了，而铅笔芯（石墨）不是金属，也让灯泡微微发亮。所以“只有金属导电”是错的；塑料、橡胶、木头都不导电。"
+          }
+        ]
+      },
+      {
+        "id": "r18",
+        "title": "No Two Leaves the Same",
+        "type": "science",
+        "topic": "Traits & variation · 性状与差异",
+        "level": "Y5-6",
+        "parts": [
+          {
+            "title": "No Two Leaves the Same",
+            "paras": [
+              [
+                "Look closely at a pōhutukawa tree and you will notice that its leaves are not all the same.",
+                "Some are long and some are short, and some are dark green while others are paler."
+              ],
+              [
+                "What are traits?"
+              ],
+              [
+                "A trait is a feature of a living thing that can be observed, such as leaf size, fur colour or beak shape.",
+                "Young plants and animals **inherit** many traits from their parents.",
+                "That is why a kererū chick grows up looking like a kererū, not a tūī.",
+                "But offspring are usually not exactly the same as their parents or as each other.",
+                "These differences between members of the same species are called variation."
+              ],
+              [
+                "How long is a pōhutukawa leaf?"
+              ],
+              [
+                "Room 6 collected 50 fallen leaves from under one pōhutukawa tree that grows in full sun at their school.",
+                "They picked up the leaves without choosing big or small ones, so that the sample was fair.",
+                "They measured each leaf with a ruler and grouped the lengths.",
+                "The bar graph shows how many leaves were in each group."
+              ],
+              [
+                "Most leaves were close to the middle length, with only a few very short or very long ones.",
+                "All 50 leaves grew on the same tree, so these differences were not inherited: they came from where each leaf grew, such as how much sun it got.",
+                "All 50 leaves grew on the same tree, so these differences were not inherited: they came from where each leaf grew, such as how much sun it got.",
+                "Some traits fall into clear groups, such as flower colour, but others, like leaf length or height, have a whole range of sizes.",
+                "The environment matters too: leaves that grow in the shade are often larger than leaves in full sun, and trees on windy cliffs can grow bent.",
+                "Variation is important, because some differences can help a living thing survive.",
+                "For example, a plant with longer roots might find water more easily in a dry summer."
+              ]
+            ]
+          }
+        ],
+        "data": {
+          "after": 4,
+          "kind": "bar",
+          "title": "Pōhutukawa leaf lengths (number of leaves)",
+          "unit": " leaves",
+          "bars": [
+            {
+              "label": "4–5 cm",
+              "value": 4
+            },
+            {
+              "label": "5–6 cm",
+              "value": 11
+            },
+            {
+              "label": "6–7 cm",
+              "value": 19
+            },
+            {
+              "label": "7–8 cm",
+              "value": 12
+            },
+            {
+              "label": "8–9 cm",
+              "value": 4
+            }
+          ]
+        },
+        "qs": [
+          {
+            "skill": "evidence",
+            "q": "What is a trait?",
+            "opts": [
+              "a kind of tree that grows on cliffs",
+              "a difference between two species",
+              "a ruler used to measure leaves",
+              "a feature of a living thing that can be observed"
+            ],
+            "a": 3,
+            "ev": [
+              3
+            ],
+            "why": "The text says, ‘A trait is a feature of a living thing that can be observed, such as leaf size, fur colour or beak shape.’",
+            "whyZh": "文中说：性状（trait）是“生物可以被观察到的特征，比如叶子大小、毛色或鸟喙的形状”。"
+          },
+          {
+            "skill": "vocab",
+            "q": "‘Young plants and animals inherit many traits from their parents.’ What does inherit mean here?",
+            "opts": [
+              "lose as they grow older",
+              "receive from their parents",
+              "choose for themselves",
+              "copy from their friends"
+            ],
+            "a": 1,
+            "ev": [
+              4,
+              5
+            ],
+            "why": "The next sentence shows it: a kererū chick looks like a kererū because it gets its traits from its parents. To inherit something is to receive it from your parents.",
+            "whyZh": "下一句说明了：kererū（新西兰鸽）的雏鸟长得像 kererū，是因为它的性状来自父母。inherit 就是“从父母那里得到、遗传”。"
+          },
+          {
+            "skill": "data",
+            "q": "How many leaves were between 6 and 7 cm long?",
+            "opts": [
+              "12",
+              "11",
+              "50",
+              "19"
+            ],
+            "a": 3,
+            "ev": [],
+            "rows": [
+              2
+            ],
+            "why": "The tallest bar, 6–7 cm, shows 19 leaves.",
+            "whyZh": "最高的那一栏是 6–7 厘米，有 19 片叶子。"
+          },
+          {
+            "skill": "data",
+            "q": "How many leaves were longer than 7 cm?",
+            "opts": [
+              "16",
+              "12",
+              "4",
+              "31"
+            ],
+            "a": 0,
+            "ev": [],
+            "rows": [
+              3,
+              4
+            ],
+            "why": "Longer than 7 cm means the 7–8 cm group and the 8–9 cm group: 12 + 4 = 16. (31 adds the 6–7 cm and 7–8 cm groups, 19 + 12 — but 6–7 cm leaves are not longer than 7 cm, and it misses the 8–9 cm group.)",
+            "whyZh": "“长于 7 厘米”指 7–8 厘米和 8–9 厘米两组：12 + 4 = 16。（31 是把 6–7 厘米和 7–8 厘米两组相加（19 + 12），但 6–7 厘米的叶子并不长于 7 厘米，而且漏掉了 8–9 厘米那组。）"
+          },
+          {
+            "skill": "predict",
+            "q": "Room 6 measures 50 leaves from a pōhutukawa growing in deep shade. What is the most likely result?",
+            "opts": [
+              "All 50 leaves will be exactly the same length.",
+              "Most of the leaves will be shorter than 4 cm.",
+              "More of the leaves will be in the longer groups.",
+              "The graph will look exactly the same."
+            ],
+            "a": 2,
+            "ev": [
+              17
+            ],
+            "why": "The school tree grows in full sun, and the text says leaves in the shade are often larger than leaves in full sun, so the bars should shift towards the longer lengths. The leaves will still vary — no two are exactly the same.",
+            "whyZh": "学校那棵树长在全日照下，而文中说长在阴影里的叶子往往比全日照下的大，所以柱子会往“更长”的那边移动；但叶子之间仍然会有差异，不会完全一样长。"
+          },
+          {
+            "skill": "conclude",
+            "q": "What do Room 6’s results show about the leaves on one tree?",
+            "opts": [
+              "They are all exactly the same length.",
+              "They vary in length, but most are close to the middle length.",
+              "Longer leaves are always older leaves.",
+              "Most of them are either very short or very long."
+            ],
+            "a": 1,
+            "ev": [
+              13
+            ],
+            "rows": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "why": "The leaves ranged from 4 to 9 cm, so they vary; the 6–7 cm group was the biggest (19 leaves), and there were only 4 at each end. The text says nothing about the age of the leaves.",
+            "whyZh": "叶子从 4 厘米到 9 厘米不等，说明有差异（variation）；6–7 厘米那组最多（19 片），两头各只有 4 片。文中没有提到叶子的年龄。"
           }
         ]
       }

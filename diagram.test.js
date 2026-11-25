@@ -44,6 +44,14 @@ ok(/<circle/.test(D.render({ type: 'pie', parts: [{ label: 'all', value: 1 }] })
 // bar: one <rect> per bar (+ no crash with a 0 value)
 ok((D.render(specs.bar).match(/<rect/g) || []).length >= 3, 'bar draws a rect per bar');
 ok(svgOk(D.render({ type: 'bar', bars: [{ label: 'a', value: 0 }, { label: 'b', value: 5 }] })), 'bar handles a zero value');
+{ // friendly axis: 190 → ticks 0/50/100/150/200 (no 47.5 / 142.5), and the top value label is not clipped
+  const out = D.render({ type: 'bar', bars: [{ label: 'a', value: 20 }, { label: 'b', value: 190 }] });
+  ok(/>200</.test(out) && />150</.test(out) && !/47\.5|142\.5/.test(out), 'bar axis uses round tick values (0/50/…/200)');
+  const top = Math.min(...[...out.matchAll(/<text x="[\d.]+" y="([\d.]+)"[^>]*font-weight="700"/g)].map(m => +m[1]));
+  ok(top >= 12, 'bar value label above the tallest bar stays inside the svg (y = ' + top + ')');
+  ok(/>40</.test(D.render({ type: 'bar', bars: [{ label: 'x', value: 40 }, { label: 'y', value: 3 }] })), 'bar axis keeps an already-round top (40)');
+  ok(/>8</.test(D.render({ type: 'bar', bars: [{ label: 'x', value: 7 }] })), 'bar axis rounds 7 up to 8 (steps of 2)');
+}
 // fractionbar: 4 parts → 4 cells; title adds a title text
 ok((D.render(specs.fractionbar).match(/<rect/g) || []).length === 4, 'fractionbar draws one cell per part');
 ok(/font-weight="700"/.test(D.render({ type: 'pie', parts: [{ value: 1 }], title: 'Hi' })), 'title row is rendered');
@@ -74,6 +82,35 @@ ok((D.render({ type: 'mindmap', root: 'X', branches: [{ label: 'a' }, { label: '
 ok(D.render({ type: 'mindmap', root: 'Y6', branches: [{ label: 'Fractions' }] }).includes('Fractions'), 'mindmap shows branch labels');
 ok(svgOk(D.render({ type: 'knowledgemap', root: 'X', branches: [{ label: 'a' }] })), 'alias "knowledgemap" → mindmap');
 ok(D.render({ type: 'mindmap', branches: [] }) === '', 'mindmap with no branches → empty');
+// yearmap: lanes × (this year | next year) nodes, status styles + marks, "builds on" arrows
+{
+  const ym = {
+    type: 'yearmap', years: ['Year 8 · 2026', 'Year 9 · 2027'],
+    lanes: [
+      { id: 'a', en: 'Algebra', zh: '代数', nodes: [
+        { id: 'a1', en: 'Expand & simplify', zh: '展开化简', year: 0, status: 'secure' },
+        { id: 'a2', en: 'Equations', zh: '方程', year: 0, status: 'work', book: true },
+        { id: 'a3', en: 'Sequences & graphs', year: 0, status: 'ok' },
+        { id: 'a4', en: 'y = mx + c', year: 1, status: 'next' }] },
+      { id: 'm', en: 'Measurement', nodes: [{ id: 'm1', en: 'Area & volume units', year: 0, status: 'ok' }] }],
+    links: [['a1', 'a2'], ['a1', 'a3'], ['a3', 'a4'], ['a2', 'm1'], ['a1', 'nope']]
+  };
+  const out = D.render(ym);
+  ok(svgOk(out) && safe(out), 'yearmap renders a valid, safe <svg>');
+  ok((out.match(/<rect[^>]*rx="7"/g) || []).length === 5, 'yearmap draws one box per topic (5)');
+  ok(out.includes('Year 8 · 2026') && out.includes('Year 9 · 2027'), 'yearmap shows both year headers');
+  ok(out.includes('Algebra') && out.includes('代数'), 'yearmap shows lane labels (EN + 中文)');
+  ok(out.includes('#34c759') && out.includes('#ff9500'), 'yearmap colours secure (green) and needs-work (orange)');
+  ok(/stroke="#8e8e93" stroke-width="1.3" stroke-dasharray="4 3"/.test(out), 'yearmap next-year topic is dashed grey');
+  ok(out.includes('>✓<') && out.includes('>!<'), 'yearmap marks status with ✓ / ! (not colour alone)');
+  ok(out.includes('#ffb400'), 'yearmap stars a topic that is in the holiday book');
+  ok((out.match(/marker-end="url\(#ymArrow\)"/g) || []).length === 4, 'yearmap draws 4 arrows (a link to a missing id is skipped)');
+  ok(/<path d="M[^"]*" fill="none" stroke="#636366" stroke-width="1.2"/.test(out), 'yearmap arcs over a topic it skips (a1 → a3)');
+  ok(/stroke-dasharray="3 3" marker-end/.test(out), 'yearmap cross-lane link is a dashed curve');
+  ok(svgOk(D.render(Object.assign({}, ym, { type: 'knowmap' }))), 'alias "knowmap" → yearmap');
+  ok(D.render({ type: 'yearmap', lanes: [] }) === '', 'yearmap with no lanes → empty');
+  ok(D.render({ type: 'yearmap', lanes: [{ id: 'x', en: '<b>X</b>', nodes: [{ id: 'n', en: 'A & B <i>', year: 0, status: 'ok' }] }] }).includes('A &amp; B &lt;i&gt;'), 'yearmap escapes text');
+}
 
 // alias resolution + whitespace/underscore tolerance
 ok(svgOk(D.render({ type: 'number_line', min: 0, max: 5 })), 'alias "number_line" works');

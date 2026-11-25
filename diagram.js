@@ -7,7 +7,8 @@
  * that make up almost all primary→intermediate (Y3–Y8) maths exams:
  *   pie · bar · numberline · fractionbar · shape · clock · pictogram · array ·
  *   coordinate · angle · lineplot · venn · tally · routemap · table · scale ·
- *   balance · timeline · flow (process / food-chain)
+ *   balance · timeline · flow (process / food-chain) · mindmap · yearmap (a
+ *   student's this-year → next-year curriculum map, coloured by status)
  *
  * PLDiagram.render(spec) -> a clean <svg>…</svg> string, or '' if the spec is
  * unknown/invalid (caller then falls back to a raw `svg` field). Pure: no DOM,
@@ -26,6 +27,14 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function fmt(v) { v = +v; if (!isFinite(v)) return ''; return Math.abs(v - Math.round(v)) < 1e-9 ? ('' + Math.round(v)) : ('' + (Math.round(v * 100) / 100)); }
   function f1(v) { return (Math.round(v * 10) / 10); }
+  // Round an axis top up so `ticks` equal steps are friendly numbers (1, 2, 2.5 or 5 × 10ⁿ):
+  // 190 → 200 (0/50/100/150/200), 40 → 40, 19 → 20, 7 → 8 — never 47.5 / 142.5 tick labels.
+  function niceMax(v, ticks) {
+    v = +v; if (!(v > 0)) return 1;
+    var raw = v / ticks, mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10)), steps = [1, 2, 2.5, 5, 10];
+    for (var i = 0; i < steps.length; i++) { var st = steps[i] * mag; if (st * ticks >= v - 1e-9) return st * ticks; }
+    return 10 * mag * ticks;
+  }
   // greedy word-wrap into <= maxc-char lines (for box/timeline labels)
   function wrapWords(str, maxc) {
     var words = String(str == null ? '' : str).split(/\s+/), lines = [], cur = '';
@@ -83,8 +92,9 @@
   function bar(s) {
     var bars = (s.bars || s.data || s.categories || []).map(function (b, i) { return typeof b === 'object' ? { label: b.label != null ? b.label : ('' + (i + 1)), value: n(b.value != null ? b.value : b.count), color: b.color } : { label: '' + (i + 1), value: n(b) }; });
     if (!bars.length) return '';
-    var w = Math.max(230, bars.length * 56 + 44), h = 196, padL = 32, padB = 32, padT = 8, gw = w - padL - 12, gh = h - padB - padT;
-    var max = s.max != null ? n(s.max) : Math.max.apply(null, bars.map(function (b) { return b.value; })); if (!(max > 0)) max = 1;
+    // padT leaves room for the value label above the tallest bar (it used to be clipped at the top).
+    var w = Math.max(230, bars.length * 56 + 44), h = 204, padL = 32, padB = 32, padT = 18, gw = w - padL - 12, gh = h - padB - padT;
+    var max = s.max != null ? n(s.max) : niceMax(Math.max.apply(null, bars.map(function (b) { return b.value; })), 4); if (!(max > 0)) max = 1;
     var inner = '', ticks = 4, t;
     for (t = 0; t <= ticks; t++) { var val = max * t / ticks, y = padT + gh - gh * t / ticks; inner += line(padL, y, w - 12, y, { stroke: LINE }) + T(padL - 5, y + 4, fmt(val), { anchor: 'end', size: 10, fill: MUTE }); }
     var gap = gw / bars.length, bw = gap * 0.6;
@@ -410,6 +420,95 @@
     return wrap(w, h, inner, null);
   }
 
+  // yearmap: a student's "Year map" (年度知识地图) — one lane per curriculum strand, this year's topics
+  // on the left, next year's on the right, arrows = "builds on", each topic coloured by its status.
+  // Same layout as the printed map in the holiday book (knowmap.py), in colour, with a ✓ / ! corner mark
+  // so the status never relies on colour alone.
+  // {type:'yearmap', years:['Year 8 · 2026','Year 9 · 2027'],
+  //  lanes:[{id, en, zh, nodes:[{id, en, zh, year:0|1, status:'secure'|'ok'|'work'|'next', book:bool}]}],
+  //  links:[[fromId, toId], …]}
+  function yearmap(s) {
+    var lanes = (s.lanes || []).filter(function (l) { return l && Array.isArray(l.nodes) && l.nodes.length; });
+    if (!lanes.length) return '';
+    var W = 700, LABEL_W = 80, NODE_W = 100, GAP = 14, CAP = [3, 2];
+    var ST = {
+      secure: { fill: '#e9f9ee', stroke: '#34c759', sw: 2.2, mark: '✓' },
+      ok: { fill: '#eef5ff', stroke: '#5e9cf0', sw: 1.4 },
+      work: { fill: '#fff4e5', stroke: '#ff9500', sw: 2.2, mark: '!' },
+      next: { fill: '#ffffff', stroke: '#8e8e93', sw: 1.3, dash: '4 3' }
+    };
+    var years = s.years || ['This year', 'Next year'];
+    function enLines(nd) { return wrapWords(nd.en, 18); }
+    function zhLines(nd) { var t = String(nd.zh || ''), out = []; for (var i = 0; i < t.length; i += 10) out.push(t.slice(i, i + 10)); return out; }
+    function nodeH(nd) { return 15 + enLines(nd).length * 12.5 + zhLines(nd).length * 12 + 4; }
+    var x0 = LABEL_W + 10, r0 = [x0, x0 + CAP[0] * NODE_W + (CAP[0] - 1) * GAP], split = r0[1] + 14, r1 = [split + 14, W - 4];
+    var regs = [r0, r1], pos = {}, boxes = [], y = 64;
+    lanes.forEach(function (lane) {
+      var placed = [[], []], rowsH = [0, 0];
+      [0, 1].forEach(function (yr) {
+        var nodes = lane.nodes.filter(function (nd) { return nd && nd.id != null && ((+nd.year || 0) === yr); });
+        for (var i = 0; i < nodes.length; i += CAP[yr]) placed[yr].push(nodes.slice(i, i + CAP[yr]));
+        rowsH[yr] = placed[yr].length ? placed[yr].reduce(function (a, r) { return a + Math.max.apply(null, r.map(nodeH)) + 8; }, 0) - 8 : 0;
+      });
+      var laneH = Math.max(rowsH[0], rowsH[1], 40) + 26;
+      [0, 1].forEach(function (yr) {
+        var xa = regs[yr][0], xb = regs[yr][1], yy = y + 18;
+        placed[yr].forEach(function (r) {
+          var rh = Math.max.apply(null, r.map(nodeH)), total = r.length * NODE_W + (r.length - 1) * GAP;
+          var xx = yr === 1 ? xa + ((xb - xa) - total) / 2 : xa;
+          r.forEach(function (nd) { var h = nodeH(nd); pos[nd.id] = { x: xx, y: yy + (rh - h) / 2, w: NODE_W, h: h, nd: nd, lane: lane.id }; xx += NODE_W + GAP; });
+          yy += rh + 8;
+        });
+      });
+      boxes.push({ y0: y, y1: y + laneH, lane: lane });
+      y += laneH + 6;
+    });
+    var H = y + 6, b = '';
+    b += '<defs><marker id="ymArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#636366"/></marker></defs>';
+    b += '<rect x="' + r0[0] + '" y="22" width="' + (r0[1] - r0[0]) + '" height="30" rx="6" fill="#f2f2f7"/>';
+    b += '<rect x="' + r1[0] + '" y="22" width="' + (r1[1] - r1[0]) + '" height="30" rx="6" fill="#ffffff" stroke="#8e8e93" stroke-dasharray="4 3"/>';
+    b += T((r0[0] + r0[1]) / 2, 42, years[0], { size: 12.5, weight: '700' });
+    b += T((r1[0] + r1[1]) / 2, 42, years[1], { size: 12.5, weight: '700' });
+    b += line(split, 56, split, H - 4, { stroke: '#8e8e93', dash: '2 4' });
+    boxes.forEach(function (bx) {
+      var cy = (bx.y0 + bx.y1) / 2;
+      b += '<rect x="2" y="' + f1(bx.y0) + '" width="' + LABEL_W + '" height="' + f1(bx.y1 - bx.y0) + '" rx="6" fill="#f2f2f7"/>';
+      b += line(2, bx.y1 + 3, W, bx.y1 + 3, { stroke: LINE, w: 0.8 });
+      b += T(2 + LABEL_W / 2, cy - 2, bx.lane.en || '', { size: 11.5, weight: '700' });
+      if (bx.lane.zh) b += T(2 + LABEL_W / 2, cy + 13, bx.lane.zh, { size: 11, fill: '#3a3a3c' });
+    });
+    (s.links || []).forEach(function (lk) {
+      var A = pos[lk && lk[0]], B = pos[lk && lk[1]];
+      if (!A || !B) return;
+      var sameRow = Math.abs((A.y + A.h / 2) - (B.y + B.h / 2)) < 30;
+      if (A.lane === B.lane && sameRow && B.x > A.x) {
+        var between = Object.keys(pos).some(function (k) { var v = pos[k]; return v !== A && v !== B && v.lane === A.lane && Math.abs(v.y - A.y) < 30 && v.x > A.x && v.x < B.x; });
+        if (!between) { b += '<line x1="' + f1(A.x + A.w) + '" y1="' + f1(A.y + A.h / 2) + '" x2="' + f1(B.x - 5) + '" y2="' + f1(B.y + B.h / 2) + '" stroke="#636366" stroke-width="1.4" marker-end="url(#ymArrow)"/>'; return; }
+        var xa = A.x + A.w * 0.62, xb = B.x + B.w * 0.38, top = Math.min(A.y, B.y) - 15;
+        b += '<path d="M' + f1(xa) + ',' + f1(A.y) + ' C' + f1(xa) + ',' + f1(top) + ' ' + f1(xb) + ',' + f1(top) + ' ' + f1(xb) + ',' + f1(B.y - 3) + '" fill="none" stroke="#636366" stroke-width="1.2" marker-end="url(#ymArrow)"/>';
+        return;
+      }
+      var x1 = A.x + A.w / 2, x2 = B.x + B.w / 2, y1, y2;
+      if (B.y > A.y) { y1 = A.y + A.h; y2 = B.y - 2; } else { y1 = A.y; y2 = B.y + B.h + 2; }
+      var my = (y1 + y2) / 2;
+      b += '<path d="M' + f1(x1) + ',' + f1(y1) + ' C' + f1(x1) + ',' + f1(my) + ' ' + f1(x2) + ',' + f1(my) + ' ' + f1(x2) + ',' + f1(y2 - (y2 > y1 ? 3 : -3)) + '" fill="none" stroke="#636366" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#ymArrow)"/>';
+    });
+    Object.keys(pos).forEach(function (k) {
+      var p = pos[k], nd = p.nd, st = ST[nd.status] || ST.ok;
+      b += '<rect x="' + f1(p.x) + '" y="' + f1(p.y) + '" width="' + p.w + '" height="' + f1(p.h) + '" rx="7" fill="' + st.fill + '" stroke="' + st.stroke + '" stroke-width="' + st.sw + '"' + (st.dash ? ' stroke-dasharray="' + st.dash + '"' : '') + '/>';
+      var ty = p.y + 20;
+      enLines(nd).forEach(function (ln) { b += T(p.x + p.w / 2, ty, ln, { size: 10.2, weight: '600' }); ty += 12.5; });
+      zhLines(nd).forEach(function (ln) { b += T(p.x + p.w / 2, ty, ln, { size: 9.6, fill: '#3a3a3c' }); ty += 12; });
+      if (st.mark) b += '<circle cx="' + f1(p.x + p.w - 3) + '" cy="' + f1(p.y + 3) + '" r="7" fill="' + st.stroke + '"/>' + T(p.x + p.w - 3, p.y + 6.4, st.mark, { size: 9.5, weight: '700', fill: '#fff' });
+      if (nd.book) {
+        var cx = p.x + 3, cy = p.y + 3.4, pts = [];
+        for (var i = 0; i < 10; i++) { var a = Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? 2.3 : 5.2; pts.push([cx + rr * Math.cos(a), cy - rr * Math.sin(a)]); }
+        b += '<circle cx="' + f1(p.x + 3) + '" cy="' + f1(p.y + 3) + '" r="7.5" fill="#fff" stroke="#8e8e93" stroke-width="1"/>' + poly(pts, { fill: '#ffb400', stroke: '#ffb400', w: 0.5 });
+      }
+    });
+    return wrap(W, H, b, null);
+  }
+
   // Decode the per-row DATA VALUES a data-figure actually renders — mirrors the
   // pictogram / bar / tally renderers EXACTLY so a caller (verify enrichment, the
   // deterministic figure-vs-key guard) reads the same numbers the student sees.
@@ -452,6 +551,7 @@
   var R = {
     pie: pie, piechart: pie, fractioncircle: pie, circlegraph: pie,
     mindmap: mindmap, conceptmap: mindmap, knowledgemap: mindmap, mindmup: mindmap,
+    yearmap: yearmap, knowmap: yearmap, progressmap: yearmap,
     timeline: timeline, time: timeline, history: timeline,
     flow: flow, flowchart: flow, process: flow, sequence: flow, foodchain: flow, chain: flow, pathway: flow,
     routemap: routemap, route: routemap, journeymap: routemap, map: routemap,

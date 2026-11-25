@@ -36,7 +36,7 @@ function extract(name) {
 }
 const NAMES = ['wordKey', 'skillKey', 'newWordRec', 'applyWordReview', 'nextWordDay', 'dueWordRecs', 'nextSkill',
   'seedNum', 'seededShuffle', 'wordReviewKinds', 'buildWordReview', 'hiWord',
-  'readSentences', 'halfSplit', 'readStats', 'nextReadTexts'];
+  'readSentences', 'halfSplit', 'readStats', 'nextReadTexts', 'readDataRows'];
 const ctx = {};
 new Function(
   src.match(/const WORD_SR_DAYS=\[[^\]]*\];/)[0] + '\n' + src.match(/const DAY_MS=\d+;/)[0] + '\n' +
@@ -170,10 +170,11 @@ check('hiWord keeps -e words (crumble → crumbling)', ctx.hiWord('The walls wer
 
 // ── 4. 📖 reading tests: content + helpers ──────────────────────────────────
 const R = D.reading;
-check('reading: 12 texts', Array.isArray(R) && R.length === 12, R && R.length);
+check('reading: 18 texts (12 stories & articles + 6 science)', Array.isArray(R) && R.length === 18, R && R.length);
 if (Array.isArray(R)) {
-  const TYPES = ['narrative', 'report', 'review', 'poem', 'procedure', 'persuasive', 'recount', 'biography', 'playscript', 'pair'];
-  const SKILLS = ['main-idea', 'inference', 'vocab', 'evidence', 'purpose', 'structure', 'character', 'compare', 'fact-opinion', 'figurative', 'sequence', 'summary'];
+  const TYPES = ['narrative', 'report', 'review', 'poem', 'procedure', 'persuasive', 'recount', 'biography', 'playscript', 'pair', 'science'];
+  const SKILLS = ['main-idea', 'inference', 'vocab', 'evidence', 'purpose', 'structure', 'character', 'compare', 'fact-opinion', 'figurative', 'sequence', 'summary', 'data', 'predict', 'conclude'];
+  check('reading: 6 science texts', R.filter(t => t.type === 'science').length === 6);
   check('reading: ids unique', new Set(R.map(t => t.id)).size === R.length);
   check('reading: every text type present', TYPES.every(ty => R.some(t => t.type === ty)), JSON.stringify(R.map(t => t.type)));
   const skillCount = {};
@@ -189,12 +190,27 @@ if (Array.isArray(R)) {
     if (t.type !== 'poem' && t.type !== 'playscript' && t.type !== 'procedure')
       check(where + ': sentences end with punctuation', sents.every(x => /[.!?:…’”)\]]$/.test(x.s.trim())), JSON.stringify(sents.filter(x => !/[.!?:…’”)\]]$/.test(x.s.trim())).map(x => x.s)));
     check(where + ': 6 questions', Array.isArray(t.qs) && t.qs.length === 6);
+    // science texts carry ONE data display (a table or a bar graph) that questions can cite as proof
+    const nData = t.data ? (t.data.kind === 'bar' ? (t.data.bars || []).length : (t.data.rows || []).length) : 0;
+    if (t.type === 'science') {
+      const d = t.data || {};
+      check(where + ': science text has a table or bar graph', ['table', 'bar'].includes(d.kind) && nonEmpty(d.title) && nData >= 3, d.kind);
+      check(where + ': data sits after a paragraph of the text', Number.isInteger(d.after) && d.after >= 0 && d.after < t.parts[0].paras.length, d.after);
+      if (d.kind === 'table') check(where + ': table rows match the header', d.rows.every(r => r.length === d.head.length));
+      if (d.kind === 'bar') check(where + ': bars have labels + numbers', d.bars.every(b => nonEmpty(b.label) && typeof b.value === 'number'));
+      check(where + ': topic label', nonEmpty(t.topic));
+      check(where + ': at least 2 questions read the data', t.qs.filter(q => (q.rows || []).length).length >= 2);
+      check(where + ': data / predict / conclude skills all used', ['data', 'predict', 'conclude'].every(s => t.qs.some(q => q.skill === s)));
+    } else check(where + ': only science texts carry data', !t.data);
     t.qs.forEach((q, i) => {
       const w2 = where + ' Q' + (i + 1);
       mcOk(q, w2);
       check(w2 + ': skill known', SKILLS.includes(q.skill), q.skill);
       check(w2 + ': bilingual why', nonEmpty(q.why) && nonEmpty(q.whyZh));
-      check(w2 + ': 1–3 proof sentences in range', Array.isArray(q.ev) && q.ev.length >= 1 && q.ev.length <= 3 && q.ev.every(k => Number.isInteger(k) && k >= 0 && k < sents.length), JSON.stringify(q.ev));
+      const rows = q.rows || [];
+      check(w2 + ': 0–3 proof sentences in range', Array.isArray(q.ev) && q.ev.length <= 3 && q.ev.every(k => Number.isInteger(k) && k >= 0 && k < sents.length), JSON.stringify(q.ev));
+      check(w2 + ': data rows in range', rows.every(k => Number.isInteger(k) && k >= 0 && k < nData), JSON.stringify(rows));
+      check(w2 + ': has proof (a sentence or a data row)', q.ev.length + rows.length >= 1);
       skillCount[q.skill] = (skillCount[q.skill] || 0) + 1;
       if (Number.isInteger(q.a)) pos[q.a]++;
       const bold = (q.q.match(/\*\*(.+?)\*\*/) || [])[1];
@@ -202,7 +218,14 @@ if (Array.isArray(R)) {
     });
   }
   for (const s of SKILLS) check('reading: skill used at least twice: ' + s, (skillCount[s] || 0) >= 2, skillCount[s] || 0);
-  check('reading: answer letters balanced (each 12–24 of 72)', pos.every(n => n >= 12 && n <= 24), JSON.stringify(pos));
+  const totalQ = R.length * 6;
+  check('reading: answer letters balanced (each between 1/6 and 1/3 of all)', pos.every(n => n >= totalQ / 6 && n <= totalQ / 3), JSON.stringify(pos));
+  check('readDataRows: table row → "a — b", bar → "label: value unit"', (() => {
+    const s = R.find(t => t.data && t.data.kind === 'table'), b = R.find(t => t.data && t.data.kind === 'bar');
+    const rs = ctx.readDataRows(s), rb = ctx.readDataRows(b);
+    return rs.length === s.data.rows.length && rs[0] === s.data.rows[0].join(' — ') && rb[0] === b.data.bars[0].label + ': ' + b.data.bars[0].value + (b.data.unit || '');
+  })());
+  check('readDataRows: no data → []', ctx.readDataRows({}).length === 0 && ctx.readDataRows(null).length === 0);
 
   // helpers
   const t1 = { parts: [{ paras: [['a.', 'b.'], ['c.']] }, { paras: [['d.']] }] };
@@ -212,8 +235,8 @@ if (Array.isArray(R)) {
   check('halfSplit: empty → nulls', ctx.halfSplit([]).early === null && ctx.halfSplit([]).late === null);
   const rs = ctx.readStats([{ kind: 'reading', last: { res: [true, true, true, false, false, false] } }, { kind: 'readset', res: [true, true, false, false] }, { kind: 'word' }]);
   check('readStats pools texts and tests', rs.early === 100 && rs.late === 0 && rs.answered === 10, JSON.stringify(rs));
-  const order = ctx.nextReadTexts(R, [{ kind: 'reading', text: R[0].id, updatedAt: 5 }, { kind: 'reading', text: R[1].id, updatedAt: 2 }], 12).map(t => t.id);
-  check('nextReadTexts: unread first in order, then oldest read', order[0] === R[2].id && order[10] === R[1].id && order[11] === R[0].id, JSON.stringify(order));
+  const order = ctx.nextReadTexts(R, [{ kind: 'reading', text: R[0].id, updatedAt: 5 }, { kind: 'reading', text: R[1].id, updatedAt: 2 }], R.length).map(t => t.id);
+  check('nextReadTexts: unread first in order, then oldest read', order[0] === R[2].id && order[R.length - 2] === R[1].id && order[R.length - 1] === R[0].id, JSON.stringify(order));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

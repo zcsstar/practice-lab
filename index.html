@@ -162,9 +162,49 @@
   .rtext .rpart:first-child{margin-top:0}
   .rs{transition:background .25s}
   .rs.ev{background:#fff1a8;box-shadow:0 0 0 3px #fff1a8;border-radius:4px}
+  .rdata{font-family:var(--font);margin:6px 0 14px;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:10px 12px;background:#fff;transition:box-shadow .25s}
+  .rdata.ev{box-shadow:0 0 0 3px #fff1a8;border-color:#f1df8f;background:#fffbe6}
+  .rdata-t{font-weight:700;font-size:14px;margin-bottom:6px}
+  .rdata-fig svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  .rtable{border-collapse:collapse;width:100%;font-size:14px;line-height:1.4}
+  .rtable th,.rtable td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+  .rtable th{background:var(--card2)}
+  .rtable tr.ev td{background:#fff1a8}
   .proof{margin-top:10px;font-size:14.5px;line-height:1.55;background:#fffbe6;border:1px solid #f1df8f;border-radius:var(--radius-ctrl);padding:10px 12px}
   .rbar{position:sticky;top:8px;z-index:5;display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:8px 12px;margin-bottom:14px;box-shadow:var(--shadow);font-weight:600;font-size:14px}
   .flagrow{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+  /* 🧭 Year map */
+  .ymwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:10px -4px 4px;padding:0 4px}
+  .ymwrap svg{min-width:640px;width:100%;height:auto;display:block}
+  .ymleg{display:flex;flex-wrap:wrap;gap:6px 8px;margin:8px 0 2px}
+  .ymchip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 10px;font-size:12.5px;font-weight:600;border:1.5px solid;white-space:nowrap}
+  .ymchip.secure{background:#e9f9ee;border-color:#34c759;color:#1b7a35}
+  .ymchip.ok{background:#eef5ff;border-color:#5e9cf0;color:#1f5fbf}
+  .ymchip.work{background:#fff4e5;border-color:#ff9500;color:#a35a00}
+  .ymchip.next{background:#fff;border-color:#8e8e93;border-style:dashed;color:#636366}
+  .ymrow{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+  .ymrow:last-child{border-bottom:none}
+  /* 🚀 Year 9 Head Start */
+  .pvfig{max-width:560px;margin:12px auto;background:#fff;border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:10px}
+  .pvfig svg{width:100%;height:auto;display:block}
+  .pvlist{margin:6px 0 0;padding-left:20px}
+  .pvlist li{margin:6px 0}
+  .pvsec h3{font-size:16px}
+  .pvword{border-bottom:1px solid var(--line);padding:8px 0}
+  .pvword:last-child{border-bottom:none}
+  .pvtwrap{overflow-x:auto;margin:8px 0}
+  .pvtable{border-collapse:collapse;font-size:14px;width:100%;margin:4px 0}
+  .pvtable th,.pvtable td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+  .pvtable th{background:var(--card2)}
+  .pvtable.zh{color:var(--muted);font-size:13px}
+  .pvmatch{display:grid;grid-template-columns:minmax(90px,1fr) 2fr;gap:8px;align-items:center;margin:8px 0}
+  .pvmatch select{padding:8px 10px;font-size:14px}
+  .pvmind{display:flex;flex-direction:column;gap:10px}
+  .pvmind-c{align-self:center;background:var(--brand);color:#fff;font-weight:700;border-radius:999px;padding:8px 16px;text-align:center}
+  .pvmind-b{display:grid;gap:10px;grid-template-columns:1fr}
+  @media(min-width:560px){.pvmind-b{grid-template-columns:1fr 1fr}}
+  .pvmind-x{border:1px solid var(--line);border-radius:var(--radius-ctrl);padding:10px 12px}
+  .pvmind-x ul{margin:6px 0 0;padding-left:18px}
 
   .scorehero{text-align:center;padding:10px 0 6px}
   .scorehero .pct{font-size:46px;font-weight:800;letter-spacing:-2px;line-height:1;color:var(--brand)}
@@ -328,6 +368,9 @@
 <!-- Curated English content (📘 Daily words + 🧩 Daily skills): window.PLEnglish.DATA. Classic script;
      self-authored (no copyrighted text). If it fails to load, the English section simply hides. -->
 <script src="english.js"></script>
+<!-- Curated "Year 9 Head Start" preview lessons (English + Science): window.PLPreview.DATA. Classic
+     script; self-authored. If it fails to load, the Head Start section simply hides. -->
+<script src="preview.js"></script>
 <!-- PRIVATE transcribed question packs (real past papers), if present. Gitignored, never
      in the public repo; the app works fine without it (a 404 here is harmless). -->
 <script src="papers.local.js"></script>
@@ -374,12 +417,12 @@ function fmtExplain(text){
 /* Allow an optional AI-supplied SVG diagram on a question. Keep only a single
    <svg>…</svg>, and strip scripts, external refs and event handlers. Content
    comes from the user's own AI key, but this is cheap defense-in-depth. */
-function sanitizeSvg(s){
+function sanitizeSvg(s,max){
   s=String(s||'').trim();
   const a=s.search(/<svg[\s>]/i);if(a<0)return '';
   const b=s.toLowerCase().lastIndexOf('</svg>');if(b<0||b<a)return '';
   s=s.slice(a,b+6);
-  if(s.length>20000)return '';
+  if(s.length>(max||20000))return ''; // AI-made figures stay small; curated figures may pass a bigger cap
   s=s.replace(/<\s*(script|foreignObject|iframe|image|use|a)\b[\s\S]*?<\s*\/\s*\1\s*>/gi,'');
   s=s.replace(/<\s*(script|foreignObject|iframe|image|use)\b[^>]*\/?>/gi,'');
   s=s.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,'');
@@ -806,6 +849,131 @@ function focusCardsFor(profile){
   const ds=defaultSettingsFor(profile);
   return focusRecords(profile).map(r=>focusCard(Object.assign({},ds,{subject:r.subject||ds.subject,exam:(r.exam&&EXAMS[r.exam])?r.exam:ds.exam}),profile)).filter(Boolean);
 }
+
+// Year maps (年度知识地图, v2.62) — per student + subject: the year's curriculum topics (this year →
+// next year, NZ Curriculum Maths & Statistics 2026), "builds on" links, a parent-estimated starting
+// status per topic, and where each topic's practice questions come from (exam strand `topics`, the
+// lane's `alt` strands for the General exam, and an optional `kw` regex on the question text) — so
+// the status UPDATES from practice (ymStatus). Same topics as the printed map on page 2 of the
+// holiday book's parent edition (Kids\…\2026假期数学\_source\knowmap_<key>.py), without the private
+// evidence. Keyed by lowercased login name, like STUDENT_FOCUS. No scores here (public repo).
+const YEAR_MAPS={
+  howard:{subject:'Mathematics',exam:'rangitoto',title:'Maths year map',years:['Year 8 · 2026','Year 9 · 2027'],asOf:'Nov 2026',
+    lanes:[
+      {id:'num',en:'Number',zh:'数与运算',alt:['Number','Fractions & decimals'],nodes:[
+        {id:'n_pow',en:'Powers, roots & prime factors',zh:'乘方开方、质因数',year:0,status:'ok',topics:['Number & integers'],kw:'power|indic|index|root|√|prime|factor|hcf|lcm|squared|cubed|exponent'},
+        {id:'n_fd',en:'Fractions & decimals: × ÷',zh:'分数小数乘除',year:0,status:'ok',topics:['Fractions, decimals & percentages'],kw:'fraction|decimal|frac|\\d\\s*/\\s*\\d'},
+        {id:'n_pr',en:'Percentages, ratio & budgets',zh:'百分数、比、预算',year:0,status:'ok',topics:['Fractions, decimals & percentages','Ratio, rate & proportion'],kw:'percent|%|ratio|budget|share|proportion'},
+        {id:'n_rate',en:'% change, rates, GST, interest',zh:'百分比变化、GST、单利',year:1,status:'next',topics:['Fractions, decimals & percentages','Ratio, rate & proportion'],kw:'increase|decrease|gst|interest|per hour|km/h|rate|discount'},
+        {id:'n_sci',en:'Scientific notation; negative powers',zh:'科学计数法、负指数',year:1,status:'next',topics:['Number & integers'],kw:'scientific notation|standard form|[×x]\\s*10|10\\s*\\^|negative (power|index|exponent)'}]},
+      {id:'alg',en:'Algebra',zh:'代数',alt:['Algebra'],nodes:[
+        {id:'a_exp',en:'Expand, factorise & simplify',zh:'展开、因式分解、化简',year:0,status:'secure',topics:['Patterns & early algebra'],kw:'expand|factori|simplif|like terms|bracket'},
+        {id:'a_eq',en:'Equations, inequalities, rearranging',zh:'方程、不等式、换主项',year:0,status:'secure',topics:['Patterns & early algebra','Linear relationships & graphs'],kw:'solve|equation|inequalit|rearrang|subject of'},
+        {id:'a_seq',en:'Sequences, functions & graphs',zh:'数列、函数与图像',year:0,status:'work',book:true,topics:['Patterns & early algebra','Linear relationships & graphs'],kw:'sequence|term|pattern|function|rule|input|output|graph|table of values|nth'},
+        {id:'a_lin',en:'y = mx + c: gradient & intercept',zh:'斜率与截距',year:1,status:'next',book:true,topics:['Linear relationships & graphs'],kw:'gradient|slope|intercept|straight line|y\\s*=\\s*-?[\\d.]*\\s*x'},
+        {id:'a_eq9',en:'Harder equations & inequalities',zh:'较难的方程与不等式',year:1,status:'next',topics:['Patterns & early algebra','Linear relationships & graphs'],kw:'inequalit|simultaneous|both sides'}]},
+      {id:'mea',en:'Measurement',zh:'测量',alt:['Measurement'],nodes:[
+        {id:'m_units',en:'Units of area & volume',zh:'面积体积单位换算',year:0,status:'ok',book:true,topics:['Measurement, area & volume'],kw:'convert|cm²|cm2|m²|mm²|cm³|ml\\b|litre|liter|hectare|unit'},
+        {id:'m_area',en:'Parallelogram, trapezium, prisms',zh:'平行四边形梯形、棱柱',year:0,status:'work',book:true,topics:['Measurement, area & volume'],kw:'parallelogram|trapez|prism|volume|area'},
+        {id:'m_circ',en:'Circle parts; circumference',zh:'圆的各部分、周长',year:0,status:'ok',book:true,topics:['Measurement, area & volume','Geometry, angles & shape'],kw:'circle|circumference|radius|diameter|π|\\bpi\\b'},
+        {id:'m_c2pr',en:'C = 2πr; half circles; kites',zh:'圆周长公式、筝形',year:1,status:'next',book:true,topics:['Measurement, area & volume','Geometry, angles & shape'],kw:'circumference|semicircle|semi-circle|half circle|quarter circle|kite|2πr|πd'},
+        {id:'m_pyth',en:'Pythagoras; speed = distance ÷ time',zh:'勾股定理、速度公式',year:1,status:'ok',book:true,topics:['Measurement, area & volume','Geometry, angles & shape','Ratio, rate & proportion'],kw:'pythag|hypotenuse|right[- ]angled triangle|speed|km/h|m/s'}]},
+      {id:'geo',en:'Geometry',zh:'几何',alt:['Geometry'],nodes:[
+        {id:'g_scale',en:'Map scale as a ratio; bearings',zh:'比例尺、方位角',year:0,status:'ok',book:true,topics:['Geometry, angles & shape','Ratio, rate & proportion','Measurement, area & volume'],kw:'scale|bearing|map|1\\s*:\\s*\\d'},
+        {id:'g_ang',en:'Angle sums of polygons',zh:'多边形内角和',year:0,status:'ok',topics:['Geometry, angles & shape'],kw:'angle|polygon|interior|exterior'},
+        {id:'g_trans',en:'Transformations & enlargement',zh:'图形变换与放大',year:0,status:'work',book:true,topics:['Geometry, angles & shape','Linear relationships & graphs'],kw:'reflect|rotat|translat|enlarg|transform|mirror|vector'},
+        {id:'g_views',en:'Nets, plan views; 90° rotations',zh:'展开图、三视图',year:1,status:'next',book:true,topics:['Geometry, angles & shape'],kw:'\\bnets?\\b|plan view|elevation|front view|side view|3d|solid'},
+        {id:'g_par',en:'Angles on parallel lines',zh:'平行线中的角',year:1,status:'next',topics:['Geometry, angles & shape'],kw:'parallel|alternate|corresponding|co-interior|transversal'}]},
+      {id:'sta',en:'Statistics',zh:'统计',alt:['Statistics'],nodes:[
+        {id:'s_mis',en:'Outliers, skew, misleading graphs',zh:'异常值、误导性图表',year:0,status:'ok',topics:['Statistics & data'],kw:'outlier|skew|mislead'},
+        {id:'s_avg',en:'Averages, range; stem-and-leaf',zh:'平均数、极差、茎叶图',year:0,status:'secure',topics:['Statistics & data'],kw:'mean|median|mode|range|average|stem'},
+        {id:'s_cmp',en:'Compare groups — explain in sentences',zh:'比较数据、用句子解释',year:0,status:'work',book:true,topics:['Statistics & data'],kw:'compar|which group|both groups|two groups|which class'},
+        {id:'s_box',en:'Quartiles, IQR, box plots',zh:'四分位距、箱线图',year:1,status:'next',topics:['Statistics & data'],kw:'quartile|iqr|interquartile|box plot|box-and-whisker|five-number'},
+        {id:'s_inv',en:'Scatter plots & investigations',zh:'散点图、统计调查',year:1,status:'next',topics:['Statistics & data'],kw:'scatter|correlation|investigat|survey|sample'}]},
+      {id:'pro',en:'Probability',zh:'概率',alt:['Probability'],nodes:[
+        {id:'p_basic',en:'P as fraction, decimal, %; complements',zh:'概率表示、互补事件',year:0,status:'secure',topics:['Probability'],kw:'probabilit|chance|likel'},
+        {id:'p_tree',en:'Tree diagrams & two-way tables',zh:'树状图、双向表',year:0,status:'ok',book:true,topics:['Probability'],kw:'tree|two-way|table|relative frequency|expected'},
+        {id:'p_joint',en:'Joint, independent & exclusive events',zh:'独立事件、互斥事件',year:1,status:'next',book:true,topics:['Probability'],kw:'independent|exclusive|both|either'}]}],
+    links:[['n_pow','n_fd'],['n_fd','n_pr'],['n_pr','n_rate'],['n_pow','n_sci'],['a_exp','a_eq'],['a_eq','a_seq'],['a_seq','a_lin'],['a_eq','a_eq9'],
+      ['m_units','m_area'],['m_area','m_circ'],['m_circ','m_c2pr'],['g_ang','g_trans'],['g_trans','g_views'],['g_ang','g_par'],
+      ['s_avg','s_cmp'],['s_cmp','s_box'],['s_mis','s_inv'],['p_basic','p_tree'],['p_tree','p_joint'],['n_fd','m_units'],['a_lin','m_pyth']]},
+  brendan:{subject:'Mathematics',exam:'icas',title:'Maths year map',years:['Year 5 · 2026','Year 6 · 2027'],asOf:'Nov 2026',
+    lanes:[
+      {id:'num',en:'Number',zh:'数与运算',alt:['Number','Fractions & decimals'],nodes:[
+        {id:'n_whole',en:'Numbers to a million; negatives',zh:'百万以内的数、负数',year:0,status:'secure',topics:['Number & place value'],kw:'place value|digit|million|thousand|round|negative|below zero|order'},
+        {id:'n_ops',en:'Times tables to 12×12; written × ÷',zh:'乘法口诀到12、笔算',year:0,status:'secure',topics:['Number & place value','Money','Problem solving'],kw:'×|÷|multipl|divid|times|product|quotient|share|each'},
+        {id:'n_frac',en:'Fractions & decimals; ⅔ of 24',zh:'分数小数、求几分之几',year:0,status:'ok',book:true,topics:['Fractions & decimals']},
+        {id:'n_fdp',en:'Fraction ↔ decimal ↔ %; % of amounts',zh:'分数小数百分数互化',year:1,status:'next',topics:['Fractions & decimals','Money'],kw:'percent|%'},
+        {id:'n_ord',en:'Order of operations; squares & cubes',zh:'运算顺序、平方立方',year:1,status:'next',topics:['Number & place value','Patterns & algebra'],kw:'order of operations|bracket|squared|cubed|square number|cube number|bedmas'}]},
+      {id:'alg',en:'Algebra',zh:'代数',alt:['Algebra'],nodes:[
+        {id:'a_sent',en:'<, >, = and missing numbers',zh:'比较大小、求未知数',year:0,status:'secure',book:true,topics:['Patterns & algebra'],kw:'missing|unknown|number sentence|true|balance|greater|less'},
+        {id:'a_pat',en:'Growing patterns (incl. decimals)',zh:'递增规律（含小数）',year:0,status:'secure',book:true,topics:['Patterns & algebra'],kw:'pattern|sequence|next|rule|term'},
+        {id:'a_rule',en:'Tables of values & rules',zh:'数值表与规律',year:1,status:'next',topics:['Patterns & algebra'],kw:'rule|table|input|output'},
+        {id:'a_coord',en:'Coordinates: plot (x, y)',zh:'坐标描点',year:1,status:'next',topics:['Geometry & shape','Patterns & algebra'],kw:'coordinate|\\(\\s*\\d+\\s*,\\s*\\d+\\s*\\)|plot'}]},
+      {id:'mea',en:'Measurement',zh:'测量',alt:['Measurement'],nodes:[
+        {id:'m_units',en:'Units, scales & time',zh:'单位、刻度、时间',year:0,status:'work',book:true,topics:['Measurement','Time'],kw:'unit|scale|convert|\\bmm\\b|\\bcm\\b|\\bkg\\b|\\bml\\b|litre|read|measur|time|clock|minute|hour'},
+        {id:'m_area',en:'Area, perimeter, cube volume',zh:'面积、周长、体积',year:0,status:'work',book:true,topics:['Measurement'],kw:'area|perimeter|volume|cube|square units'},
+        {id:'m_ang',en:'Angles: name & measure to 180°',zh:'角的分类与测量',year:0,status:'ok',topics:['Geometry & shape','Measurement'],kw:'angle|degree|°|acute|obtuse|reflex'},
+        {id:'m_afact',en:'Angle facts: 180° line, 360° point',zh:'平角与周角',year:1,status:'next',topics:['Geometry & shape','Measurement'],kw:'straight line|180|360|around a point|angles? on a'},
+        {id:'m_form',en:'Triangle = ½ rectangle; V = l×w×h',zh:'面积体积公式',year:1,status:'next',book:true,topics:['Measurement'],kw:'triangle|cuboid|l\\s*×\\s*w|length\\s*×\\s*width'}]},
+      {id:'geo',en:'Geometry',zh:'几何',alt:['Geometry'],nodes:[
+        {id:'g_shapes',en:'Parallel lines; prisms & nets',zh:'平行垂直、展开图',year:0,status:'ok',book:true,topics:['Geometry & shape'],kw:'parallel|perpendicular|prism|pyramid|\\bnets?\\b|face|edge|vert|3d'},
+        {id:'g_trans',en:'Reflect, translate, rotate',zh:'对称、平移、旋转',year:0,status:'work',book:true,topics:['Geometry & shape'],kw:'reflect|mirror|symmetr|rotat|translat|flip|turn|slide|fold'},
+        {id:'g_maps',en:'Grid maps & compass points',zh:'方格地图与方位',year:0,status:'ok',topics:['Geometry & shape'],kw:'map|grid|north|south|east|west|compass|direction'},
+        {id:'g_scale',en:'Map scales; turns in degrees',zh:'比例尺、转向角度',year:1,status:'next',topics:['Geometry & shape','Measurement'],kw:'scale|clockwise|quarter turn|half turn|degrees'},
+        {id:'g_quad',en:'Quadrilaterals & tessellation',zh:'四边形与密铺',year:1,status:'next',topics:['Geometry & shape'],kw:'quadrilateral|rhombus|trapez|parallelogram|kite|tessellat'}]},
+      {id:'sta',en:'Statistics',zh:'统计',alt:['Statistics'],nodes:[
+        {id:'s_tab',en:'Graphs & two-way tables',zh:'统计图与双向表',year:0,status:'work',book:true,topics:['Data & graphs'],kw:'graph|table|chart|tally|pictogram|key'},
+        {id:'s_inv',en:'Investigations: middle & spread',zh:'统计调查',year:0,status:'ok',topics:['Data & graphs'],kw:'survey|most|least|middle|spread|data'},
+        {id:'s_mean',en:'Mean & range',zh:'平均数与极差',year:1,status:'next',topics:['Data & graphs'],kw:'mean|average|range'},
+        {id:'s_time',en:'Time-series graphs & trends',zh:'时间序列图',year:1,status:'next',topics:['Data & graphs'],kw:'line graph|over time|trend|temperature'}]},
+      {id:'pro',en:'Probability',zh:'概率',alt:['Probability'],nodes:[
+        {id:'p_exp',en:'Chance experiments; 0–1 scale',zh:'概率实验、0–1 刻度',year:0,status:'ok',book:true,topics:['Chance & probability'],kw:'likely|unlikely|certain|impossible|even chance|chance'},
+        {id:'p_space',en:'Sample space; P = ways ÷ total',zh:'样本空间、概率计算',year:0,status:'ok',book:true,topics:['Chance & probability'],kw:'outcome|probabilit|chance|out of|spinner|dice|\\bdie\\b|coin'},
+        {id:'p_comb',en:'Combinations; probabilities add to 1',zh:'列举组合、概率和为1',year:1,status:'next',book:true,topics:['Chance & probability','Logic & reasoning','Problem solving'],kw:'combination|arrange|how many ways|different ways|order|outfit'}]}],
+    links:[['n_whole','n_ops'],['n_ops','n_frac'],['n_frac','n_fdp'],['a_sent','a_pat'],['a_pat','a_rule'],['a_rule','a_coord'],
+      ['m_units','m_area'],['m_area','m_ang'],['m_ang','m_afact'],['m_area','m_form'],['g_shapes','g_trans'],['g_trans','g_maps'],['g_maps','g_scale'],['g_trans','g_quad'],
+      ['s_tab','s_inv'],['s_inv','s_mean'],['p_exp','p_space'],['p_space','p_comb'],['n_ops','m_area'],['n_frac','m_units'],['g_maps','a_coord']]}
+};
+function yearMapsFor(profile){const m=profile&&YEAR_MAPS[String(profile.name||'').toLowerCase().trim()];return !m?[]:(Array.isArray(m)?m:[m]);}
+const YM_MIN=6,YM_RECENT=30; // re-rate a topic after 6+ marked questions; judge on the latest 30
+// Pure: does a practised result count towards a year-map topic? Its strand must be one of the
+// topic's strands (or the lane's General-exam strands), and the question must match `kw` if given.
+function ymMatches(node,lane,r){
+  if(!r)return false;const t=String(r.topic||'').toLowerCase();
+  const strands=(node.topics||[]).concat((lane&&lane.alt)||[]).map(x=>x.toLowerCase());
+  if(!strands.includes(t))return false;
+  if(!node.kw)return true;
+  try{return new RegExp(node.kw,'i').test(String(r.question||''));}catch(e){return true;}
+}
+// Pure: live stats per topic from attempts — {id:{n,c,pct}} over the most recent YM_RECENT marked
+// (correct / wrong) results that match; self-check / broken items don't count.
+function ymNodeStats(map,attempts){
+  const at=(attempts||[]).filter(a=>a&&a.subject===map.subject).sort((a,b)=>(b.startedAt||0)-(a.startedAt||0));
+  const out={};
+  (map.lanes||[]).forEach(lane=>(lane.nodes||[]).forEach(nd=>{let n=0,c=0;
+    for(const a of at){for(const r of (a.results||[])){if(n>=YM_RECENT)break;
+      if(r.status!=='correct'&&r.status!=='wrong')continue;if(!ymMatches(nd,lane,r))continue;n++;if(r.status==='correct')c++;}
+      if(n>=YM_RECENT)break;}
+    out[nd.id]={n,c,pct:n?Math.round(100*c/n):null};}));
+  return out;
+}
+// Pure: the status to show. The parent's estimate stands until there are YM_MIN marked questions;
+// then recent accuracy re-rates it (≥85% secure, ≥60% mostly there, else needs work). A next-year
+// topic stays "next year" until the student is getting it (≥60%).
+function ymStatus(nd,st){
+  if(!st||st.n<YM_MIN)return {status:nd.status||'ok',live:false};
+  const p=st.pct;
+  if((nd.year||0)===1)return p>=85?{status:'secure',live:true}:p>=60?{status:'ok',live:true}:{status:'next',live:true};
+  return {status:p>=85?'secure':p>=60?'ok':'work',live:true};
+}
+// Pure: the map with every node's shown status (+ live flag and stats) filled in.
+function ymResolve(map,attempts){
+  const stats=ymNodeStats(map,attempts);
+  return Object.assign({},map,{lanes:map.lanes.map(l=>Object.assign({},l,{nodes:l.nodes.map(nd=>{const s=ymStatus(nd,stats[nd.id]);return Object.assign({},nd,{status:s.status,live:s.live,stat:stats[nd.id]});})}))});
+}
+function ymCounts(resolved){const c={secure:0,ok:0,work:0,next:0};resolved.lanes.forEach(l=>l.nodes.forEach(nd=>{c[nd.status]=(c[nd.status]||0)+1;}));return c;}
+function ymMenuLine(map,attempts){const c=ymCounts(ymResolve(map,attempts));return map.years.map(y=>y.split(' ·')[0]).join(' → ')+': ✓ '+c.secure+' secure · '+c.ok+' mostly there · ! '+c.work+' to work on';}
 
 /* ============================================================ AI generation ============================================================ */
 // Friendly difficulty names (1–5) shown to kids/parents instead of a bare number.
@@ -2040,7 +2208,8 @@ function buildWordReview(w,kind,seed){
 // Pure: bold the word (any ending: relish → relished) inside a sentence.
 function hiWord(s,w){const stem=String(w&&w.word||'').toLowerCase().replace(/e$/,'');if(stem.length<3)return String(s||'');
   return String(s||'').replace(new RegExp('\\b('+stem.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[a-z]*)','gi'),'**$1**');}
-function engMd(s){return esc(String(s||'')).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
+// **bold**, *italic* (titles of works in the Head Start lessons) and line breaks; everything else escaped.
+function engMd(s){return esc(String(s||'')).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*(?![\s*])([^*\n]+?)\*(?![*\w])/g,'$1<i>$2</i>').replace(/\n/g,'<br>');}
 function sayBtn(text,lang){return el('button',{class:'iconbtn sm',type:'button',title:lang==='zh'?'朗读中文':'Read aloud',onclick:e=>{e.preventDefault();e.stopPropagation();speak(text,{lang:lang||'en'});}},lang==='zh'?'🔊中':'🔊');}
 // English line (for the child) + muted Chinese line (for a parent), each with its own 🔊.
 function biLine(en,zh){return el('div',{class:'bi'},
@@ -2216,8 +2385,11 @@ async function viewSkill(id){
    the end, then reviews everything and reports EARLY vs LATE accuracy — the stamina signal from his tests.
    Progress: `english` store — kind 'reading' (per text: best/last/history) and 'readset' (per test). */
 const READ_MIN_PER_TEXT=7; // timed: minutes per text (≈1 min a question + reading time)
-const READ_TYPES={narrative:'Story · 故事',report:'Report · 说明文',review:'Review · 评论',poem:'Poem · 诗歌',procedure:'Procedure · 步骤说明',persuasive:'Persuasive · 说服性文章',recount:'Recount · 记叙',biography:'Biography · 人物传记',playscript:'Play script · 剧本',pair:'Two texts · 两篇对比'};
-const READ_SKILLS={'main-idea':'Main idea · 主旨',inference:'Inference · 推断',vocab:'Word meaning · 词义',evidence:'Evidence · 找证据',purpose:'Author’s purpose · 写作目的',structure:'Text structure · 文章结构',character:'Character · 人物',compare:'Compare · 比较','fact-opinion':'Fact or opinion · 事实或观点',figurative:'Figurative language · 修辞',sequence:'Sequence · 顺序',summary:'Summary · 概括'};
+const READ_TYPES={narrative:'Story · 故事',report:'Report · 说明文',review:'Review · 评论',poem:'Poem · 诗歌',procedure:'Procedure · 步骤说明',persuasive:'Persuasive · 说服性文章',recount:'Recount · 记叙',biography:'Biography · 人物传记',playscript:'Play script · 剧本',pair:'Two texts · 两篇对比',science:'Science · 科学说明文'};
+const READ_SKILLS={'main-idea':'Main idea · 主旨',inference:'Inference · 推断',vocab:'Word meaning · 词义',evidence:'Evidence · 找证据',purpose:'Author’s purpose · 写作目的',structure:'Text structure · 文章结构',character:'Character · 人物',compare:'Compare · 比较','fact-opinion':'Fact or opinion · 事实或观点',figurative:'Figurative language · 修辞',sequence:'Sequence · 顺序',summary:'Summary · 概括',
+  data:'Reading data · 读图表',predict:'Predict · 预测',conclude:'Conclusion · 下结论'};
+// A science text's data rows as plain strings (table row → "a — b"; bar → "label: value unit") — for proof + read-aloud.
+function readDataRows(t){const d=t&&t.data;if(!d)return [];return d.kind==='bar'?(d.bars||[]).map(b=>b.label+': '+b.value+(d.unit||'')):(d.rows||[]).map(r=>r.join(' — '));}
 function readTexts(){const D=engData();return (D&&Array.isArray(D.reading))?D.reading:[];}
 // Pure: every sentence of a text in reading order, with the global index that `ev` points at.
 function readSentences(t){const out=[];(t.parts||[]).forEach((p,pi)=>(p.paras||[]).forEach((para,ri)=>(para||[]).forEach(s=>out.push({part:pi,para:ri,i:out.length,s}))));return out;}
@@ -2236,7 +2408,11 @@ async function viewReading(){
   const recs=(await engRecs()).filter(r=>r.kind==='reading'||r.kind==='readset');
   const by=new Map(recs.filter(r=>r.kind==='reading').map(r=>[r.text,r])),st=readStats(recs);
   const doneT=texts.filter(t=>by.has(t.id)),avg=doneT.length?Math.round(doneT.reduce((s,t)=>{const r=by.get(t.id);return s+100*(r.best||0)/(r.total||6);},0)/doneT.length):null;
-  const next=nextReadTexts(texts,recs,1)[0],set=nextReadTexts(texts,recs,3);
+  const sci=texts.filter(t=>t.type==='science'),gen=texts.filter(t=>t.type!=='science');
+  const next=nextReadTexts(gen.length?gen:texts,recs,1)[0],set=nextReadTexts(gen.length?gen:texts,recs,3);
+  const sciNext=sci.length?nextReadTexts(sci,recs,1)[0]:null,sciSet=sci.length>=3?nextReadTexts(sci,recs,3):[];
+  const listItem=t=>{const r=by.get(t.id);
+    return menuItem(r?'✅':(t.type==='science'?'🔬':'📄'),t.title+' · '+(t.type==='science'?(t.topic||READ_TYPES.science):(READ_TYPES[t.type]||t.type)),r?('Best '+r.best+' / '+r.total+' · read '+r.tries+'×'):'Not read yet',()=>viewReadingTest([t.id],false));};
   show(el('div',{class:'nomath'},backBar('📖 Reading tests',viewHome),
     el('div',{class:'card'},el('h2',{},'📖 Reading tests · 阅读小卷'),
       el('p',{class:'sub'},'Read a longer text and answer 6 questions — then see the sentence that PROVES each answer. The later questions are harder, just like ICAS. 读一篇长一点的文章、答 6 道题，再看哪一句话证明了答案；越往后越难，和 ICAS 一样。'),
@@ -2245,8 +2421,12 @@ async function viewReading(){
       el('button',{class:'btn primary block lg',onclick:()=>viewReadingTest([next.id],false)},'✨ Read next: '+next.title),
       el('button',{class:'btn block',style:'margin-top:10px',onclick:()=>viewReadingTest(set.map(t=>t.id),true)},'⏱ Mini test · '+set.length+' texts · '+set.length*6+' questions · '+set.length*READ_MIN_PER_TEXT+' min'),
       el('p',{class:'small muted',style:'margin:10px 0 0'},'Practice: answers are marked as you go. Mini test: like a real exam — no hints until the end. 练习：每题马上对答案；小测：和考试一样，做完才看答案。')),
-    el('div',{class:'card'},el('h2',{},'All texts · 全部文章'),el('div',{class:'menu'},...texts.map(t=>{const r=by.get(t.id);
-      return menuItem(r?'✅':'📄',t.title+' · '+(READ_TYPES[t.type]||t.type),r?('Best '+r.best+' / '+r.total+' · read '+r.tries+'×'):'Not read yet',()=>viewReadingTest([t.id],false));})))));
+    sci.length?el('div',{class:'card'},el('h2',{},'🔬 Science reading · 科学阅读'),
+      el('p',{class:'sub'},'Science reports with a table or a bar graph. Read the data, predict what happens next and draw a conclusion — the same skills as ICAS Science. 带表格或柱状图的科学说明文：读数据、做预测、下结论——和 ICAS 科学考的能力一样。'),
+      sciNext?el('button',{class:'btn primary block',onclick:()=>viewReadingTest([sciNext.id],false)},'🔬 Read next: '+sciNext.title):'',
+      sciSet.length?el('button',{class:'btn block',style:'margin-top:10px',onclick:()=>viewReadingTest(sciSet.map(t=>t.id),true)},'⏱ Science mini test · 3 texts · 18 questions · '+3*READ_MIN_PER_TEXT+' min'):'',
+      el('div',{class:'menu',style:'margin-top:12px'},...sci.map(listItem))):'',
+    el('div',{class:'card'},el('h2',{},'Stories & articles · 故事和文章'),el('div',{class:'menu'},...gen.map(listItem)))));
 }
 async function viewReadingTest(ids,timed){
   stopTimer();const all=readTexts(),texts=ids.map(id=>all.find(t=>t.id===id)).filter(Boolean);if(!texts.length)return viewReading();
@@ -2254,34 +2434,47 @@ async function viewReadingTest(ids,timed){
   const items=[];texts.forEach((t,ti)=>t.qs.forEach((q,qi)=>items.push({ti,qi,q,ans:null,reveal:null})));
   const t0=Date.now(),limit=timed?texts.length*READ_MIN_PER_TEXT*60:0,L=i=>String.fromCharCode(65+i);
   let finished=false,timer=null;
-  const root=el('div',{class:'nomath'}),doneSlot=el('div',{}),sentEls=texts.map(()=>[]);
+  const root=el('div',{class:'nomath'}),doneSlot=el('div',{}),sentEls=texts.map(()=>[]),rowEls=texts.map(()=>[]),dataEls=texts.map(()=>null);
+  // A science text's table or bar graph (its rows/bars are what a question's `rows` proof points at).
+  const dataEl=(t,ti)=>{const d=t.data;let box;
+    if(d.kind==='bar'){let svg='';try{svg=(typeof PLDiagram!=='undefined')?sanitizeSvg(PLDiagram.render({type:'bar',bars:d.bars}),60000):'';}catch(e){}
+      box=el('div',{class:'rdata'},el('div',{class:'rdata-t'},'📊 '+d.title),el('div',{class:'rdata-fig',html:svg}));}
+    else{const tb=el('table',{class:'rtable'},el('tr',{},...d.head.map(h=>el('th',{},h))));
+      d.rows.forEach((r,i)=>{const tr=el('tr',{},...r.map(c=>el('td',{},c)));rowEls[ti][i]=tr;tb.append(tr);});
+      box=el('div',{class:'rdata'},el('div',{class:'rdata-t'},'📊 '+d.title),el('div',{style:'overflow-x:auto'},tb));}
+    dataEls[ti]=box;return box;};
   const textCard=(t,ti)=>{
     const sents=readSentences(t),poem=t.type==='poem',body=el('div',{class:'passage rtext'+(poem?' poem':'')});let k=0;
-    t.parts.forEach(p=>{
+    t.parts.forEach((p,pi)=>{
       if(t.parts.length>1||(p.title&&p.title!==t.title))body.append(el('div',{class:'rpart'},p.title||''));
-      p.paras.forEach(para=>{const one=para.length===1?String(para[0]).trim():'';
+      p.paras.forEach((para,ri)=>{const one=para.length===1?String(para[0]).trim():'';
         // A short one-line paragraph ending in ? or : in a report/procedure is a heading; "• …"/"1. …" lines are list items.
-        const head=['report','procedure','persuasive','biography'].includes(t.type)&&/[?:]$/.test(one)&&one.split(/\s+/).length<=8;
+        const head=['report','procedure','persuasive','biography','science'].includes(t.type)&&/[?:]$/.test(one)&&one.split(/\s+/).length<=8;
         const item=/^(•|\d+\.)\s/.test(one);
-        const pe=el('p',{class:'rpara'+(head?' rhead':item?' ritem':'')});para.forEach((s,j)=>{const sp=el('span',{class:'rs',html:engMd(s)});sentEls[ti][k++]=sp;pe.append(sp);if(j<para.length-1)pe.append(poem?el('br'):document.createTextNode(' '));});body.append(pe);});
+        const pe=el('p',{class:'rpara'+(head?' rhead':item?' ritem':'')});para.forEach((s,j)=>{const sp=el('span',{class:'rs',html:engMd(s)});sentEls[ti][k++]=sp;pe.append(sp);if(j<para.length-1)pe.append(poem?el('br'):document.createTextNode(' '));});body.append(pe);
+        if(t.data&&pi===0&&t.data.after===ri)body.append(dataEl(t,ti));});
     });
-    const say=t.title+'. '+sents.map(x=>x.s).join(' ');
+    const say=t.title+'. '+sents.map(x=>x.s).join(' ')+(t.data?(' '+t.data.title+': '+readDataRows(t).join('. ')+'.'):'');
     return el('div',{class:'card'},
       el('div',{class:'row between',style:'align-items:center;flex-wrap:nowrap'},el('div',{},texts.length>1?el('span',{class:'pill'},'Text '+(ti+1)+' of '+texts.length):'',el('span',{class:'pill'},READ_TYPES[t.type]||t.type)),
         el('button',{class:'iconbtn',type:'button',title:'Read it aloud',onclick:()=>speak(say)},'🔊')),
       el('h2',{style:'margin:8px 0 10px'},t.title),body);
   };
   const proofEl=(t,q)=>{const sents=readSentences(t),lines=(q.ev||[]).map(i=>sents[i]).filter(Boolean).map(x=>'“'+String(x.s).replace(/\*\*/g,'')+'”');
+    const dr=readDataRows(t),rows=(q.rows||[]).map(i=>dr[i]).filter(Boolean);
+    if(rows.length)lines.push('📊 '+(t.data.kind==='bar'?'graph':'table')+': '+rows.join('; '));
     return lines.length?el('div',{class:'proof'},el('b',{},'🔎 Proof · 证据: '),el('span',{},lines.join(' … '))):'';};
   const qCard=(it,idx)=>{
     const {ti,q}=it,t=texts[ti],opts=el('div',{class:'opts'}),fb=el('div',{});
     it.reveal=()=>{const ok=it.ans===q.a;
       $$('.opt',opts).forEach((b,bi)=>{b.disabled=true;b.setAttribute('aria-pressed','false');if(bi===q.a)b.classList.add('right');else if(bi===it.ans)b.classList.add('wrongpick');});
       (q.ev||[]).forEach(i=>{const s=sentEls[ti][i];if(s)s.classList.add('ev');});
+      (q.rows||[]).forEach(i=>{const r=rowEls[ti][i];if(r)r.classList.add('ev');else if(dataEls[ti])dataEls[ti].classList.add('ev');});
+      const firstProof=(q.ev&&q.ev.length)?sentEls[ti][q.ev[0]]:((q.rows&&q.rows.length)?(rowEls[ti][q.rows[0]]||dataEls[ti]):null);
       fb.innerHTML='';
       fb.append(el('div',{style:'margin-top:10px'},el('span',{class:'badge '+(ok?'ok':(it.ans==null?'warn':'bad'))},ok?'✓ Correct! 答对了':(it.ans==null?'– Not answered · 没有作答':'✗ The answer is '+L(q.a)+' · 正确答案是 '+L(q.a)))),
         proofEl(t,q),q.why?el('div',{class:'explain'},biLine(q.why,q.whyZh)):'',
-        (q.ev&&q.ev.length)?el('button',{class:'btn sm ghost',style:'margin-top:8px',onclick:()=>{const s=sentEls[ti][q.ev[0]];if(s)s.scrollIntoView({behavior:'smooth',block:'center'});}},'↑ Show it in the text · 在原文中看'):'');};
+        firstProof?el('button',{class:'btn sm ghost',style:'margin-top:8px',onclick:()=>firstProof.scrollIntoView({behavior:'smooth',block:'center'})},'↑ Show it in the text · 在原文中看'):'');};
     q.opts.forEach((o,i)=>opts.append(el('button',{class:'opt',type:'button','aria-pressed':'false',onclick:()=>{
       if(finished)return;
       if(!timed){if(it.ans!=null)return;it.ans=i;it.reveal();if(items.every(x=>x.ans!=null))finish(false);}
@@ -2323,6 +2516,209 @@ async function viewReadingTest(ids,timed){
   show(root);
   if(timed){tick();timer=setInterval(()=>{if(!document.body.contains(root)){clearInterval(timer);return;}tick();},1000);}
 }
+/* ----- 🚀 Year 9 Head Start (v2.62) — curated English + Science preview lessons -----
+   Content in preview.js (window.PLPreview.DATA; self-authored; the block between BEGIN/END-DATA is
+   STRICT JSON because the printed preview books' Python generator reads it): 12 English + 12 Science
+   lessons (~15 min each — learning intention + success criteria, recall, key words, learn, worked
+   example, learn by heart, ★→★★★ practice, think deeper, try at home, parent notes) and 3 weekly
+   quizzes per subject (each with a week mind map). Shown only to the students in DATA.students. The
+   student text is English; the 中文 lines + parent notes appear when the 中文 toggle is on (default
+   on for a parent). Progress per student in the `english` store: `profileId|pv|<lesson>` (kind 'pv')
+   and `profileId|pvq|<quiz>` (kind 'pvq'), Drive-synced like the other English records. NO AI calls. */
+function pvData(){const P=(typeof PLPreview!=='undefined')?PLPreview:null;const D=P&&P.DATA;return (D&&Array.isArray(D.lessons)&&D.lessons.length&&Array.isArray(D.quizzes))?D:null;}
+function pvFor(profile){const D=pvData();return !!(D&&profile&&(D.students||[]).includes(String(profile.name||'').toLowerCase().trim()));}
+function pvZhOn(){try{const v=localStorage.getItem('practicelab.pvZh');if(v==='1')return true;if(v==='0')return false;}catch(e){}return isParent();}
+function pvSetZh(on){try{localStorage.setItem('practicelab.pvZh',on?'1':'0');}catch(e){}}
+function pvZhBtn(rerender){const on=pvZhOn();return el('button',{class:'btn sm'+(on?' primary':''),type:'button',title:'Show the Chinese notes for parents · 显示家长中文说明',onclick:()=>{pvSetZh(!on);rerender();}},on?'中文 ✓':'中文');}
+// Pure: the Day number of lesson n (1–12) or the week-n quiz in the 4 lessons + quiz weekly rhythm.
+function pvDayOf(kind,n){return kind==='Q'?5*n:n+Math.floor((n-1)/4);}
+function pvDoneSet(recs){return new Set(recs.filter(r=>r.kind==='pv'&&r.done).map(r=>r.lesson));}
+// Pure: the first lesson of a subject not yet done (null once all are done).
+function pvNextLesson(D,recs,subject){const done=pvDoneSet(recs);return D.lessons.filter(l=>l.subject===subject).sort((a,b)=>a.num-b.num).find(l=>!done.has(l.id))||null;}
+// Pure: a quiz is ready once that subject's 4 lessons of its week are done.
+function pvQuizReady(D,recs,q){const done=pvDoneSet(recs);return D.lessons.filter(l=>l.subject===q.subject&&l.week===q.week).every(l=>done.has(l.id));}
+function pvProgress(D,recs){const done=pvDoneSet(recs),qs=recs.filter(r=>r.kind==='pvq'),by={};
+  (D.subjects||[]).forEach(s=>{const ls=D.lessons.filter(l=>l.subject===s.id);by[s.id]={done:ls.filter(l=>done.has(l.id)).length,total:ls.length};});
+  const avg=qs.length?Math.round(qs.reduce((a,r)=>a+100*(r.best||0)/Math.max(1,r.total||1),0)/qs.length):null;
+  return {by,quizzes:qs.length,quizTotal:D.quizzes.length,quizAvg:avg};}
+function pvMenuLine(D,recs){const p=pvProgress(D,recs);return (D.subjects||[]).map(s=>s.id+' '+p.by[s.id].done+'/'+p.by[s.id].total).join(' · ')+(p.quizzes?(' · quizzes '+p.quizzes+'/'+p.quizTotal+(p.quizAvg!=null?' ('+p.quizAvg+'%)':'')):'');}
+// Pure: marks for one quiz item from the answer state — mc/match auto-marked, short/write self-marked.
+function pvItemMarks(it,ans){const m=it.marks||1;if(ans==null)return 0;
+  if(it.type==='mc')return ans===it.a?m:0;
+  if(it.type==='match'){const ok=(it.pairs||[]).filter((p,i)=>ans[i]===p[1]).length;return Math.round(m*ok/Math.max(1,(it.pairs||[]).length)*2)/2;}
+  return Math.max(0,Math.min(m,+ans||0));}
+function pvSubj(D,id){return (D.subjects||[]).find(s=>s.id===id)||{id,zh:'',icon:'📘'};}
+function pvFig(L,fid,zh){const f=(L.figs||{})[fid];if(!f)return '';const svg=sanitizeSvg(f.svg,200000);if(!svg)return '';
+  return el('div',{class:'pvfig'},el('div',{html:svg}),f.caption?el('div',{class:'small muted',style:'text-align:center;margin-top:6px'},f.caption+(zh&&f.captionZh?' · '+f.captionZh:'')):'');}
+function pvTable(t,zh){const tb=el('table',{class:'pvtable'},el('tr',{},...t.head.map(h=>el('th',{html:engMd(h)}))),...t.rows.map(r=>el('tr',{},...r.map(c=>el('td',{html:engMd(c)})))));
+  const out=el('div',{class:'pvtwrap'},tb);
+  if(zh&&t.headZh&&t.rowsZh)out.append(el('table',{class:'pvtable zh'},el('tr',{},...t.headZh.map(h=>el('th',{html:engMd(h)}))),...t.rowsZh.map(r=>el('tr',{},...r.map(c=>el('td',{html:engMd(c)}))))));
+  return out;}
+const PV_STARS=['','★','★★','★★★'];
+// One practice/quiz item. mode 'practice' marks MC at once; 'quiz' holds every mark until reveal().
+// st = shared answer state {ans:{id:…}, self:{id:…}}; onChange() fires after any answer / self-mark.
+function pvItemEl(L,it,{mode,zh,st,onChange,label}){
+  const Z=s=>zh?s:'',L_=i=>String.fromCharCode(65+i),box=el('div',{class:'card pvitem'}),fb=el('div',{});
+  const head=el('div',{class:'row between',style:'align-items:center'},el('span',{class:'pill'},(label||('Q'+it.id))+' · '+PV_STARS[it.lv||1]),it.marks?el('span',{class:'pill'},it.marks+' mark'+(it.marks>1?'s':'')):'');
+  box.append(head);
+  if(it.fig)box.append(pvFig(L,it.fig,zh));
+  let reveal=()=>{};
+  if(it.type==='mc'){
+    if(mode==='practice'){
+      box.append(engMCQ({q:it.q,opts:it.opts,a:it.a,why:it.why,whyZh:Z(it.whyZh)},{onAnswer:ok=>{st.ans[it.id]=ok?it.a:-1;onChange&&onChange();}}));
+    }else{
+      const opts=el('div',{class:'opts'});
+      it.opts.forEach((o,i)=>opts.append(el('button',{class:'opt',type:'button','aria-pressed':String(st.ans[it.id]===i),onclick:()=>{if(box.dataset.revealed)return;st.ans[it.id]=i;$$('.opt',opts).forEach((b,bi)=>b.setAttribute('aria-pressed',String(bi===i)));onChange&&onChange();}},el('span',{class:'key'},L_(i)),el('span',{html:engMd(o)}))));
+      box.append(el('div',{class:'bi-en'},el('div',{class:'qtext',html:engMd(it.q)}),sayBtn(String(it.q).replace(/\*\*/g,''),'en')),opts,fb);
+      reveal=()=>{const a=st.ans[it.id],ok=a===it.a;$$('.opt',opts).forEach((b,bi)=>{b.disabled=true;if(bi===it.a)b.classList.add('right');else if(bi===a)b.classList.add('wrongpick');});
+        fb.append(el('div',{style:'margin-top:8px'},el('span',{class:'badge '+(ok?'ok':(a==null?'warn':'bad'))},ok?'✓ Correct':(a==null?'– Not answered':'✗ The answer is '+L_(it.a)))),it.why?el('div',{class:'explain'},biLine(it.why,Z(it.whyZh))):'');};
+    }
+  }else if(it.type==='match'){
+    const means=seededShuffle(it.pairs.map(p=>p[1]),L.id+'|'+it.id),cur=st.ans[it.id]||it.pairs.map(()=>'');st.ans[it.id]=cur;
+    const sels=it.pairs.map((p,i)=>{const s=el('select',{onchange:()=>{cur[i]=s.value;onChange&&onChange();}},el('option',{value:''},'— choose —'),...means.map(m=>el('option',{value:m},m)));s.value=cur[i]||'';return s;});
+    const rows=it.pairs.map((p,i)=>el('div',{class:'pvmatch'},el('div',{class:'pvterm'},el('b',{},p[0]),zh&&it.zh&&it.zh[i]?el('div',{class:'small muted'},it.zh[i][0]):''),sels[i]));
+    box.append(el('div',{class:'qtext',html:engMd(it.q)}),...rows,fb);
+    reveal=()=>{let right=0;it.pairs.forEach((p,i)=>{const ok=cur[i]===p[1];if(ok)right++;sels[i].disabled=true;sels[i].style.borderColor=ok?'var(--ok)':'var(--bad)';
+        if(!ok)rows[i].append(el('div',{class:'small',style:'grid-column:1/-1;color:var(--ok)'},'✓ '+p[1]+(zh&&it.zh&&it.zh[i]?' · '+it.zh[i][1]:'')));});
+      fb.append(el('div',{style:'margin-top:8px'},el('span',{class:'badge '+(right===it.pairs.length?'ok':'bad')},right+' / '+it.pairs.length+' right')));
+      if(mode==='practice'){st.self[it.id]=right===it.pairs.length?'got':(right>=it.pairs.length/2?'part':'not');onChange&&onChange();}};
+    if(mode==='practice')box.append(el('button',{class:'btn sm',style:'margin-top:10px',onclick:e=>{e.target.remove();reveal();}},'Check'));
+  }else{ // short / write — write it, then compare with the model answer and mark yourself
+    const ta=el('textarea',{rows:String(Math.max(2,Math.min(10,it.lines||2))),placeholder:'Write your answer here (or on paper)…',oninput:()=>{st.ans[it.id]=ta.value;onChange&&onChange();}});
+    ta.value=typeof st.ans[it.id]==='string'?st.ans[it.id]:'';
+    box.append(el('div',{class:'bi-en'},el('div',{class:'qtext',html:engMd(it.q)}),sayBtn(String(it.q).replace(/\*\*/g,''),'en')),ta,fb);
+    reveal=()=>{
+      fb.append(el('div',{class:'explain'},el('div',{class:'h'},'Model answer'+(zh?' · 参考答案':'')),biLine(it.model,Z(it.modelZh)),
+        (it.check&&it.check.length)?el('div',{style:'margin-top:8px'},el('div',{class:'h'},'Check for'+(zh?' · 评分要点':'')),el('ul',{style:'margin:4px 0 0;padding-left:18px'},...it.check.map((c,i)=>el('li',{},c+(zh&&it.checkZh?' · '+it.checkZh[i]:''))))):''));
+      const m=it.marks||0,btns=el('div',{class:'row',style:'gap:6px;flex-wrap:wrap;margin-top:8px'});
+      const opts=m?Array.from({length:m+1},(_,k)=>[String(k),k+'/'+m]):[['got','✓ I got it'],['part','~ Partly'],['not','✗ Not yet']];
+      opts.forEach(([v,t])=>btns.append(el('button',{class:'btn sm'+(String(st.self[it.id])===v?' primary':''),onclick:()=>{st.self[it.id]=m?+v:v;$$('button',btns).forEach(b=>b.classList.remove('primary'));btns.querySelector('[data-v="'+v+'"]').classList.add('primary');onChange&&onChange();},'data-v':v},t)));
+      fb.append(el('div',{class:'small muted',style:'margin-top:8px'},m?'How many marks did you earn?':'How did you go?'),btns);};
+    if(mode==='practice')box.append(el('button',{class:'btn sm',style:'margin-top:10px',onclick:e=>{e.target.remove();reveal();}},'Show model answer'));
+  }
+  return {el:box,reveal:()=>{if(box.dataset.revealed)return;box.dataset.revealed='1';reveal();}};
+}
+async function viewPreview(){
+  stopTimer();const D=pvData();if(!D||!pvFor(activeProfile())){toast('Year 9 Head Start isn’t set up for this student.');return viewHome();}
+  const recs=(await engRecs()).filter(r=>r.kind==='pv'||r.kind==='pvq'),zh=pvZhOn(),done=pvDoneSet(recs),P=pvProgress(D,recs);
+  const qRec=id=>recs.find(r=>r.kind==='pvq'&&r.quiz===id);
+  const lessonBtn=l=>{const s=pvSubj(D,l.subject),ok=done.has(l.id);
+    return menuItem(ok?'✅':s.icon,s.id+' '+l.num+' · '+l.title,(zh?l.titleZh+' · ':'')+'Day '+pvDayOf('L',l.num)+(ok?' · done ✓':' · about '+(l.minutes||15)+' min'),()=>viewPreviewLesson(l.id));};
+  const quizBtn=q=>{const s=pvSubj(D,q.subject),r=qRec(q.id),ready=pvQuizReady(D,recs,q);
+    return menuItem(r?'🏁':'📝',s.id+' · '+q.title,(zh?q.titleZh+' · ':'')+'Day '+pvDayOf('Q',q.week)+(r?' · best '+r.best+'/'+r.total:(ready?' · ready':' · after the week’s 4 lessons'))+' · '+q.minutes+' min',()=>viewPreviewQuiz(q.id));};
+  const next=(D.subjects||[]).map(s=>pvNextLesson(D,recs,s.id)).filter(Boolean);
+  const readyQ=D.quizzes.filter(q=>!qRec(q.id)&&pvQuizReady(D,recs,q));
+  const upNext=el('div',{class:'card'},el('h2',{style:'margin:0 0 8px'},'Up next'+(zh?' · 接下来':'')),
+    (next.length||readyQ.length)?el('div',{class:'menu'},...readyQ.map(quizBtn),...next.map(lessonBtn)):el('p',{class:'sub',style:'margin:0'},'🎉 Every lesson and quiz is done — you’re ready for Year 9! Revisit any lesson below.'));
+  const weekCard=w=>el('div',{class:'card'},el('h2',{style:'margin:0 0 4px'},'Week '+w),
+    el('p',{class:'sub',style:'margin:0 0 8px'},(D.subjects||[]).map(s=>s.icon+' '+((D.weeks&&D.weeks[s.id]&&D.weeks[s.id][w-1])||'')).join(' · ')),
+    el('div',{class:'menu'},...D.lessons.filter(l=>l.week===w).sort((a,b)=>a.num-b.num||(a.subject<b.subject?-1:1)).map(lessonBtn),...D.quizzes.filter(q=>q.week===w).map(quizBtn)));
+  const bars=(D.subjects||[]).map(s=>{const b=P.by[s.id],pct=Math.round(100*b.done/Math.max(1,b.total));
+    return el('div',{style:'margin-top:8px'},el('div',{class:'row between small'},el('span',{},s.icon+' '+s.id+(zh?' '+s.zh:'')),el('span',{class:'muted'},b.done+' / '+b.total+' lessons')),el('div',{class:'gbar',style:'margin-top:4px'},el('div',{class:'gbar-fill',style:'width:'+pct+'%;background:var(--brand)'})));});
+  const how=el('details',{class:'card'},el('summary',{style:'font-weight:700;cursor:pointer'},'How this pack works'+(zh?' · 这份预习包怎么用':'')),
+    ...(D.method||[]).map(m=>el('div',{style:'margin-top:8px'},biLine('**'+m.h+'** — '+m.en,zh?m.zh:''))));
+  show(el('div',{class:'nomath'},backBar('Year 9 Head Start',()=>viewHome()),
+    el('div',{class:'card'},el('div',{class:'row between',style:'align-items:flex-start;flex-wrap:nowrap'},
+        el('div',{},el('h2',{style:'margin:0'},'🚀 '+D.title+(zh?' · '+D.titleZh:'')),el('p',{class:'sub',style:'margin:4px 0 0'},D.blurb||'')),pvZhBtn(viewPreview)),
+      ...bars,P.quizzes?el('div',{class:'small muted',style:'margin-top:8px'},'Quizzes: '+P.quizzes+' / '+P.quizTotal+' done'+(P.quizAvg!=null?' · average best '+P.quizAvg+'%':'')):''),
+    upNext,...[1,2,3].map(weekCard),how));
+}
+async function viewPreviewLesson(id){
+  stopTimer();const D=pvData();if(!D)return viewHome();
+  const L=D.lessons.find(l=>l.id===id);if(!L)return viewPreview();
+  const recs=await engRecs(),rid=pid()+'|pv|'+L.id,prev=recs.find(r=>r.id===rid)||null,zh=pvZhOn(),Z=s=>zh?s:'',s=pvSubj(D,L.subject);
+  const st={ans:Object.assign({},(prev&&prev.answers)||{}),self:{}};
+  const crit=L.criteria.map((c,i)=>!!(prev&&prev.crit&&prev.crit[i]));let conf=(prev&&prev.conf)||null;
+  const card=(title,...kids)=>el('div',{class:'card'},el('h2',{style:'margin:0 0 8px'},title),...kids);
+  const T=(en,zhs)=>biLine(en,Z(zhs));
+  const recallAns=el('div',{style:'display:none'},...L.recall.map((r,i)=>el('div',{class:'small',style:'margin:4px 0;color:var(--ok)'},(i+1)+'. '+r.a+(zh?' · '+r.zh:''))));
+  const learnEls=L.learn.map(sec=>el('div',{class:'pvsec'},el('h3',{style:'margin:14px 0 6px'},sec.h+(zh?' · '+sec.hZh:'')),
+    ...sec.p.map((p,i)=>T(p,(sec.pZh||[])[i])),
+    sec.list?el('ul',{class:'pvlist'},...sec.list.map((x,i)=>el('li',{},T(x,(sec.listZh||[])[i])))):'',
+    sec.table?pvTable(sec.table,zh):'',sec.fig?pvFig(L,sec.fig,zh):''));
+  const ex=L.example;
+  const items=L.practice.map(it=>pvItemEl(L,it,{mode:'practice',zh,st}));
+  const d=L.deeper;
+  const hint=el('div',{style:'display:none'},el('div',{class:'explain'},el('div',{class:'h'},'Hint'+(zh?' · 提示':'')),T(d.hint,d.hintZh)));
+  const model=el('div',{style:'display:none'},el('div',{class:'explain'},el('div',{class:'h'},'A strong answer'+(zh?' · 参考回答':'')),T(d.model,d.modelZh)));
+  const confBtns=el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'});
+  [['got','😀 Got it'],['nearly','🙂 Nearly'],['help','😕 I need help']].forEach(([v,t])=>confBtns.append(el('button',{class:'btn sm'+(conf===v?' primary':''),'data-v':v,onclick:()=>{conf=v;$$('button',confBtns).forEach(b=>b.classList.toggle('primary',b.dataset.v===v));}},t)));
+  const finish=async()=>{const now=Date.now(),mcIds=L.practice.filter(x=>x.type==='mc').map(x=>x.id);
+    const right=mcIds.filter(i=>st.ans[i]!=null&&st.ans[i]>=0).length,answered=mcIds.filter(i=>st.ans[i]!=null).length;
+    const answers={};Object.keys(st.ans).forEach(k=>{if(typeof st.ans[k]==='string'&&st.ans[k].trim())answers[k]=st.ans[k].slice(0,2000);});
+    const rec=Object.assign({},prev||{},{id:rid,profileId:pid(),kind:'pv',lesson:L.id,subject:L.subject,done:true,
+      mc:answered?{right,total:mcIds.length}:((prev&&prev.mc)||null),self:Object.assign({},(prev&&prev.self)||{},st.self),answers,crit,conf,
+      tries:((prev&&prev.tries)||0)+1,firstDoneAt:(prev&&prev.firstDoneAt)||now,updatedAt:now});
+    await dbPut('english',rec);scheduleDriveSync();
+    if(!prev||!prev.done)await engReward(3,15,'for a Head Start lesson');else toast('Saved ✓');
+    viewPreview();};
+  const parentBox=zh?el('details',{class:'card',open:true},el('summary',{style:'font-weight:700;cursor:pointer'},'For parents · 家长辅导'),
+    el('div',{class:'explain'},el('div',{class:'h'},'这一课讲什么'),el('div',{html:engMd(L.parent.summaryZh)})),
+    el('div',{class:'explain'},el('div',{class:'h'},'怎么讲'),el('ul',{style:'margin:0;padding-left:18px'},...L.parent.teachZh.map(t=>el('li',{style:'margin:4px 0',html:engMd(t)})))),
+    el('div',{class:'explain'},el('div',{class:'h'},'常见误区 · Misconceptions'),...L.parent.misconceptions.map(m=>el('div',{style:'margin:6px 0'},el('div',{},'✗ '+m.wrong),el('div',{style:'color:var(--ok)'},'✓ '+m.right),el('div',{class:'small muted',html:engMd(m.zh)})))),
+    el('div',{class:'explain'},el('div',{class:'h'},'可以这样问 · Ask'),...L.parent.ask.map(a=>T(a.en,a.zh)))):'';
+  show(el('div',{class:'nomath'},backBar(s.icon+' '+s.id+' '+L.num,()=>viewPreview()),
+    el('div',{class:'card'},el('div',{class:'row between',style:'align-items:flex-start;flex-wrap:nowrap'},
+        el('div',{},el('span',{class:'pill'},s.icon+' '+s.id+' · Lesson '+L.num+' · Day '+pvDayOf('L',L.num)+' · ~'+(L.minutes||15)+' min'),
+          el('h2',{style:'margin:6px 0 0'},L.title),zh?el('div',{class:'small muted'},L.titleZh):''),pvZhBtn(()=>viewPreviewLesson(id))),
+      el('div',{class:'explain'},el('div',{class:'h'},'Learning intention'+(zh?' · 学习目标':'')),T(L.intention,L.intentionZh),
+        el('div',{class:'h',style:'margin-top:10px'},'Success criteria'+(zh?' · 达成标准':'')),el('ul',{class:'pvlist'},...L.criteria.map((c,i)=>el('li',{},T(c,(L.criteriaZh||[])[i])))))),
+    card('🤔 Before you start'+(zh?' · 先想一想':''),T(L.hook.q,L.hook.zh)),
+    card('🔁 Quick recall'+(zh?' · 回顾':''),el('ol',{class:'pvlist'},...L.recall.map(r=>el('li',{},T(r.q,'')))),recallAns,
+      el('button',{class:'btn sm',onclick:e=>{recallAns.style.display='';e.target.remove();}},'Show answers')),
+    card('🔑 Key words'+(zh?' · 关键词':''),...L.words.map(w=>el('div',{class:'pvword'},
+      el('div',{class:'row between',style:'align-items:center;flex-wrap:nowrap'},el('div',{},el('b',{},w.term),zh?el('span',{class:'small muted'},'  '+w.zh):''),
+        el('button',{class:'iconbtn sm',type:'button',title:'Say it',onclick:()=>speak(w.term+'. '+w.def,{rate:0.9})},'🔊')),
+      el('div',{html:engMd(w.def)}),w.eg?el('div',{class:'small muted',style:'font-style:italic',html:engMd(w.eg)}):''))),
+    card('📖 Learn'+(zh?' · 学习':''),...learnEls),
+    card('✍️ '+ex.title+(zh?' · '+ex.titleZh:''),T(ex.task,ex.taskZh),el('ol',{class:'pvlist'},...ex.steps.map((x,i)=>el('li',{},T(x,(ex.stepsZh||[])[i])))),
+      el('div',{class:'explain'},el('div',{class:'h'},'Answer'+(zh?' · 答案':'')),T(ex.answer,ex.answerZh))),
+    card('🧠 Learn by heart'+(zh?' · 背一背':''),el('ul',{class:'pvlist'},...L.byHeart.map((x,i)=>el('li',{},T(x,(L.byHeartZh||[])[i]))))),
+    el('div',{class:'card',style:'padding-bottom:6px'},el('h2',{style:'margin:0'},'🏋️ Practice'+(zh?' · 练习':'')),el('p',{class:'sub',style:'margin:4px 0 0'},'★ basic → ★★ core → ★★★ challenge')),
+    ...items.map(x=>x.el),
+    card('🚀 Think deeper (optional)'+(zh?' · 深入思考（选做）':''),T(d.q,d.zh),hint,model,el('div',{class:'row',style:'gap:8px;margin-top:8px'},
+      el('button',{class:'btn sm',onclick:e=>{hint.style.display='';e.target.remove();}},'💡 Hint'),
+      el('button',{class:'btn sm',onclick:e=>{model.style.display='';e.target.remove();}},'Show a strong answer'))),
+    L.home?card('🏠 Try it at home (optional): '+L.home.title+(zh?' · '+L.home.titleZh:''),el('ol',{class:'pvlist'},...L.home.steps.map((x,i)=>el('li',{},T(x,(L.home.stepsZh||[])[i])))),
+      L.home.safety?el('div',{class:'small',style:'color:var(--warn);margin-top:6px'},'⚠️ '+L.home.safety+(zh&&L.home.safetyZh?' · '+L.home.safetyZh:'')):''):'',
+    parentBox,
+    card('✅ Check in'+(zh?' · 自我检查':''),el('p',{class:'sub',style:'margin:0 0 6px'},'Tick what you can do now.'),
+      ...L.criteria.map((c,i)=>{const cb=el('input',{type:'checkbox',class:'sw',onchange:()=>{crit[i]=cb.checked;}});cb.checked=crit[i];return el('label',{class:'row',style:'gap:10px;align-items:center;margin:6px 0;flex-wrap:nowrap;cursor:pointer'},cb,el('span',{},c));}),
+      el('div',{class:'small muted',style:'margin-top:8px'},'How confident are you?'),confBtns,
+      el('button',{class:'btn primary block lg',style:'margin-top:14px',onclick:finish},prev&&prev.done?'Save again ✓':'Finish lesson ✓'))));
+}
+async function viewPreviewQuiz(id){
+  stopTimer();const D=pvData();if(!D)return viewHome();
+  const Q=D.quizzes.find(q=>q.id===id);if(!Q)return viewPreview();
+  const recs=await engRecs(),rid=pid()+'|pvq|'+Q.id,prev=recs.find(r=>r.id===rid)||null,zh=pvZhOn(),s=pvSubj(D,Q.subject);
+  const st={ans:{},self:{}},total=Q.questions.reduce((a,x)=>a+(x.marks||1),0),tries=((prev&&prev.tries)||0)+1;let marked=false,rewarded=!!prev;
+  const ref={lessons:D.lessons};
+  const items=Q.questions.map(it=>pvItemEl(Q,it,{mode:'quiz',zh,st,label:'Q'+it.id,onChange:()=>{if(marked)save();}}));
+  const result=el('div',{});
+  const score=()=>Q.questions.reduce((a,it)=>a+pvItemMarks(it,(it.type==='short'||it.type==='write')?st.self[it.id]:st.ans[it.id]),0);
+  const save=async()=>{const now=Date.now(),sc=score(),res={};Q.questions.forEach(it=>{res[it.id]=pvItemMarks(it,(it.type==='short'||it.type==='write')?st.self[it.id]:st.ans[it.id]);});
+    const rec=Object.assign({},prev||{},{id:rid,profileId:pid(),kind:'pvq',quiz:Q.id,subject:Q.subject,score:sc,total,best:Math.max((prev&&prev.best)||0,sc),res,
+      tries,updatedAt:now}); // one attempt per visit: self-marking re-saves the same attempt
+    await dbPut('english',rec);scheduleDriveSync();paintResult(sc,res);
+    if(!rewarded){rewarded=true;await engReward(3,20,'for a Head Start quiz');}};
+  const paintResult=(sc,res)=>{result.innerHTML='';
+    const weak=Q.questions.filter(it=>res[it.id]<(it.marks||1)),lessons=[...new Set(weak.map(it=>it.review))].map(lid=>ref.lessons.find(l=>l.id===lid)).filter(Boolean);
+    const sum=Q.summary;
+    result.append(el('div',{class:'card',style:'text-align:center'},el('h2',{},'🏁 '+sc+' / '+total+' marks'),
+        el('p',{class:'sub'},Math.round(100*sc/Math.max(1,total))+'% · mark your written answers below (the score updates as you go)'),
+        lessons.length?el('div',{style:'text-align:left;margin-top:8px'},el('div',{class:'h',style:'font-weight:700;margin-bottom:6px'},'Lessons to review'+(zh?' · 回去复习':'')),
+          el('div',{class:'menu'},...lessons.map(l=>menuItem(pvSubj(D,l.subject).icon,l.subject+' '+l.num+' · '+l.title,zh?l.titleZh:'Open the lesson',()=>viewPreviewLesson(l.id))))):el('p',{class:'small',style:'color:var(--ok)'},'Full marks on every question — excellent!'),
+        zh&&Q.scoringZh?el('div',{class:'explain',style:'text-align:left'},el('div',{class:'h'},'评分说明'),el('div',{html:engMd(Q.scoringZh)})):''),
+      sum?el('div',{class:'card'},el('h2',{style:'margin:0 0 8px'},'🗺️ The week in one picture'+(zh?' · 本周知识框架':'')),el('div',{class:'pvmind'},el('div',{class:'pvmind-c'},sum.centre),
+        el('div',{class:'pvmind-b'},...sum.branches.map(b=>el('div',{class:'pvmind-x'},el('b',{},b.h+(zh?' · '+b.hZh:'')),el('ul',{},...b.items.map(x=>el('li',{},x)))))))):'');};
+  const markBtn=el('button',{class:'btn primary block lg',onclick:async()=>{if(marked)return;marked=true;markBtn.remove();items.forEach(x=>x.reveal());await save();window.scrollTo({top:0,behavior:'smooth'});}},'Mark my quiz ✓');
+  show(el('div',{class:'nomath'},backBar(s.icon+' '+Q.title,()=>viewPreview()),
+    el('div',{class:'card'},el('div',{class:'row between',style:'align-items:flex-start;flex-wrap:nowrap'},
+        el('div',{},el('span',{class:'pill'},s.icon+' '+s.id+' · Week '+Q.week+' · Day '+pvDayOf('Q',Q.week)+' · '+Q.minutes+' min · '+total+' marks'),el('h2',{style:'margin:6px 0 0'},Q.title),zh?el('div',{class:'small muted'},Q.titleZh):''),
+        pvZhBtn(()=>viewPreviewQuiz(id))),
+      el('div',{class:'explain'},biLine(Q.intro,zh?Q.introZh:'')),prev?el('div',{class:'small muted',style:'margin-top:6px'},'Best so far: '+prev.best+' / '+prev.total):''),
+    result,...items.map(x=>x.el),markBtn));
+}
 /* ----- HOME ----- */
 async function viewHome(){
   stopTimer();refreshHeaderProfile();
@@ -2338,7 +2734,7 @@ async function viewHome(){
   const doneToday=attempts.filter(a=>a.date===todayISO()).reduce((s,a)=>s+(a.count||0),0);
   const goalPct=Math.min(100,Math.round(doneToday/goal*100));
   const homeFocus=focusCardsFor(activeProfile()); // focus areas, one card per subject (empty if none)
-  const engD=engData(),engR=engD?await engRecs():[];
+  const engD=engData(),pvD=pvFor(activeProfile())?pvData():null,engR=(engD||pvD)?await engRecs():[];
   const tiles=el('div',{class:'tiles'},tile(attempts.length,'Practices'),tile(avg+'%','Avg score'),tile(dueN||review.length,dueN?'Due now':'To review'),tile(el('span',{class:'streak'},'🔥 '+streak),'Day streak'));
   const goalCard=el('div',{class:'card'},el('div',{class:'row between',style:'margin-bottom:8px'},el('b',{},'🎯 Today’s goal'),el('span',{class:'small muted'},doneToday+' / '+goal+' questions'+(doneToday>=goal?' · done! 🎉':''))),el('div',{class:'gbar'},el('div',{class:'gbar-fill',style:'width:'+goalPct+'%;background:'+(doneToday>=goal?'var(--ok)':'var(--brand)')})));
   // Grouped into meaningful sections (each its own card) so the home screen scans easily:
@@ -2350,13 +2746,18 @@ async function viewHome(){
     menuItem('📓','Mistakes notebook',dueN?`🔁 ${dueN} due for review now`:(review.length?`${review.length} saved · spaced out, check back soon`:'Nothing to revise — nice!'),()=>review.length?viewReview():toast('No mistakes saved yet.')),
     menuItem('🗄️','Question bank',bankN?`${bankN} saved — practise with no AI`:'Pre-generate questions to save AI calls',()=>viewBank()),
   ]);
+  const secPreview=pvD?sectionCard('Year 9 Head Start','English + Science preview for Year 9 — about 20 minutes of each a day.',[
+    menuItem('🚀','Year 9 Head Start',pvMenuLine(pvD,engR),()=>viewPreview()),
+  ]):null;
   const secEnglish=engD?sectionCard('English','Book words and reading & grammar skills — in English and 中文, with read-aloud.',[
     menuItem('📘','Daily words',wordsMenuLine(engD,engR),()=>viewWords()),
     menuItem('🧩','Daily skills',skillsMenuLine(engD,engR),()=>viewSkills()),
     readTexts().length?menuItem('📖','Reading tests',readingMenuLine(engR),()=>viewReading()):null,
   ]):null;
+  const yMaps=yearMapsFor(activeProfile());
   const secProgress=sectionCard('Track progress','See how you’re going and earn rewards.',[
     menuItem('📈','Progress & stats','Score trends, activity and accuracy by topic',()=>viewHistory()),
+    yMaps.length?menuItem('🧭','Year map',ymMenuLine(yMaps[0],attempts),()=>viewYearMap()):null,
     attempts.length?menuItem('📚','Past questions','Revisit any question — study it or practise similar',()=>viewAllQuestions()):null,
     menuItem('🗺️','Knowledge map','Topic coverage + learn each skill (key idea, formulas, worked example) — then practise',()=>viewKnowledgeMap()),
     menuItem('📐','Formula sheet','Key formulas for your level — with pictures & simple explanations',()=>viewFormulaSheet()),
@@ -2375,6 +2776,7 @@ async function viewHome(){
     setupWarn,
     driveBanner,
     homeFocus,
+    secPreview,
     secPractise,
     secEnglish,
     secProgress,
@@ -3150,7 +3552,8 @@ async function viewKnowledgeMap(){
     el('div',{class:'card'},el('h2',{},'🗺️ Knowledge map'),
       el('p',{class:'sub'},'A map of everything '+(s.level||'')+' '+(s.subject||'')+' ('+exam.label+') covers — grouped by strand, each knowledge point with a learn card (key idea + formulas + worked example) and a focused drill.'),
       el('p',{class:'small muted',style:'margin-bottom:12px'},'Built once by AI, then saved and shared to your devices. Your topic coverage below works right away.'),
-      el('button',{class:'btn primary block lg',onclick:()=>buildKnowledgeMap(s)},'✨ Build my knowledge map')),
+      el('button',{class:'btn primary block lg',onclick:()=>buildKnowledgeMap(s)},'✨ Build my knowledge map'),
+      yearMapsFor(activeProfile()).length?el('button',{class:'btn block',style:'margin-top:8px',onclick:()=>viewYearMap()},'🧭 My year map (this year → next year)'):''),
     focusCard(s),
     coverage));
 }
@@ -3203,6 +3606,7 @@ async function renderKnowledgeMap(rec,s){
       el('p',{class:'small muted',style:'margin-bottom:6px'},practisedStrands+' of '+gnames.length+' strands practised'),
       el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:8px'},
         el('button',{class:'btn',onclick:()=>practiceWeakSpots()},'🎯 Practise weak spots'),
+        yearMapsFor(activeProfile()).length?el('button',{class:'btn',onclick:()=>viewYearMap()},'🧭 Year map'):'',
         el('button',{class:'btn',onclick:()=>viewFormulaSheet()},'📐 Formula sheet'),
         (rec.source&&/🤖/.test(rec.source))?el('button',{class:'btn',onclick:()=>viewRefs()},'🔗 Add a curriculum source'):'',
         el('button',{class:'btn ghost',onclick:()=>rebuildKnowledgeMap(s)},'↻ Rebuild map'))),
@@ -3271,6 +3675,56 @@ async function practiceKnowledgePoint(point,s){
   show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building a drill…'),el('div',{class:'muted small',style:'margin-top:6px'},point.name)))));
   try{const set=await buildPracticeSet(setup,[]);if(!set.questions.length)throw new Error('No questions came back — please try again.');startSession(setup,set.questions,'practice');viewRun();}
   catch(e){alert('Couldn’t build that drill:\n\n'+(e.message||e));viewKnowledgeMap();}
+}
+
+/* ----- 🧭 Year map (v2.62) — this year → next year, coloured by status, updated by practice ----- */
+const YM_LABEL={secure:'✓ Secure',ok:'Mostly there',work:'! Needs work',next:'Next year'};
+async function viewYearMap(subject){
+  stopTimer();
+  const p=activeProfile(),maps=yearMapsFor(p);
+  if(!maps.length){toast('No year map for '+p.name+' yet.');return viewHome();}
+  const map=maps.find(m=>!subject||m.subject===subject)||maps[0];
+  const attempts=(await dbAll('attempts')).filter(a=>a.profileId===p.id);
+  const R=ymResolve(map,attempts),c=ymCounts(R);
+  let svg='';try{svg=(typeof PLDiagram!=='undefined')?sanitizeSvg(PLDiagram.render({type:'yearmap',years:R.years,lanes:R.lanes,links:R.links}),400000):'';}catch(e){}
+  const liveN=R.lanes.reduce((a,l)=>a+l.nodes.filter(nd=>nd.live).length,0);
+  const chip=st=>el('span',{class:'ymchip '+st},YM_LABEL[st]);
+  const laneCards=R.lanes.map(l=>el('div',{class:'card'},
+    el('h2',{style:'margin:0 0 2px'},l.en+' ',el('span',{class:'small muted',style:'font-weight:400'},l.zh)),
+    ...l.nodes.map(nd=>{const st=nd.stat||{n:0};
+      return el('div',{class:'ymrow'},
+        el('div',{style:'flex:1;min-width:0'},
+          el('div',{style:'font-weight:600'},nd.en,nd.book?el('span',{title:'In the holiday book',style:'margin-left:6px;color:#ffb400'},'★'):''),
+          el('div',{class:'small muted'},nd.zh+' · '+(nd.year?R.years[1]:R.years[0]).split(' ·')[0]),
+          el('div',{class:'small muted',style:'margin-top:2px'},st.n?(st.n+' question'+(st.n>1?'s':'')+' · '+st.pct+'%'+(nd.live?' · rated from practice':' · '+(YM_MIN-st.n)+' more to re-rate')):'Estimate — not practised yet')),
+        el('div',{style:'flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:6px'},chip(nd.status),
+          el('button',{class:'btn sm',onclick:()=>practiceYearNode(nd,map)},'✏️ Practise')));
+    })));
+  show(el('div',{},backBar('Year map',()=>viewHome()),
+    el('div',{class:'card'},
+      el('h2',{style:'margin:0 0 4px'},'🧭 '+p.name+'’s '+(map.title||'year map')),
+      el('p',{class:'sub',style:'margin:0'},R.years.join(' → ')+' · NZ Curriculum '+(map.subject==='Mathematics'?'Maths & Statistics':map.subject)),
+      el('div',{class:'ymleg'},chip('secure'),chip('ok'),chip('work'),chip('next'),el('span',{class:'small muted',style:'align-self:center'},'★ in the holiday book · arrows: learn this first')),
+      el('div',{class:'small',style:'margin-top:6px'},'✓ '+c.secure+' secure · '+c.ok+' mostly there · ! '+c.work+' to work on · '+c.next+' still to come'),
+      svg?el('div',{class:'ymwrap',html:svg}):'',
+      el('p',{class:'small muted',style:'margin:6px 0 0'},'Each topic starts from a parent’s estimate ('+(map.asOf||'')+'). Once you’ve answered '+YM_MIN+'+ marked questions on it, your recent practice re-rates it'+(liveN?(' — '+liveN+' topic'+(liveN>1?'s are':' is')+' rated from practice now.'):'.')+' On a phone, swipe the map sideways.'),
+      el('div',{class:'row',style:'gap:8px;flex-wrap:wrap;margin-top:10px'},
+        el('button',{class:'btn',onclick:()=>practiceWeakSpots(map.subject,map.exam)},'🎯 Practise weak spots'),
+        el('button',{class:'btn',onclick:()=>viewKnowledgeMap()},'🗺️ Knowledge map'))),
+    ...laneCards));
+}
+// A fresh 6-question drill on ONE year-map topic (notes-scoped → not banked). Next-year topics start gently.
+async function practiceYearNode(nd,map){
+  const base=defaultSettingsFor(activeProfile());
+  const examId=(map.exam&&EXAMS[map.exam])?map.exam:base.exam,exam=EXAMS[examId]||EXAMS.icas;
+  const level=(base.exam===examId)?base.level:exam.levels[0];
+  const topics=(nd.topics||[]).filter(t=>examTopics(examId,map.subject).includes(t));
+  const setup={country:base.country,subject:map.subject,exam:examId,level,topics:topics.length?topics:[],count:6,difficulty:base.difficulty||3,style:base.style||exam.style||'mixed',
+    context:CFG.examContext[examId]||'',webSearch:CFG.webSearch,examLabel:exam.label,
+    notes:'Focus every question specifically on this skill: '+nd.en+'.'+((nd.year||0)===1?' This is NEXT year’s content for the student — start at an introductory level and build up gently.':'')};
+  show(el('div',{},el('div',{class:'loader'},el('div',{class:'spinner'}),el('div',{},el('b',{},'Building a drill…'),el('div',{class:'muted small',style:'margin-top:6px'},nd.en)))));
+  try{const set=await buildPracticeSet(setup,[]);if(!set.questions.length)throw new Error('No questions came back — please try again.');startSession(setup,set.questions,'practice');viewRun();}
+  catch(e){alert('Couldn’t build that drill:\n\n'+(e.message||e));viewYearMap(map.subject);}
 }
 
 /* ============================================================ Formula sheet (图形解释 — key formulas with labelled diagrams) ============================================================
@@ -4653,7 +5107,7 @@ async function viewDashboard(){
   const allReview=(await dbAll('review')).filter(r=>!r.mastered);
   const allTrainer=(await dbAll('trainer')).map(normTrainer);
   const allTradesD=await dbAll('trades');
-  const engD=engData(),allEng=engD?await dbAll('english'):[];
+  const engD=engData(),allEng=(engD||pvData())?await dbAll('english'):[];
   const students=CFG.profiles.filter(p=>!isParentName(p.name));
   const list=students.length?students:CFG.profiles;
   const cards=list.map(p=>{
@@ -4674,7 +5128,7 @@ async function viewDashboard(){
     const moneyLine=el('div',{class:'small muted',style:'margin-top:8px'},'💰 🍬 '+worth+' total'+(saved?(' · saved 🍬 '+saved):'')+' · trading '+(netT>=0?'+':'')+netT+' · 🏅 '+badgeN+'/'+BADGES.length+' badges'+(gifts?(' · 🎁 '+gifts+' gift'+(gifts>1?'s':'')):''));
     // 📘/🧩 English habit — words learned/mastered/due and skill cards done (from the synced english store).
     const er=allEng.filter(r=>r.profileId===p.id),ew=er.filter(r=>r.kind==='word');
-    const engLine=(engD&&er.length)?el('div',{class:'small muted',style:'margin-top:4px'},'📘 '+ew.length+' word'+(ew.length===1?'':'s')+' learned · '+ew.filter(r=>r.mastered).length+' mastered · '+dueWordRecs(er,Date.now()).length+' due · 🧩 '+er.filter(r=>r.kind==='skill'&&r.done).length+'/'+engD.skills.length+' skills'+(()=>{const rt=new Set(er.filter(r=>r.kind==='reading').map(r=>r.text)).size;if(!rt)return '';const st=readStats(er);return ' · 📖 '+rt+' text'+(rt>1?'s':'')+(st.early!=null&&st.late!=null?' (early Qs '+st.early+'%, late Qs '+st.late+'%)':'');})()):'';
+    const engLine=(engD&&er.some(r=>r.kind==='word'||r.kind==='skill'||r.kind==='reading'))?el('div',{class:'small muted',style:'margin-top:4px'},'📘 '+ew.length+' word'+(ew.length===1?'':'s')+' learned · '+ew.filter(r=>r.mastered).length+' mastered · '+dueWordRecs(er,Date.now()).length+' due · 🧩 '+er.filter(r=>r.kind==='skill'&&r.done).length+'/'+engD.skills.length+' skills'+(()=>{const rt=new Set(er.filter(r=>r.kind==='reading').map(r=>r.text)).size;if(!rt)return '';const st=readStats(er);return ' · 📖 '+rt+' text'+(rt>1?'s':'')+(st.early!=null&&st.late!=null?' (early Qs '+st.early+'%, late Qs '+st.late+'%)':'');})()):'';
     return el('div',{class:'card'},
       el('div',{class:'row between'},
         el('div',{class:'row',style:'gap:10px;align-items:center'},el('span',{class:'avatar',style:'background:'+colorFor(p.name)},initials(p.name)),el('div',{},el('div',{style:'font-weight:700'},esc(p.name)),el('div',{class:'small muted'},last?('Last practice: '+last.date):'No practices yet'))),
@@ -4683,9 +5137,12 @@ async function viewDashboard(){
       weak?el('div',{class:'small muted',style:'margin-top:8px'},'Focus area: '+weak.t+' ('+weak.pct+'%)'):'',
       moneyLine,
       engLine,
+      yearMapsFor(p).length?el('div',{class:'small muted',style:'margin-top:4px'},'🧭 '+ymMenuLine(yearMapsFor(p)[0],at)):'',
+      pvFor(p)?el('div',{class:'small muted',style:'margin-top:4px'},'🚀 Year 9 Head Start: '+pvMenuLine(pvData(),er)):'',
       el('div',{class:'row',style:'margin-top:12px;gap:8px;flex-wrap:wrap'},
         el('button',{class:'btn sm primary',onclick:()=>openStudent(p.id,viewHome)},'Open'),
         el('button',{class:'btn sm',onclick:()=>openStudent(p.id,viewHistory)},'📈 Progress'),
+        yearMapsFor(p).length?el('button',{class:'btn sm',onclick:()=>openStudent(p.id,()=>viewYearMap())},'🧭 Year map'):'',
         el('button',{class:'btn sm'+(toReview?'':' ghost'),onclick:()=>openStudent(p.id,viewReview)},'📓 Mistakes'+(toReview?' ('+toReview+')':''))));
   });
   // AI answer-check tally (this device) — makes accuracy OBSERVABLE rather than asserted.
@@ -5091,7 +5548,7 @@ async function startApp(){
 }
 // Versioning: v1.x — bump the minor (v1.1, v1.2, …) each release; reserve a major
 // bump (v2.0) for a big feature release. (Claude suggests the number; Chi decides.)
-const APP_VERSION='v2.61';
+const APP_VERSION='v2.62';
 (async function boot(){
   try{$('#footYear').textContent=new Date().getFullYear();$('#footVer').textContent=APP_VERSION;}catch(e){}
   try{await openDB();}catch(e){console.warn('IndexedDB unavailable',e);}

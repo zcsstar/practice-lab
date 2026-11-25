@@ -7,7 +7,7 @@ family (multiple children), starting with NZ maths (ICAS primary + Rangitoto
 College extension), but generalised to any country / subject / exam / level.
 
 The app is [index.html](index.html) plus a small number of sibling static files
-([parse.js](parse.js), [battle.js](battle.js), [diagram.js](diagram.js), [english.js](english.js)). No build step, no dependencies installed
+([parse.js](parse.js), [battle.js](battle.js), [diagram.js](diagram.js), [english.js](english.js), [preview.js](preview.js)). No build step, no dependencies installed
 locally. It runs by double-clicking `index.html` or hosting it statically
 (GitHub Pages). Setup instructions for the user are in [SETUP.md](SETUP.md).
 
@@ -646,6 +646,50 @@ locally. It runs by double-clicking `index.html` or hosting it statically
   in the `english` store: kind `reading` (`profileId|r|id`: tries/best/last{res,timed,timeSec}/history) and
   `readset` (`profileId|rs|ts`: the test's answer pattern + time). +3 🍬 per new text (same daily cap). The
   parent dashboard adds texts read + early/late %. Content + helpers are tested in english.test.js.
+  - **🔬 Science reading (v2.62)** — 6 more texts (r13–r18, `type:'science'`, with a `topic`: heat transfer,
+    friction, physical vs chemical change, erosion, simple circuits, traits & variation — Year 5–6 content where
+    Brendan lost ICAS Science marks). Each carries ONE `data` display after paragraph `data.after` of part 1:
+    `{kind:'table', title, head, rows}` or `{kind:'bar', title, unit, bars:[{label,value}]}` (bar drawn by
+    PLDiagram). Questions may cite data as proof with `rows` (indices into the table rows / bars) alongside or
+    instead of `ev`; the proof box quotes them (`readDataRows`) and the rows (or the whole graph) highlight. New
+    skills `data` / `predict` / `conclude`. The hub shows them in their own "🔬 Science reading" card with a
+    Read-next button and a 3-text Science mini test; the main Read-next / Mini test use the 12 stories &
+    articles. Texts are drafted as JSON (first option = correct, proof as quotes) and spliced into english.js by
+    the scratch `add-reading.js`, which fixes answer positions from a balanced plan.
+- **🧭 Year map (v2.62)** — a per-student "this year → next year" curriculum diagram with live progress
+  (home Track progress "🧭 Year map", a button on the Knowledge map, and per student on the parent
+  dashboard). `YEAR_MAPS` (next to `STUDENT_FOCUS`, keyed by lowercased login name) holds, per subject, the
+  lanes (curriculum strands) → topics `{id,en,zh,year:0|1,status,book,topics,kw}` + `links` ("builds on").
+  The topics/labels are the SAME as the printed map on page 2 of the holiday books' parent editions
+  (`Kids\学习资料\2026假期数学\_source\knowmap_<key>.py`, which also carries private evidence — keep scores
+  OUT of the committed YEAR_MAPS). `status` is the parent's estimate (secure / ok / work / next); `ymStatus`
+  re-rates a topic from practice once `YM_MIN` (6) marked questions match it, judged on the latest
+  `YM_RECENT` (30): ≥85% secure, ≥60% mostly there, else needs work; a next-year topic stays "next" until
+  ≥60%. A result matches a topic when its `topic` is one of the topic's exam strands (or the lane's `alt`
+  General-exam strands) and, if set, the question text matches `kw` (`ymMatches`/`ymNodeStats`/`ymResolve`).
+  Rendered by a new `diagram.js` **`yearmap`** type (colour port of `knowmap.py`'s layout: lanes, this-year |
+  next-year columns, straight / arched / dashed cross-lane arrows, ✓ / ! corner marks so status never relies
+  on colour alone, ★ = in the holiday book) inside `.ymwrap` (scrolls sideways on a phone; `sanitizeSvg`
+  now takes an optional bigger cap for curated figures). Below the map, per-lane cards list each topic's
+  status, practice stats and a **✏️ Practise** button (`practiceYearNode` — a fresh 6-question drill scoped
+  by `notes`, gentle for next-year topics). Tested in [yearmap.test.js](yearmap.test.js) + diagram.test.js.
+- **🚀 Year 9 Head Start (v2.62)** — a curated, NO-AI preview pack for Howard's move to Year 9 (home section
+  "Year 9 Head Start", shown only to `DATA.students`). Content in [preview.js](preview.js)
+  (`window.PLPreview.DATA`; the block between `/*BEGIN-DATA*/` and `/*END-DATA*/` is STRICT JSON because the
+  printed books' generator `Kids\学习资料\2027九年级预习\_source\build_preview.py` reads it): 12 English + 12
+  Science lessons (~15 min each) and 3 weekly quizzes per subject, on a 15-day plan (`DATA.schedule`: Tue–Sat,
+  4 lessons + a quiz a week, from Tue 5 Jan 2027). Each lesson follows NZ classroom practice with borrowed
+  Chinese strengths: learning intention + success criteria, a "before you start" question, spaced recall,
+  key words, learn sections (+ tables / B&W SVG figures in `figs`), one worked example, learn by heart,
+  ★→★★★ practice (`mc` marks itself via `engMCQ`; `match` uses dropdowns; `short`/`write` show the model
+  answer + a self-mark), think deeper, try at home, parent notes, and a check-in. Quizzes hold all marks until
+  "Mark my quiz", then self-marking of written answers updates the score; results list the lessons to review
+  and the week mind map. Student text is English; `pvZhOn()` (toggle "中文", default on for a parent) adds the
+  Chinese lines + the "For parents" notes. Progress in the `english` store: `profileId|pv|<lesson>` (kind
+  `pv`: done, mc right/total, self-marks, typed answers, criteria ticks, confidence) and `profileId|pvq|<quiz>`
+  (kind `pvq`: score/total/best/res). +3 🍬 per new lesson / quiz (same daily cap). The dashboard shows each
+  student's progress line. Views are `nomath` (no KaTeX). Content is written as per-lesson JSON and assembled
+  (scratch `assemble.js`); content rules + helpers are tested in [preview.test.js](preview.test.js).
 - **Read-aloud** — `speak(text, opts)` (Web Speech) reads a question/explanation aloud
   (`opts.lang:'zh'` → a Chinese voice via `pickZhVoice()`, since the chosen English voice can't read
   中文; `opts.rate` multiplies the speed, e.g. 0.8 to say a word slowly),
@@ -928,7 +972,7 @@ locally. It runs by double-clicking `index.html` or hosting it statically
 - User-entered HTML is always `esc()`-aped before insertion.
 - **Versioning** (`APP_VERSION`, shown in the footer; cache-busting is via headers,
   so the string is just a visible deploy marker): scheme is **v2.x** — bump the
-  minor on each release (currently at **v2.61**). Claude suggests the next number on
+  minor on each release (currently at **v2.62**). Claude suggests the next number on
   each deploy; Chi decides. **Push only to the personal `zcsstar` GitHub** (never the
   work account), the same way as the sibling personal repos: git's github.com credential
   helper is gh, which serves only the ACTIVE gh account (the work one by default), so wrap
@@ -967,8 +1011,13 @@ locally. It runs by double-clicking `index.html` or hosting it statically
    story, question and skill card — one correct option, bilingual fields, bold forms, cloze, strict
    JSON — and extracts the Daily-words helpers: the review ladder, next day/due/next skill, the four
    review-question builders, seeded shuffle, word highlighting; plus the 📖 reading texts — 6 questions
-   each, proof-sentence indices in range, skill coverage, balanced keys — and `readSentences`/`halfSplit`/
-   `readStats`/`nextReadTexts`).
+   each, proof-sentence indices in range, skill coverage, balanced keys; the 6 science texts' table/bar data
+   and `rows` proofs — and `readSentences`/`halfSplit`/`readStats`/`nextReadTexts`/`readDataRows`).
+   **Year map:** `node yearmap.test.js` (extracts `YEAR_MAPS` + `ymMatches`/`ymNodeStats`/`ymStatus`/
+   `ymResolve`; data integrity — valid strands, links, statuses, no scores — and the re-rating rules).
+   **Year 9 Head Start:** `node preview.test.js` (requires preview.js; strict-JSON block, 24 lessons + 6
+   quizzes, every item's shape and bilingual fields, safe figures, balanced MC keys; and the `pv…` helpers —
+   day numbers, next lesson, quiz readiness, progress, marking).
 2. **Run it:** `python -m http.server 8744` in this dir, open
    `http://localhost:8744/index.html`.
 3. **JS syntax check** without a browser:
